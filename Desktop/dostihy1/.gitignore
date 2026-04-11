@@ -39,3 +39,14 @@ Thumbs.db
 # --- Systémové soubory ---
 *.tmp
 *.temp
+
+# 1. Ignoruj VŠECHNY markdown soubory
+*.md
+
+# 2. Vyjmi (vynechej) všechny .md soubory -> Tím se vrátí jejich sledování
+!*.md
+
+# 3. Ignoruj složku temp
+agents/
+
+prompts/
