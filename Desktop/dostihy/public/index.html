@@ -12,8 +12,46 @@
 </head>
 <body>
 
+<!-- ═══════════════════════════════════════════════════════════ INTRO -->
+<div id="intro-view">
+  <div class="lobby-bg-glow"></div>
+  <div class="lobby-card" style="width: 500px;">
+    <div class="lobby-hero">
+      <div class="lobby-emoji">🏇</div>
+      <h1 class="lobby-title">DOSTIHY<br/>A SÁZKY</h1>
+    </div>
+    
+    <div id="room-selection">
+       <button id="show-create-room" class="btn btn-gold" style="width:100%">+ Vytvořit novou místnost</button>
+       <div class="bc-divider" style="margin: 15px auto; width: 100%;"></div>
+       <p class="label-sm">Dostupné hry:</p>
+       <div id="room-list" class="room-list">
+          <p class="dim">Hledám volné místnosti...</p>
+       </div>
+    </div>
+
+    <!-- Create Room Form (initially hidden) -->
+    <div id="room-create-form" class="hidden">
+       <div class="config-panel">
+          <div class="config-row">
+             <label>Název místnosti:</label>
+             <input type="text" id="new-room-name" class="text-input" placeholder="Moje hra..." maxlength="20"/>
+          </div>
+          <div class="config-row">
+             <label>Heslo (volitelné):</label>
+             <input type="password" id="new-room-pass" class="text-input" placeholder="Zadejte heslo..."/>
+          </div>
+       </div>
+       <div class="action-buttons row">
+          <button id="room-create-btn" class="btn btn-green" style="flex:1">Vytvořit</button>
+          <button id="cancel-create-btn" class="btn btn-outline" style="flex:1">Zrušit</button>
+       </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════ LOBBY -->
-<div id="lobby-view">
+<div id="lobby-view" class="hidden">
   <div class="lobby-bg-glow"></div>
 
   <div class="lobby-card">
@@ -45,9 +83,30 @@
 
     <!-- Host controls -->
     <div id="host-controls" class="hidden">
+      <div class="config-panel">
+        <p class="label-sm">Nastavení hry:</p>
+        <div class="config-row">
+          <label>Základní kapitál:</label>
+          <input type="number" id="cfg-startBal" class="text-input" value="10000" step="500" min="1000"/>
+        </div>
+        <div class="config-row">
+          <label>Průchod přes START:</label>
+          <input type="number" id="cfg-startBon" class="text-input" value="4000" step="500" min="0"/>
+        </div>
+        <div class="config-row">
+          <label>Násobič odkupu koní:</label>
+          <input type="number" id="cfg-buyout" class="text-input" value="0" step="0.5" min="0"/>
+        </div>
+        <p class="dim" style="margin-bottom:8px">Násobič 0 znamená vypnuto. Ostatní hráči vidí aktuální pravidla níže.</p>
+      </div>
       <button id="start-btn" class="btn btn-green btn-lg" disabled>
         ▶ Spustit hru (min. 2 hráči)
       </button>
+    </div>
+    
+    <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+       <p id="cfg-bal-disp" class="dim hidden" style="text-align:center; padding:0 20px; margin:0;"></p>
+       <button id="lobby-leave-btn" class="btn btn-outline btn-xs" style="align-self: center;">✖ Opustit místnost</button>
     </div>
   </div>
 </div>
@@ -108,6 +167,10 @@
       <h2 class="section-title">Průběh</h2>
       <div id="log-list"></div>
     </section>
+
+    <div style="padding: 10px; border-top: 1px solid var(--border); display: flex; gap: 8px;">
+       <button id="game-leave-btn" class="btn btn-outline btn-xs" style="flex:1">Odpojit se</button>
+    </div>
 
   </div>
 </div>

@@ -1,6 +1,6 @@
 'use strict';
 /* ─── State ──────────────────────────────────────────────────────────────── */
-let myId      = null;
+let myId = null;
 let boardData = null;
 let gameState = null;
 let boardBuilt = false;
@@ -8,45 +8,67 @@ let clientVisualPos = {};
 let isAnimatingPawn = false;
 let prevOwnerships = {};
 let prevTokens = {};
+let prevBalances = {};
+let allColors = []; // Store full color list from server
 
-const DICE_FACES = ['','⚀','⚁','⚂','⚃','⚄','⚅'];
-const fmt = n  => Number(n).toLocaleString('cs-CZ');
-const esc = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+const fmt = n => Number(n).toLocaleString('cs-CZ');
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /* ─── DOM refs ───────────────────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
 const dom = {
-  lobbyView:    $('lobby-view'),
-  gameView:     $('game-view'),
-  joinForm:     $('join-form'),
-  joinedWait:   $('joined-wait'),
-  nameInput:    $('name-input'),
-  colorPicker:  $('color-picker'),
-  joinBtn:      $('join-btn'),
+  introView: $('intro-view'),
+  roomList: $('room-list'),
+  lobbyView: $('lobby-view'),
+  gameView: $('game-view'),
+  joinForm: $('join-form'),
+  joinedWait: $('joined-wait'),
+  nameInput: $('name-input'),
+  colorPicker: $('color-picker'),
+  joinBtn: $('join-btn'),
   lobbyPlayers: $('lobby-players'),
   hostControls: $('host-controls'),
-  startBtn:     $('start-btn'),
-  board:        $('board'),
-  playersList:  $('players-list'),
-  actionTitle:  $('action-title'),
-  actionContent:$('action-content'),
-  logList:      $('log-list'),
-  bcDice:       $('bc-dice'),
-  bcTurn:       $('bc-turn'),
-  bcRound:      $('bc-round'),
-  toast:        $('toast'),
-  tooltip:      $('space-tip'),
+  startBtn: $('start-btn'),
+  board: $('board'),
+  playersList: $('players-list'),
+  actionTitle: $('action-title'),
+  actionContent: $('action-content'),
+  logList: $('log-list'),
+  bcDice: $('bc-dice'),
+  bcTurn: $('bc-turn'),
+  bcRound: $('bc-round'),
+  toast: $('toast'),
+  tooltip: $('space-tip'),
 };
 
 /* ─── Socket ─────────────────────────────────────────────────────────────── */
 const socket = io();
-let myColor   = null;
+let myColor = null;
 let selectedColor = null;
 
-socket.on('game:init', ({ board, colors, state }) => {
+socket.on('room:list', list => renderRoomList(list));
+
+socket.on('room:created', ({ roomId, password }) => {
+  // Automatically join created room
+  socket.emit('room:join', { roomId, password });
+  $('room-create-form').classList.add('hidden');
+  // We don't restore room-selection here because we're entering the room
+});
+
+socket.on('game:init', ({ roomId, board, colors, state }) => {
   boardData = board;
-  buildColorPicker(colors);
+  allColors = colors;
+  // Initially build picker with used colors from state
+  buildColorPicker(allColors, state.players.map(p => p.color));
+  // Hide intro, show lobby or game
+  dom.introView.classList.add('hidden');
   processState(state);
+
+  // Focus name input if not joined
+  if (!state.players.find(p => p.id === socket.id)) {
+    setTimeout(() => dom.nameInput.focus(), 100);
+  }
 });
 
 socket.on('game:state', state => processState(state));
@@ -55,47 +77,80 @@ socket.on('game:error', ({ message }) => showToast(message, true));
 
 /* ─── State processing ──────────────────────────────────────────────────── */
 function processState(state) {
+  if (!state) {
+    // No state = we are in room list
+    dom.introView.classList.remove('hidden');
+    dom.lobbyView.classList.add('hidden');
+    dom.gameView.classList.add('hidden');
+    return;
+  }
   gameState = state;
   identifyMe(state.players);                           // ← vždy, i v lobby
+
   const me = state.players.find(p => p.id === myId);
 
   if (state.phase === 'lobby') {
     renderLobby(state, me);
+    // If I'm not joined yet, refresh color picker to show only available colors
+    if (!me && allColors.length > 0) {
+      buildColorPicker(allColors, state.players.map(p => p.color));
+    }
   } else {
     dom.lobbyView.classList.add('hidden');
     dom.gameView.classList.remove('hidden');
-    if (!boardBuilt && boardData) { 
-       buildBoard(boardData); 
-       generateParticles();
-       boardBuilt = true; 
+    if (!boardBuilt && boardData) {
+      buildBoard(boardData);
+      generateParticles();
+      boardBuilt = true;
     }
-    
+
     // Check animations
     const currentOwn = state.ownerships || {};
     const currentTok = state.tokens || {};
     if (boardBuilt) {
-        Object.keys(currentOwn).forEach(sid => {
-            if (currentOwn[sid] !== prevOwnerships[sid]) {
-                const owner = state.players.find(p => p.id === currentOwn[sid]);
-                if (owner) playBuyAnimation(sid, owner);
-            }
-        });
-        Object.keys(currentTok).forEach(sid => {
-            const tNew = currentTok[sid];
-            const tOld = prevTokens[sid] || { small: 0, big: false };
-            if (tNew.small > tOld.small) playTokenAnimation(sid, false);
-            if (tNew.big && !tOld.big) playTokenAnimation(sid, true);
-        });
+      Object.keys(currentOwn).forEach(sid => {
+        if (currentOwn[sid] !== prevOwnerships[sid]) {
+          const owner = state.players.find(p => p.id === currentOwn[sid]);
+          if (owner) playBuyAnimation(sid, owner);
+        }
+      });
+      Object.keys(currentTok).forEach(sid => {
+        const tNew = currentTok[sid];
+        const tOld = prevTokens[sid] || { small: 0, big: false };
+        if (tNew.small > tOld.small) playTokenAnimation(sid, false);
+        if (tNew.big && !tOld.big) playTokenAnimation(sid, true);
+      });
     }
     prevOwnerships = { ...currentOwn };
     prevTokens = JSON.parse(JSON.stringify(currentTok));
 
     // Inicializace vizuálních poloh pro plynulý start
     state.players.forEach(p => {
-       if (clientVisualPos[p.id] === undefined) clientVisualPos[p.id] = p.position;
+      if (clientVisualPos[p.id] === undefined) clientVisualPos[p.id] = p.position;
+    });
+
+    const balanceDiffs = [];
+    state.players.forEach(p => {
+      if (prevBalances[p.id] !== undefined && prevBalances[p.id] !== p.balance) {
+        balanceDiffs.push({ id: p.id, diff: p.balance - prevBalances[p.id] });
+      }
+      prevBalances[p.id] = p.balance;
     });
 
     updatePlayers(state);
+
+    // Append balance animations
+    balanceDiffs.forEach(({ id, diff }) => {
+      const balEl = $(`pb-${id}`);
+      if (balEl) {
+        const diffEl = document.createElement('div');
+        diffEl.className = `balance-diff ${diff > 0 ? 'pos' : 'neg'}`;
+        diffEl.textContent = (diff > 0 ? '+' : '') + fmt(diff) + ' Kč';
+        balEl.appendChild(diffEl);
+        setTimeout(() => { if (diffEl.parentNode) diffEl.remove(); }, 2000);
+      }
+    });
+
     updateBoard(state);
     animatePawnsIfNeeded(state);
     updateActionPanel(state);
@@ -133,15 +188,115 @@ function renderLobby(state, me) {
       dom.startBtn.textContent = state.players.length < 2
         ? `▶ Spustit hru (min. 2 hráče — ${state.players.length}/2)`
         : `▶ Spustit hru (${state.players.length} hráči)`;
+      $('cfg-bal-disp').classList.add('hidden');
+
+      const c = state.config || { startBalance: 10000, startBonus: 4000, buyoutMultiplier: 0 };
+      if (document.activeElement !== $('cfg-startBal')) $('cfg-startBal').value = c.startBalance;
+      if (document.activeElement !== $('cfg-startBon')) $('cfg-startBon').value = c.startBonus;
+      if (document.activeElement !== $('cfg-buyout')) $('cfg-buyout').value = c.buyoutMultiplier;
+    } else {
+      $('cfg-bal-disp').classList.remove('hidden');
+      const c = state.config || { startBalance: 10000, startBonus: 4000, buyoutMultiplier: 0 };
+      $('cfg-bal-disp').innerHTML = `Pravidla hostitele: <strong>Kapitál ${fmt(c.startBalance)} Kč</strong>, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${c.buyoutMultiplier > 0 ? (c.buyoutMultiplier + 'x') : '<span style="color:var(--red)">Vypnuto</span>'}`;
     }
   }
 }
 
-function buildColorPicker(colors) {
+// Bind config inputs
+['cfg-startBal', 'cfg-startBon', 'cfg-buyout'].forEach(id => {
+  const el = $(id);
+  if (el) {
+    el.addEventListener('change', () => {
+      socket.emit('game:update_config', {
+        startBalance: Number($('cfg-startBal').value),
+        startBonus: Number($('cfg-startBon').value),
+        buyoutMultiplier: Number($('cfg-buyout').value)
+      });
+    });
+  }
+});
+
+/* ─── Intro Screen Items ────────────────────────────────────────────────── */
+function renderRoomList(list) {
+  if (!list.length) {
+    dom.roomList.innerHTML = '<p class="dim">Žádné aktivní místnosti.</p>';
+    return;
+  }
+  dom.roomList.innerHTML = list.map(r => `
+    <div class="room-item" data-id="${r.id}" data-pw="${r.hasPassword}">
+      <div class="room-main">
+        <div class="room-name">${esc(r.name)}</div>
+        <div class="room-meta">
+          <span>👥 ${r.players}/6</span>
+          <span class="room-status ${r.phase === 'lobby' ? 'status-lobby' : 'status-playing'}">${r.phase === 'lobby' ? 'Lobby' : 'Probíhá'}</span>
+          ${r.hasPassword ? '<span>🔒 Heslo</span>' : ''}
+        </div>
+      </div>
+      <div class="room-join-btn">Vstoupit →</div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.room-item').forEach(el => {
+    el.onclick = () => {
+      const roomId = el.dataset.id;
+      const hasPw = el.dataset.pw === 'true';
+      let password = '';
+      if (hasPw) {
+        password = prompt('Zadejte heslo k místnosti:');
+        if (password === null) return;
+      }
+      socket.emit('room:join', { roomId, password });
+    };
+  });
+}
+
+$('show-create-room').onclick = () => {
+  $('room-selection').classList.add('hidden');
+  $('room-create-form').classList.remove('hidden');
+};
+$('cancel-create-btn').onclick = () => {
+  $('room-create-form').classList.add('hidden');
+  $('room-selection').classList.remove('hidden');
+};
+$('room-create-btn').onclick = () => {
+  const name = $('new-room-name').value.trim();
+  const password = $('new-room-pass').value;
+  if (!name) return showToast('Zadejte název místnosti!', true);
+  socket.emit('room:create', { name, password });
+};
+
+// Leave buttons
+$('lobby-leave-btn').onclick = () => {
+  if (confirm('Opravdu chcete opustit místnost?')) {
+    socket.emit('game:leave');
+    location.reload(); // Refresh is simplest way to reset local state
+  }
+};
+$('game-leave-btn').onclick = () => {
+  if (confirm('Opravdu chcete opustit hru? Pokud odejdete během zápasu, zbankrotujete.')) {
+    socket.emit('game:leave');
+    location.reload();
+  }
+};
+
+// Initial room list request
+socket.emit('room:list');
+setInterval(() => { if (!dom.introView.classList.contains('hidden')) socket.emit('room:list'); }, 5000);
+
+
+function buildColorPicker(colors, usedColors = []) {
   dom.colorPicker.innerHTML = '';
+  // Clean selectedColor if it's now taken
+  if (selectedColor && usedColors.includes(selectedColor)) {
+    selectedColor = null;
+  }
+
   colors.forEach(c => {
+    if (usedColors.includes(c)) return; // Hide taken colors
+
     const btn = document.createElement('button');
     btn.className = 'color-btn';
+    if (selectedColor === c) btn.classList.add('selected');
     btn.style.background = c;
     btn.title = c;
     btn.onclick = () => {
@@ -151,8 +306,10 @@ function buildColorPicker(colors) {
     };
     dom.colorPicker.appendChild(btn);
   });
-  // Select first by default
-  dom.colorPicker.firstChild?.click();
+  // Select first available by default if none selected
+  if (!selectedColor && dom.colorPicker.firstChild) {
+    dom.colorPicker.firstChild.click();
+  }
 }
 
 dom.joinBtn.onclick = () => {
@@ -203,7 +360,7 @@ function buildBoard(board) {
     const el = document.createElement('div');
     el.className = `space space-${space.type} side-${side}`;
     el.dataset.id = String(space.id);
-    el.style.gridRow    = row;
+    el.style.gridRow = row;
     el.style.gridColumn = col;
 
     // Color stripe
@@ -238,28 +395,28 @@ function buildBoard(board) {
 
     // Dynamic elements (updated per state)
     const ownOverlay = document.createElement('div');
-    ownOverlay.id      = `ov-${space.id}`;
+    ownOverlay.id = `ov-${space.id}`;
     ownOverlay.className = 'own-overlay hidden';
     el.appendChild(ownOverlay);
 
-    const ownBadge   = document.createElement('div');
-    ownBadge.id      = `ob-${space.id}`;
+    const ownBadge = document.createElement('div');
+    ownBadge.id = `ob-${space.id}`;
     ownBadge.className = 'own-badge hidden';
     el.appendChild(ownBadge);
 
-    const tokenDots  = document.createElement('div');
-    tokenDots.id     = `td-${space.id}`;
+    const tokenDots = document.createElement('div');
+    tokenDots.id = `td-${space.id}`;
     tokenDots.className = 'token-dots';
     el.appendChild(tokenDots);
 
-    const pawns      = document.createElement('div');
-    pawns.id         = `pw-${space.id}`;
-    pawns.className  = 'space-pawns';
+    const pawns = document.createElement('div');
+    pawns.id = `pw-${space.id}`;
+    pawns.className = 'space-pawns';
     el.appendChild(pawns);
 
     // Tooltip
     el.addEventListener('mouseenter', ev => showTip(space, ev));
-    el.addEventListener('mousemove',  ev => moveTip(ev));
+    el.addEventListener('mousemove', ev => moveTip(ev));
     el.addEventListener('mouseleave', () => dom.tooltip.classList.add('hidden'));
 
     dom.board.appendChild(el);
@@ -267,30 +424,32 @@ function buildBoard(board) {
 }
 
 function getGridPos(id) {
-  if (id === 0)  return [11,11];
-  if (id === 10) return [11,1];
+  if (id === 0) return [11, 11];
+  if (id === 10) return [11, 1];
   if (id === 20) return [1, 1];
   if (id === 30) return [1, 11];
-  if (id >= 1  && id <= 9)  return [11,       11 - id];
-  if (id >= 11 && id <= 19) return [11-(id-10), 1];
-  if (id >= 21 && id <= 29) return [1,         id-19];
-  if (id >= 31 && id <= 39) return [id-29,      11];
+  if (id >= 1 && id <= 9) return [11, 11 - id];
+  if (id >= 11 && id <= 19) return [11 - (id - 10), 1];
+  if (id >= 21 && id <= 29) return [1, id - 19];
+  if (id >= 31 && id <= 39) return [id - 29, 11];
 }
 
 function getSide(id) {
-  if ([0,10,20,30].includes(id)) return 'corner';
-  if (id >= 1  && id <= 9)  return 'bottom';
+  if ([0, 10, 20, 30].includes(id)) return 'corner';
+  if (id >= 1 && id <= 9) return 'bottom';
   if (id >= 11 && id <= 19) return 'left';
   if (id >= 21 && id <= 29) return 'top';
   if (id >= 31 && id <= 39) return 'right';
 }
 
 function cornerIcon(id) {
-  return { 0:'🏁', 10:'🔒', 20:'🌿', 30:'➡️' }[id] || '⬜';
+  return { 0: '🏁', 10: '🔒', 20: '🅿️', 30: '➡️' }[id] || '⬜';
 }
 function typeIcon(space) {
-  return { finance:'💰', nahoda:'🎁', tax:'💸', go_to_jail:'🚔',
-           free_parking:'🌿', service:'👤', start:'🏁' }[space.type] || '';
+  return {
+    finance: '💰', nahoda: '🎁', tax: '💸', go_to_jail: '🚔',
+    free_parking: '🅿️', service: '👤', start: '🏁'
+  }[space.type] || '';
 }
 
 /* ─── Board Update (per state) ──────────────────────────────────────────── */
@@ -365,16 +524,16 @@ function animatePawnsIfNeeded(state) {
         if (p.bankrupt) return;
         if (clientVisualPos[p.id] !== p.position) {
           const diff = (p.position - clientVisualPos[p.id] + 40) % 40;
-          if (diff <= 12) { 
-             clientVisualPos[p.id] = (clientVisualPos[p.id] + 1) % 40;
+          if (diff <= 12) {
+            clientVisualPos[p.id] = (clientVisualPos[p.id] + 1) % 40;
           } else {
-             clientVisualPos[p.id] = (clientVisualPos[p.id] - 1 + 40) % 40;
+            clientVisualPos[p.id] = (clientVisualPos[p.id] - 1 + 40) % 40;
           }
           // Bounce effect
           const space = document.querySelector(`.space[data-id="${clientVisualPos[p.id]}"]`);
           if (space) {
-             space.style.transform = 'translateY(-4px)';
-             setTimeout(() => { if (space) space.style.transform = ''; }, 150);
+            space.style.transform = 'translateY(-4px)';
+            setTimeout(() => { if (space) space.style.transform = ''; }, 150);
           }
           if (clientVisualPos[p.id] !== p.position) stillNeeds = true;
         }
@@ -382,8 +541,8 @@ function animatePawnsIfNeeded(state) {
       renderPawns(state);
       if (stillNeeds) setTimeout(step, 180);
       else {
-         isAnimatingPawn = false;
-         renderPawns(state);
+        isAnimatingPawn = false;
+        renderPawns(state);
       }
     };
     step();
@@ -396,50 +555,50 @@ function animatePawnsIfNeeded(state) {
 function updatePlayers(state) {
   identifyMe(state.players);
   dom.playersList.innerHTML = state.players.map(p => {
-    const isMe   = p.id === myId;
+    const isMe = p.id === myId;
     const isTurn = p.id === state.currentTurnId;
     let badges = '';
-    if (p.inJail)   badges += '<span class="p-badge jail">🔒 Distanc</span>';
+    if (p.inJail) badges += '<span class="p-badge jail">🔒 Distanc</span>';
     if (p.bankrupt) badges += '<span class="p-badge bankrupt-badge">💀 Bankrot</span>';
-    if (isTurn)     badges += '<span class="p-badge">▶ Na tahu</span>';
+    if (isTurn) badges += '<span class="p-badge">▶ Na tahu</span>';
     const pos = boardData ? (boardData[p.position]?.name || '?') : '?';
 
     let invHtml = '';
     if (boardData && p.properties && p.properties.length > 0) {
-       const ownedSpaces = p.properties.map(id => boardData.find(s => s.id === id)).filter(Boolean);
-       
-       const groups = {};
-       ownedSpaces.forEach(sp => {
-           const g = sp.type === 'service' ? 'S' : (sp.groupColor || '#000');
-           if (!groups[g]) groups[g] = [];
-           groups[g].push(sp);
-       });
+      const ownedSpaces = p.properties.map(id => boardData.find(s => s.id === id)).filter(Boolean);
 
-       invHtml = '<div class="p-inventory">';
-       Object.entries(groups).forEach(([gColor, spcList]) => {
-           const totalInGroup = boardData.filter(s => s.type === 'horse' && s.groupColor === gColor).length;
-           const isMonopoly = (spcList.length === totalInGroup && totalInGroup > 0) && spcList[0].type !== 'service';
+      const groups = {};
+      ownedSpaces.forEach(sp => {
+        const g = sp.type === 'service' ? 'S' : (sp.groupColor || '#000');
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(sp);
+      });
 
-           invHtml += `<div class="inv-group ${isMonopoly ? 'monopoly-glow' : ''}">`;
-           
-           spcList.forEach(sp => {
-              if (sp.type === 'service') {
-                 const isTrainer = sp.name.toLowerCase().includes('trenér');
-                 const icon = isTrainer ? '👤' : '🚐';
-                 invHtml += `<div class="inv-service" data-sid="${sp.id}">${icon}</div>`;
-              } else {
-                 const tok = (gameState && gameState.tokens) ? gameState.tokens[sp.id] : null;
-                 let inner = '';
-                 if (tok && tok.big) inner = '<span class="inv-crown">👑</span>';
-                 else if (tok && tok.small > 0) {
-                     inner = Array(tok.small).fill('<span class="inv-dot"></span>').join('');
-                 }
-                 invHtml += `<div class="inv-bar" data-sid="${sp.id}" style="background:${esc(sp.groupColor)}">${inner}</div>`;
-              }
-           });
-           invHtml += '</div>';
-       });
-       invHtml += '</div>';
+      invHtml = '<div class="p-inventory">';
+      Object.entries(groups).forEach(([gColor, spcList]) => {
+        const totalInGroup = boardData.filter(s => s.type === 'horse' && s.groupColor === gColor).length;
+        const isMonopoly = (spcList.length === totalInGroup && totalInGroup > 0) && spcList[0].type !== 'service';
+
+        invHtml += `<div class="inv-group ${isMonopoly ? 'monopoly-glow' : ''}">`;
+
+        spcList.forEach(sp => {
+          if (sp.type === 'service') {
+            const isTrainer = sp.name.toLowerCase().includes('trenér');
+            const icon = isTrainer ? '👤' : '🚐';
+            invHtml += `<div class="inv-service" data-sid="${sp.id}">${icon}</div>`;
+          } else {
+            const tok = (gameState && gameState.tokens) ? gameState.tokens[sp.id] : null;
+            let inner = '';
+            if (tok && tok.big) inner = '<span class="inv-crown">👑</span>';
+            else if (tok && tok.small > 0) {
+              inner = Array(tok.small).fill('<span class="inv-dot"></span>').join('');
+            }
+            invHtml += `<div class="inv-bar" data-sid="${sp.id}" style="background:${esc(sp.groupColor)}">${inner}</div>`;
+          }
+        });
+        invHtml += '</div>';
+      });
+      invHtml += '</div>';
     }
 
     return `
@@ -450,7 +609,7 @@ function updatePlayers(state) {
           <div class="p-pos">${esc(pos)} ${badges}</div>
           ${invHtml}
         </div>
-        <div class="p-balance ${p.balance < 2000 ? 'low' : ''}">${fmt(p.balance)} Kč</div>
+        <div class="p-balance ${p.balance < 2000 ? 'low' : ''}" id="pb-${p.id}">${fmt(p.balance)} Kč</div>
       </div>
     `;
   }).join('');
@@ -461,9 +620,9 @@ let prevDice = null;
 function updateCenter(state) {
   dom.bcRound.textContent = `Kolo ${state.round}`;
 
-  if (state.lastDice && state.lastDice !== prevDice) {
+  if (state.lastDice && state.lastDice.id !== prevDice?.id) {
     prevDice = state.lastDice;
-    
+
     // 3D dice 
     const diceEl = $('dice-3d');
     if (diceEl) {
@@ -471,9 +630,9 @@ function updateCenter(state) {
       diceEl.style.transition = 'none';
       setTimeout(() => {
         diceEl.classList.remove('rolling');
-        
+
         let rotX = 0, rotY = 0;
-        switch (state.lastDice) {
+        switch (state.lastDice.value) {
           case 1: rotX = 0; rotY = 0; break;
           case 6: rotX = 0; rotY = -180; break;
           case 3: rotX = 0; rotY = -90; break;
@@ -483,8 +642,8 @@ function updateCenter(state) {
         }
         rotX += (Math.random() * 20 - 10);
         rotY += (Math.random() * 20 - 10);
-        
-        diceEl.style.transform = `rotateX(${rotX-360}deg) rotateY(${rotY-360}deg)`;
+
+        diceEl.style.transform = `rotateX(${rotX - 360}deg) rotateY(${rotY - 360}deg)`;
         void diceEl.offsetWidth; // hard reflow
         diceEl.style.transition = 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
         diceEl.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
@@ -501,11 +660,11 @@ function updateCenter(state) {
 /* ─── Action Panel ──────────────────────────────────────────────────────── */
 function updateActionPanel(state) {
   const pa = state.pendingAction;
-  
+
   // Hide 3D Card logic if not card_ack
   const cardOverlay = $('card-3d-overlay');
   if (cardOverlay && (!pa || pa.type !== 'card_ack')) {
-      cardOverlay.classList.add('hidden');
+    cardOverlay.classList.add('hidden');
   }
 
   if (!pa) {
@@ -514,10 +673,10 @@ function updateActionPanel(state) {
     return;
   }
 
-  const isTargeted    = pa.targetId === myId;
-  const targetPlayer  = state.players.find(p => p.id === pa.targetId);
-  const targetName    = targetPlayer?.name || '?';
-  const me            = state.players.find(p => p.id === myId);
+  const isTargeted = pa.targetId === myId;
+  const targetPlayer = state.players.find(p => p.id === pa.targetId);
+  const targetName = targetPlayer?.name || '?';
+  const me = state.players.find(p => p.id === myId);
 
   switch (pa.type) {
     // ── Roll ──
@@ -534,10 +693,26 @@ function updateActionPanel(state) {
       }
       break;
 
+    case 'service_roll':
+      dom.actionTitle.textContent = isTargeted ? 'Poplatek za služby' : 'Čeká se...';
+      if (isTargeted) {
+        dom.actionContent.innerHTML = `
+          <div class="jail-display" style="border-color:var(--blue);padding:10px;margin-bottom:10px;border: 1px solid var(--blue);">
+            🏠 <strong>Musíte hodit kostkou pro určení poplatku!</strong><br/>
+            Pole: ${esc(boardData[pa.data.spaceId].name)}
+          </div>
+          <button id="roll-service-btn" class="btn btn-gold btn-lg">🎲 Hodit pro poplatek</button>
+        `;
+        $('roll-service-btn').onclick = () => socket.emit('game:roll');
+      } else {
+        dom.actionContent.innerHTML = waitHTML(targetPlayer, 'hází kostkou pro určení poplatku...');
+      }
+      break;
+
     // ── Buy offer ──
     case 'buy_offer': {
-      const space  = boardData[pa.data.spaceId];
-      const rents  = space.rents || [];
+      const space = boardData[pa.data.spaceId];
+      const rents = space.rents || [];
       dom.actionTitle.textContent = 'Nabídka koupě';
       if (isTargeted) {
         const balAfter = (me?.balance || 0) - space.price;
@@ -553,18 +728,83 @@ function updateActionPanel(state) {
                   <div class="rent-row"><span>1 žeton:</span><span class="rent-val">${fmt(rents[1])} Kč</span></div>
                   <div class="rent-row"><span>Velký dostih:</span><span class="rent-val">${fmt(rents[5])} Kč</span></div>
                 </div>` : ''}
-              <div class="buy-rest">Zůstatek po koupi: <strong style="color:${balAfter<0?'var(--red)':'var(--green)'}">${fmt(balAfter)} Kč</strong></div>
+              <div class="buy-rest">Zůstatek po koupi: <strong style="color:${balAfter < 0 ? 'var(--red)' : 'var(--green)'}">${fmt(balAfter)} Kč</strong></div>
               <div class="action-buttons row" style="margin-top:6px">
-                <button id="buy-yes" class="btn btn-green" style="flex:1">Koupit</button>
+                ${balAfter >= 0 ? `<button id="buy-yes" class="btn btn-green" style="flex:1">Koupit</button>` : ''}
                 <button id="buy-no"  class="btn btn-outline" style="flex:1">Pas</button>
               </div>
             </div>
           </div>
         `;
-        $('buy-yes').onclick = () => socket.emit('game:respond', { decision:'buy',  spaceId: pa.data.spaceId });
-        $('buy-no').onclick  = () => socket.emit('game:respond', { decision:'pass', spaceId: pa.data.spaceId });
+        if ($('buy-yes')) $('buy-yes').onclick = () => socket.emit('game:respond', { decision: 'buy', spaceId: pa.data.spaceId });
+        if ($('buy-no')) $('buy-no').onclick = () => socket.emit('game:respond', { decision: 'pass', spaceId: pa.data.spaceId });
       } else {
         dom.actionContent.innerHTML = waitHTML(targetPlayer, `zvažuje koupi <strong>${esc(space.name)}</strong>`);
+      }
+      break;
+    }
+
+    // ── Debt Manage ──
+    case 'debt_manage': {
+      dom.actionTitle.textContent = 'Dluh! Prodejte majetek';
+      if (isTargeted) {
+        const p = state.players.find(p => p.id === myId);
+        const props = (p.properties || []).map(sid => {
+          const sp = boardData[sid];
+          let val = Math.floor(sp.price / 2);
+          const tok = state.tokens[sid];
+          if (tok) {
+            if (tok.big) val += Math.floor(sp.bigTokenCost / 2) + Math.floor(sp.tokenCost / 2) * 4;
+            else if (tok.small) val += Math.floor(sp.tokenCost / 2) * tok.small;
+          }
+          return `<div class="token-item">
+                      <div class="tok-name" style="border-left:3px solid ${esc(sp.groupColor || '#5b8dee')};padding-left:6px">
+                        ${esc(sp.name)} <span class="dim">(+ ${fmt(val)} Kč)</span>
+                      </div>
+                      <div class="tok-btns">
+                        <button class="btn btn-xs btn-outline sell-btn" data-sid="${sid}">Prodat</button>
+                      </div>
+                    </div>`;
+        }).join('');
+
+        dom.actionContent.innerHTML = `
+           <div class="jail-display" style="border-color:var(--red);padding:10px;margin-bottom:10px;border: 1px solid var(--red);">
+             ⚠️ <strong style="color:var(--red)">Jste v mínusu: ${fmt(p.balance)} Kč!</strong><br/>
+             Musíte prodat majetek nebo zkrachovat.
+           </div>
+           <div class="token-list" style="margin-top:10px">${props || '<p class="dim">Žádný majetek k prodeji.</p>'}</div>
+           <button id="debt-bankrupt" class="btn btn-red" style="margin-top:10px;width:100%">Vyhlásit bankrot 💀</button>
+         `;
+        document.querySelectorAll('.sell-btn').forEach(b => {
+          b.onclick = () => socket.emit('game:respond', { decision: 'sell_property', spaceId: +b.dataset.sid });
+        });
+        $('debt-bankrupt').onclick = () => socket.emit('game:respond', { decision: 'declare_bankrupt' });
+      } else {
+        dom.actionContent.innerHTML = waitHTML(targetPlayer, 'řeší své dluhy...');
+      }
+      break;
+    }
+
+    // ── Buyout Offer ──
+    case 'buyout_offer': {
+      const space = boardData[pa.data.spaceId];
+      const cost = pa.data.buyoutCost;
+      dom.actionTitle.textContent = 'Nepřátelský odkup';
+      if (isTargeted) {
+        dom.actionContent.innerHTML = `
+           <div class="jail-display" style="border-color:var(--gold);padding:10px;margin-bottom:10px;border: 1px solid var(--gold);">
+             Chcete nuceně odkoupit stáj <strong>${esc(space.name)}</strong>?<br/>
+             Stojí to <strong style="color:var(--gold)">${fmt(cost)} Kč</strong>.
+           </div>
+           <div class="action-buttons row">
+             <button id="buyout-yes" class="btn btn-gold" style="flex:1">Odkoupit</button>
+             <button id="buyout-no"  class="btn btn-outline" style="flex:1">Ne, díky</button>
+           </div>
+         `;
+        if ($('buyout-yes')) $('buyout-yes').onclick = () => socket.emit('game:respond', { decision: 'buy' });
+        if ($('buyout-no')) $('buyout-no').onclick = () => socket.emit('game:respond', { decision: 'pass' });
+      } else {
+        dom.actionContent.innerHTML = waitHTML(targetPlayer, `zvažuje odkup cizí stáje...`);
       }
       break;
     }
@@ -572,27 +812,27 @@ function updateActionPanel(state) {
     // ── Card ──
     case 'card_ack': {
       const { card, label } = pa.data;
-      
-      const cardEl  = $('card-3d');
-      if (cardOverlay && cardEl) {
-         cardOverlay.classList.remove('hidden');
-         $('card-3d-title').textContent = label;
-         $('card-3d-text').textContent  = card.text;
-         $('card-3d-btn').classList.toggle('hidden', !isTargeted);
-         
-         // Flip animation
-         cardEl.classList.remove('flipped');
-         setTimeout(() => cardEl.classList.add('flipped'), 100);
 
-         if (isTargeted) {
-             $('card-3d-btn').onclick = () => {
-                 cardEl.classList.remove('flipped');
-                 setTimeout(() => {
-                     cardOverlay.classList.add('hidden');
-                     socket.emit('game:respond', { decision:'ok' });
-                 }, 500);
-             };
-         }
+      const cardEl = $('card-3d');
+      if (cardOverlay && cardEl) {
+        cardOverlay.classList.remove('hidden');
+        $('card-3d-title').textContent = label;
+        $('card-3d-text').textContent = card.text;
+        $('card-3d-btn').classList.toggle('hidden', !isTargeted);
+
+        // Flip animation
+        cardEl.classList.remove('flipped');
+        setTimeout(() => cardEl.classList.add('flipped'), 100);
+
+        if (isTargeted) {
+          $('card-3d-btn').onclick = () => {
+            cardEl.classList.remove('flipped');
+            setTimeout(() => {
+              cardOverlay.classList.add('hidden');
+              socket.emit('game:respond', { decision: 'ok' });
+            }, 500);
+          };
+        }
       }
 
       dom.actionTitle.textContent = `Karta: ${label}`;
@@ -614,15 +854,15 @@ function updateActionPanel(state) {
         dom.actionContent.innerHTML = `
           <div class="jail-display">
             <div class="jail-icon">🔒</div>
-            <p class="jail-text">Jste v Distancu!<br/>Zbývá: <strong>${jt}</strong> ${jt===1?'kolo':'kola'}</p>
+            <p class="jail-text">Jste v Distancu!<br/>Zbývá: <strong>${jt}</strong> ${jt === 1 ? 'kolo' : 'kola'}</p>
             <div class="action-buttons">
               <button id="jail-pay"  class="btn btn-gold">Zaplatit ${fmt(500)} Kč a hrát</button>
               <button id="jail-roll" class="btn btn-outline">🎲 Hodit (6 = volno)</button>
             </div>
           </div>
         `;
-        $('jail-pay').onclick  = () => socket.emit('game:respond', { decision:'pay_fine' });
-        $('jail-roll').onclick = () => socket.emit('game:respond', { decision:'roll_jail' });
+        $('jail-pay').onclick = () => socket.emit('game:respond', { decision: 'pay_fine' });
+        $('jail-roll').onclick = () => socket.emit('game:respond', { decision: 'roll_jail' });
       } else {
         dom.actionContent.innerHTML = waitHTML(targetPlayer, 'je v Distancu...');
       }
@@ -635,15 +875,15 @@ function updateActionPanel(state) {
       if (isTargeted) {
         const eligible = pa.data.eligible || [];
         const tokRows = eligible.map(sid => {
-          const sp  = boardData[sid];
-          const tok = state.tokens[sid] || { small:0, big:false };
+          const sp = boardData[sid];
+          const tok = state.tokens[sid] || { small: 0, big: false };
           const canS = !tok.big && tok.small < 4 && (me?.balance || 0) >= sp.tokenCost;
           const canB = !tok.big && tok.small >= 4 && (me?.balance || 0) >= sp.bigTokenCost;
           return `
             <div class="token-item">
               <div class="tok-name" style="border-left:3px solid ${esc(sp.groupColor)};padding-left:6px">
                 ${esc(sp.name)}
-                <span style="color:var(--text-muted);font-weight:400"> — ${tok.small}× ${tok.big?'🏆':''}</span>
+                <span style="color:var(--text-muted);font-weight:400"> — ${tok.small}× ${tok.big ? '🏆' : ''}</span>
               </div>
               <div class="tok-btns">
                 ${canS ? `<button class="btn btn-xs btn-outline add-tok" data-sid="${sid}" data-t="small">+Žeton (${fmt(sp.tokenCost)} Kč)</button>` : ''}
@@ -658,10 +898,10 @@ function updateActionPanel(state) {
         `;
         document.querySelectorAll('.add-tok').forEach(b => {
           b.onclick = () => socket.emit('game:respond', {
-            decision:'add_token', spaceId:+b.dataset.sid, tokenType:b.dataset.t
+            decision: 'add_token', spaceId: +b.dataset.sid, tokenType: b.dataset.t
           });
         });
-        $('end-turn').onclick = () => socket.emit('game:respond', { decision:'end_turn' });
+        $('end-turn').onclick = () => socket.emit('game:respond', { decision: 'end_turn' });
       } else {
         dom.actionContent.innerHTML = waitHTML(targetPlayer, 'spravuje své stáje...');
       }
@@ -675,7 +915,7 @@ function updateActionPanel(state) {
       dom.actionContent.innerHTML = `
         <div class="gameover-display">
           <div class="gameover-trophy">🏆</div>
-          <div class="gameover-title">${w ? esc(w.name)+' vyhrál(a)!' : 'Konec hry!'}</div>
+          <div class="gameover-title">${w ? esc(w.name) + ' vyhrál(a)!' : 'Konec hry!'}</div>
           ${w ? `<div class="gameover-balance">Výsledný zůstatek: ${fmt(w.balance)} Kč</div>` : ''}
           <button class="btn btn-gold btn-lg" onclick="location.reload()">Hrát znovu</button>
         </div>
@@ -692,7 +932,7 @@ function waitHTML(player, msg) {
   return `
     <div class="action-waiting">
       <div class="waiting-icon">⏳</div>
-      <p>Čeká se na <strong style="color:${esc(player?.color||'#fff')}">${esc(player?.name||'?')}</strong><br/><span class="dim">${msg}</span></p>
+      <p>Čeká se na <strong style="color:${esc(player?.color || '#fff')}">${esc(player?.name || '?')}</strong><br/><span class="dim">${msg}</span></p>
     </div>
   `;
 }
@@ -708,13 +948,13 @@ function updateLog(state) {
 function showTip(space, ev) {
   if (!gameState) return;
   const ownerId = gameState.ownerships?.[space.id];
-  const owner   = ownerId ? gameState.players.find(p => p.id === ownerId) : null;
-  const tok     = gameState.tokens?.[space.id] || { small:0, big:false };
+  const owner = ownerId ? gameState.players.find(p => p.id === ownerId) : null;
+  const tok = gameState.tokens?.[space.id] || { small: 0, big: false };
 
   let html = `<div class="tip-name">${esc(space.name)}</div>`;
 
   if (space.type === 'horse') {
-    html += `<div class="tip-group" style="color:${esc(space.groupColor)}">● Stáj ${esc(space.group||'')}</div>`;
+    html += `<div class="tip-group" style="color:${esc(space.groupColor)}">● Stáj ${esc(space.group || '')}</div>`;
     html += `<div class="tip-row"><span>Cena:</span><span class="tip-val">${fmt(space.price)} Kč</span></div>`;
     html += `<div class="tip-row"><span>Základní nájem:</span><span class="tip-val">${fmt(space.rents[0])} Kč</span></div>`;
     if (tok.big) {
@@ -742,10 +982,10 @@ function showTip(space, ev) {
 function moveTip(ev) {
   const tip = dom.tooltip;
   let x = ev.clientX + 14, y = ev.clientY + 14;
-  if (x + 230 > window.innerWidth)  x = ev.clientX - 230;
+  if (x + 230 > window.innerWidth) x = ev.clientX - 230;
   if (y + 180 > window.innerHeight) y = ev.clientY - 180;
   tip.style.left = x + 'px';
-  tip.style.top  = y + 'px';
+  tip.style.top = y + 'px';
 }
 
 /* ─── Toast ──────────────────────────────────────────────────────────────── */
@@ -780,9 +1020,9 @@ function generateParticles() {
 dom.playersList.addEventListener('mouseover', ev => {
   const bar = ev.target.closest('.inv-bar, .inv-service');
   if (bar && boardData) {
-     const sid = parseInt(bar.dataset.sid);
-     const space = boardData.find(s => s.id === sid);
-     if (space) showTip(space, ev);
+    const sid = parseInt(bar.dataset.sid);
+    const space = boardData.find(s => s.id === sid);
+    if (space) showTip(space, ev);
   }
 });
 dom.playersList.addEventListener('mousemove', ev => {
@@ -797,29 +1037,29 @@ function spawnFloatingText(spaceId, text, color) {
   const space = document.querySelector(`.space[data-id="${spaceId}"]`);
   if (!space) return;
   const rect = space.getBoundingClientRect();
-  
+
   const el = document.createElement('div');
   el.className = 'floating-text';
-  el.style.left = (rect.left + rect.width/2) + 'px';
-  el.style.top  = (rect.top + rect.height/2) + 'px';
+  el.style.left = (rect.left + rect.width / 2) + 'px';
+  el.style.top = (rect.top + rect.height / 2) + 'px';
   el.style.color = color;
   el.innerHTML = text;
   document.body.appendChild(el);
-  
+
   setTimeout(() => { if (el.parentNode) el.remove(); }, 1200);
 }
 
 function playBuyAnimation(spaceId, owner) {
   const color = owner.color || '#fff';
   spawnFloatingText(spaceId, 'VLASTNÍK!', color);
-  
+
   const space = document.querySelector(`.space[data-id="${spaceId}"]`);
   if (space) {
-    space.classList.add('flash-buy'); 
+    space.classList.add('flash-buy');
     space.style.boxShadow = `inset 0 0 40px ${esc(color)}`;
     setTimeout(() => {
-        space.classList.remove('flash-buy');
-        space.style.boxShadow = '';
+      space.classList.remove('flash-buy');
+      space.style.boxShadow = '';
     }, 1000);
   }
 }

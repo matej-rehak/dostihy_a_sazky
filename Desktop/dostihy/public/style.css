@@ -170,6 +170,41 @@ html, body {
 .lp-name  { flex: 1; font-weight: 600; font-size: 13px; }
 .lp-host  { font-size: 10px; font-weight: 700; color: var(--gold); }
 
+/* Config Panel */
+.config-panel { background: rgba(255,255,255,.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 12px; }
+.config-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.config-row label { font-size: 13px; color: var(--text-dim); }
+.config-row input { width: 100px; padding: 6px 10px; font-size: 13px; }
+
+/* Room List */
+.room-list {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 240px; overflow-y: auto;
+  padding-right: 4px; border-radius: 8px;
+}
+.room-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; background: rgba(255,255,255,.04);
+  border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer; transition: var(--trans);
+}
+.room-item:hover {
+  background: rgba(255,215,0,.08); border-color: var(--gold);
+  transform: translateX(4px);
+}
+.room-main { display: flex; flex-direction: column; gap: 2px; }
+.room-name { font-weight: 700; font-size: 14px; letter-spacing: 0.5px; }
+.room-meta { display: flex; gap: 10px; font-size: 11px; color: var(--text-muted); }
+.room-join-btn {
+  font-family: var(--font-h); font-size: 12px; letter-spacing: 1px;
+  color: var(--gold); font-weight: 700;
+}
+.room-status {
+  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+}
+.status-lobby { background: rgba(0,230,118,.15); color: var(--green); }
+.status-playing { background: rgba(64,196,255,.15); color: var(--blue); }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    GAME LAYOUT
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -451,8 +486,30 @@ html, body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .p-pos  { font-size: 10px; color: var(--text-muted); }
-.p-balance { font-family: var(--font-h); font-size: 16px; color: var(--green); white-space: nowrap; }
+.p-balance { font-family: var(--font-h); font-size: 16px; color: var(--green); white-space: nowrap; position: relative; }
 .p-balance.low { color: var(--red); }
+
+/* Balance diff floating text */
+.balance-diff {
+  position: absolute;
+  right: 0;
+  top: -15px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-h);
+  pointer-events: none;
+  animation: floatDiff 1.8s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+  z-index: 20;
+}
+.balance-diff.pos { color: #00ff73; text-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,230,118,0.8); }
+.balance-diff.neg { color: #ff5e6d; text-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(255,71,87,0.8); }
+
+@keyframes floatDiff {
+  0%   { opacity: 0; transform: translateY(5px) scale(0.8); }
+  15%  { opacity: 1; transform: translateY(-5px) scale(1.1); }
+  85%  { opacity: 0.8; transform: translateY(-20px) scale(1); }
+  100% { opacity: 0; transform: translateY(-30px) scale(0.9); }
+}
 .p-badge {
   font-size: 9px; font-weight: 700; padding: 2px 6px;
   border-radius: 999px;
