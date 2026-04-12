@@ -102,11 +102,33 @@ class GameEngine {
 
     this.phase = 'playing';
     this.players.forEach(p => p.balance = this.config.startBalance);
-    this.turnOrder = [...this.players.keys()];
+    
+    // Shuffle turn order (Fisher-Yates)
+    const keys = [...this.players.keys()];
+    for (let i = keys.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [keys[i], keys[j]] = [keys[j], keys[i]];
+    }
+    this.turnOrder = keys;
     this.currentTurnIdx = 0;
-    this._addLog('🏁 Hra začala! Hodí se na pořadí...');
+
+    // Set starting animation action
+    this.pendingAction = { 
+      type: 'selecting_starter', 
+      targetId: this.turnOrder[0],
+      data: { starterId: this.turnOrder[0] }
+    };
+
+    this._addLog('🏁 Hra začala! Losuje se začínající hráč...');
     this._broadcast();
-    setTimeout(() => this._startTurn(), 800);
+
+    // Actual start after animation delay
+    setTimeout(() => {
+      if (this.pendingAction && this.pendingAction.type === 'selecting_starter') {
+        this.pendingAction = null;
+        this._startTurn();
+      }
+    }, 5000);
   }
 
   // ─── Turn ─────────────────────────────────────────────────────────────────

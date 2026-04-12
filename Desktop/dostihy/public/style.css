@@ -23,6 +23,52 @@
   --trans:        0.18s ease;
 }
 
+/* ─── Starter Animation ─── */
+#starter-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(10px);
+  animation: fadeIn 0.4s ease-out;
+}
+.starter-content {
+  text-align: center;
+}
+.starter-label {
+  font-family: var(--font-h); font-size: 32px; letter-spacing: 4px;
+  color: var(--gold); margin-bottom: 20px;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
+}
+.starter-flicker {
+  min-height: 120px;
+  display: flex; align-items: center; justify-content: center;
+}
+.flicker-item {
+  font-family: var(--font-h); font-size: 80px; letter-spacing: 2px;
+  padding: 0 40px; border-radius: 12px;
+  transition: all 0.05s ease-out;
+  text-transform: uppercase;
+  color: #fff;
+}
+.starter-winner {
+  font-family: var(--font-h); font-size: 100px; letter-spacing: 5px;
+  color: #fff; text-shadow: 0 0 40px rgba(255,255,255,0.4);
+  animation: winnerReveal 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.starter-winner.winning-gold {
+  color: var(--gold);
+  text-shadow: 0 0 50px rgba(255, 215, 0, 0.2);
+}
+
+@keyframes winnerReveal {
+  0% { transform: scale(0.5); opacity: 0; filter: blur(10px); }
+  100% { transform: scale(1); opacity: 1; filter: blur(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; } to { opacity: 1; }
+}
+
 /* ─── Reset ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -668,22 +714,92 @@ html, body {
 .log-entry:first-child { color: var(--text); }
 @keyframes logIn { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   TOOLTIP
-═══════════════════════════════════════════════════════════════════════════ */
+/* ─── Tooltip Detailed ─── */
 .space-tip {
-  position: fixed; z-index: 50; pointer-events: none;
-  background: var(--bg-card2); border: 1px solid var(--border-hi);
-  border-radius: 8px; padding: 10px 12px;
-  min-width: 160px; max-width: 220px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.6);
-  font-size: 12px;
+  position: fixed; z-index: 10000;
+  width: 240px; pointer-events: none;
+  background: rgba(13, 22, 38, 0.95);
+  border: 1px solid var(--border-hi);
+  border-radius: 12px; padding: 0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+  display: flex; flex-direction: column;
 }
-.tip-name  { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
-.tip-group { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
-.tip-row   { display: flex; justify-content: space-between; gap: 12px; margin: 2px 0; font-size: 11px; }
-.tip-val   { color: var(--gold); font-weight: 600; }
-.tip-owner { margin-top: 6px; font-size: 11px; font-weight: 600; }
+
+.tip-header {
+  padding: 12px; text-align: center;
+  font-family: var(--font-h); font-size: 20px; letter-spacing: 1px;
+  color: #fff; border-bottom: 2px solid rgba(255,255,255,0.1);
+}
+
+.tip-body { padding: 12px; }
+
+.tip-table {
+  width: 100%; border-collapse: collapse; margin-top: 8px;
+}
+.tip-table th { 
+  display: none; 
+}
+.tip-table td {
+  padding: 4px 0; font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.tip-table tr:last-child td { border-bottom: none; }
+.tip-table td:last-child { text-align: right; font-weight: 600; }
+.tip-table tr.active-rent {
+  background: rgba(255,255,255,0.1);
+  color: var(--gold);
+}
+.tip-table tr.active-rent td { border-bottom: none; }
+
+.tip-prices {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px dashed var(--border-hi);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.price-tag {
+  font-size: 11px; color: var(--text-dim);
+  display: flex; flex-direction: column;
+}
+.price-tag b { font-size: 13px; color: #fff; margin-top: 2px; }
+
+.tip-owner-info {
+  margin-top: 12px; padding: 8px 12px;
+  background: rgba(255,255,255,0.03);
+  font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+.owner-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* ─── Premium Cards ─── */
+.card-display {
+  background: #fff; color: #333;
+  border-radius: 10px; padding: 20px;
+  text-align: center; position: relative;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+.card-display::before {
+  content: ''; position: absolute; inset: 6px;
+  border: 2px solid #333; border-radius: 6px; pointer-events: none;
+}
+.card-display .card-header {
+  font-family: var(--font-h); font-size: 24px; color: #000;
+  margin-bottom: 10px; border-bottom: 2px solid #333;
+  padding-bottom: 5px;
+}
+.card-display .card-impact {
+  font-size: 32px; font-weight: 800; margin: 10px 0;
+}
+.card-display .card-impact.neg { color: #d63031; }
+.card-display .card-impact.pos { color: #27ae60; }
+
+.card-display .card-text {
+  font-size: 15px; line-height: 1.4; font-weight: 500;
+  padding: 0 10px;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TOAST

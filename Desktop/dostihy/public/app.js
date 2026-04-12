@@ -10,6 +10,7 @@ let prevOwnerships = {};
 let prevTokens = {};
 let prevBalances = {};
 let allColors = []; // Store full color list from server
+let isStarterAnimating = false;
 
 const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 const fmt = n => Number(n).toLocaleString('cs-CZ');
@@ -310,6 +311,43 @@ function buildColorPicker(colors, usedColors = []) {
   if (!selectedColor && dom.colorPicker.firstChild) {
     dom.colorPicker.firstChild.click();
   }
+}
+
+/* ─── Starter Animation ─── */
+function runStarterAnimation(winnerId, players) {
+  const overlay = $('starter-overlay');
+  const flicker = $('starter-flicker');
+  const winnerEl = $('starter-winner');
+  
+  if (!overlay || !flicker || !winnerEl) return;
+
+  overlay.classList.remove('hidden');
+  winnerEl.classList.add('hidden');
+  flicker.classList.remove('hidden');
+
+  let count = 0;
+  const max = 30; // Number of flickers
+  const interval = setInterval(() => {
+    const randomIdx = Math.floor(Math.random() * players.length);
+    const p = players[randomIdx];
+    flicker.innerHTML = `<div class="flicker-item" style="color:${esc(p.color)}">${esc(p.name)}</div>`;
+    
+    count++;
+    if (count >= max) {
+      clearInterval(interval);
+      // Reveal winner
+      const winner = players.find(p => p.id === winnerId);
+      flicker.classList.add('hidden');
+      winnerEl.classList.remove('hidden');
+      winnerEl.innerHTML = `🏁 ${esc(winner.name)} ZAČÍNÁ!`;
+      winnerEl.style.color = winner.color;
+      winnerEl.classList.add('winning-gold');
+      
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+      }, 2000);
+    }
+  }, 100);
 }
 
 dom.joinBtn.onclick = () => {
@@ -678,6 +716,17 @@ function updateActionPanel(state) {
   const targetName = targetPlayer?.name || '?';
   const me = state.players.find(p => p.id === myId);
 
+  // Starter Overlay Handling
+  if (pa.type === 'selecting_starter') {
+    if (!isStarterAnimating) {
+      isStarterAnimating = true;
+      runStarterAnimation(pa.data.starterId, state.players);
+    }
+  } else {
+    isStarterAnimating = false;
+    $('starter-overlay').classList.add('hidden');
+  }
+
   switch (pa.type) {
     // ── Roll ──
     case 'wait_roll':
@@ -812,37 +861,62 @@ function updateActionPanel(state) {
     // ── Card ──
     case 'card_ack': {
       const { card, label } = pa.data;
+      const isMe = pa.targetId === myId;
+      const p = state.players.find(pl => pl.id === pa.targetId);
 
-      const cardEl = $('card-3d');
-      if (cardOverlay && cardEl) {
-        cardOverlay.classList.remove('hidden');
-        $('card-3d-title').textContent = label;
-        $('card-3d-text').textContent = card.text;
-        $('card-3d-btn').classList.toggle('hidden', !isTargeted);
-
-        // Flip animation
-        cardEl.classList.remove('flipped');
-        setTimeout(() => cardEl.classList.add('flipped'), 100);
-
-        if (isTargeted) {
-          $('card-3d-btn').onclick = () => {
-            cardEl.classList.remove('flipped');
-            setTimeout(() => {
-              cardOverlay.classList.add('hidden');
-              socket.emit('game:respond', { decision: 'ok' });
-            }, 500);
-          };
-        }
+      // Impact calculation
+      let impactText = '';
+      let impactClass = '';
+      if (card.amount) {
+          impactText = (card.type==='pay'||card.type==='pay_to_all' ? '-' : '+') + fmt(card.amount) + ' Kč';
+          impactClass = (card.type==='pay'||card.type==='pay_to_all') ? 'neg' : 'pos';
       }
 
-      dom.actionTitle.textContent = `Karta: ${label}`;
-      dom.actionContent.innerHTML = `
-        <div class="card-display" style="margin-top:10px">
-          <div class="card-label">🃏 ${esc(label)}</div>
+      const cardHTML = `
+        <div class="card-display">
+          <div class="card-header">${esc(label)}</div>
+          ${impactText ? `<div class="card-impact ${impactClass}">${impactText}</div>` : ''}
           <div class="card-text">${esc(card.text)}</div>
-          ${isTargeted ? '<p class="dim" style="font-size:11px">Potvrďte na obrazovce karty.</p>' : '<p class="dim" style="font-size:11px">Čeká se na potvrzení hráče...</p>'}
         </div>
       `;
+
+      dom.actionTitle.textContent = 'Tažená karta';
+      
+      if (isMe) {
+          dom.actionContent.innerHTML = `
+            ${cardHTML}
+            <button id="card-ack-btn" class="btn btn-gold btn-lg" style="width:100%">Rozumím</button>
+          `;
+          $('card-ack-btn').onclick = () => socket.emit('game:respond', { decision: 'ok' });
+      } else {
+          dom.actionContent.innerHTML = `
+            ${cardHTML}
+            ${waitHTML(p, 'čte kartu...')}
+          `;
+      }
+
+      // Sync 3D card for consistency
+      const cardEl = $('card-3d');
+      if (cardOverlay && cardEl) {
+          cardOverlay.classList.remove('hidden');
+          $('card-3d-title').textContent = label;
+          $('card-3d-text').textContent = card.text;
+          $('card-3d-btn').classList.toggle('hidden', !isMe);
+          
+          if (!cardEl.classList.contains('flipped')) {
+              setTimeout(() => cardEl.classList.add('flipped'), 100);
+          }
+          
+          if (isMe) {
+              $('card-3d-btn').onclick = () => {
+                  cardEl.classList.remove('flipped');
+                  setTimeout(() => {
+                      cardOverlay.classList.add('hidden');
+                      socket.emit('game:respond', { decision: 'ok' });
+                  }, 400);
+              };
+          }
+      }
       break;
     }
 
@@ -951,27 +1025,62 @@ function showTip(space, ev) {
   const owner = ownerId ? gameState.players.find(p => p.id === ownerId) : null;
   const tok = gameState.tokens?.[space.id] || { small: 0, big: false };
 
-  let html = `<div class="tip-name">${esc(space.name)}</div>`;
+  let html = `<div class="tip-header" style="background:${esc(space.groupColor || 'var(--bg-card2)')}">${esc(space.name)}</div>`;
+  html += `<div class="tip-body">`;
 
   if (space.type === 'horse') {
-    html += `<div class="tip-group" style="color:${esc(space.groupColor)}">● Stáj ${esc(space.group || '')}</div>`;
-    html += `<div class="tip-row"><span>Cena:</span><span class="tip-val">${fmt(space.price)} Kč</span></div>`;
-    html += `<div class="tip-row"><span>Základní nájem:</span><span class="tip-val">${fmt(space.rents[0])} Kč</span></div>`;
-    if (tok.big) {
-      html += `<div class="tip-row"><span>Hlavní dostih:</span><span class="tip-val">${fmt(space.rents[5])} Kč</span></div>`;
-    } else if (tok.small > 0) {
-      html += `<div class="tip-row"><span>Nájem (${tok.small}× žeton):</span><span class="tip-val">${fmt(space.rents[tok.small])} Kč</span></div>`;
-    }
-    if (owner) {
-      html += `<div class="tip-owner" style="color:${esc(owner.color)}">🏠 Vlastní: ${esc(owner.name)}</div>`;
-    }
+    html += `<div class="tip-group">● Stáj ${esc(space.group || '')}</div>`;
+    
+    // Rent Table
+    html += `<table class="tip-table">`;
+    const rents = space.rents || [];
+    const labels = ['Základní nájem', 'S 1 dostihy', 'S 2 dostihy', 'S 3 dostihy', 'S 4 dostihy', 'HLAVNÍ DOSTIH'];
+    
+    rents.forEach((r, i) => {
+      let active = false;
+      if (tok.big && i === 5) active = true;
+      else if (!tok.big && tok.small === i) active = true;
+      
+      html += `<tr class="${active ? 'active-rent' : ''}">
+                 <td>${labels[i]}</td>
+                 <td>${fmt(r)} Kč</td>
+               </tr>`;
+    });
+    html += `</table>`;
+
+    // Maintenance Costs
+    html += `<div class="tip-prices">
+      <div class="price-tag">Cena koně: <b>${fmt(space.price)} Kč</b></div>
+      <div class="price-tag">Cena žetonu: <b>${fmt(space.tokenCost)} Kč</b></div>
+    </div>`;
+
   } else if (space.type === 'service') {
-    html += `<div class="tip-row"><span>Cena:</span><span class="tip-val">${fmt(space.price)} Kč</span></div>`;
-    if (owner) html += `<div class="tip-owner" style="color:${esc(owner.color)}">Vlastní: ${esc(owner.name)}</div>`;
+    let formula = '';
+    if (space.serviceType === 'trener') {
+      formula = '1.000 Kč × počet trenérů';
+    } else {
+      formula = 'Jedna: 80× hod kostkou<br/>Obě: 200× hod kostkou';
+    }
+    html += `<div class="tip-group">Specifické služby</div>
+             <div style="font-size:12px; margin-top:10px; line-height:1.4">${formula}</div>
+             <div class="price-tag" style="margin-top:10px">Pořizovací cena: <b>${fmt(space.price)} Kč</b></div>`;
+
   } else if (space.type === 'tax') {
-    html += `<div class="tip-row"><span>Platíš:</span><span class="tip-val">${fmt(space.amount)} Kč</span></div>`;
+    html += `<div class="tip-group" style="color:var(--red)">Pravidelná platba</div>
+             <div class="tip-impact neg" style="font-size:24px; font-weight:800; text-align:center; padding:10px 0">-${fmt(space.amount)} Kč</div>`;
   } else if (space.type === 'start') {
-    html += `<div class="dim">Průchod: +4 000 Kč</div>`;
+    html += `<div class="tip-group" style="color:var(--green)">Průchod startem</div>
+             <div style="font-size:13px; margin:10px 0">Získáváte od banky finanční injekci za dokončené kolo.</div>
+             <div style="text-align:right; font-weight:800; color:var(--green)">+${fmt(4000)} Kč</div>`;
+  }
+
+  html += `</div>`; // Close body
+
+  if (owner) {
+    html += `<div class="tip-owner-info">
+      <div class="owner-dot" style="background:${esc(owner.color)}"></div>
+      <div>Vlastní: ${esc(owner.name)}</div>
+    </div>`;
   }
 
   dom.tooltip.innerHTML = html;
@@ -981,9 +1090,15 @@ function showTip(space, ev) {
 
 function moveTip(ev) {
   const tip = dom.tooltip;
-  let x = ev.clientX + 14, y = ev.clientY + 14;
-  if (x + 230 > window.innerWidth) x = ev.clientX - 230;
-  if (y + 180 > window.innerHeight) y = ev.clientY - 180;
+  const tw = tip.offsetWidth || 240;
+  const th = tip.offsetHeight || 200;
+  
+  let x = ev.clientX + 14;
+  let y = ev.clientY + 14;
+
+  if (x + tw > window.innerWidth) x = ev.clientX - tw - 10;
+  if (y + th > window.innerHeight) y = ev.clientY - th - 10;
+
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
 }
