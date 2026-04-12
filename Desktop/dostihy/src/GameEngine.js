@@ -55,7 +55,8 @@ class GameEngine {
       id: socket.id, name, color: finalColor, isHost,
       position: 0, balance: this.config.startBalance,
       bankrupt: false, inJail: false, jailTurns: 0, skipTurns: 0,
-      properties: [],
+      properties: [], rollAccumulator: 0, lastMoveForwardOnly: false,
+      jailFreeCards: 0,
     };
     this.players.set(socket.id, player);
     this._addLog(`🐎 ${name} se připojil(a) k hře`);
@@ -142,8 +143,8 @@ class GameEngine {
     // Skip turns (card effect)
     if (player.skipTurns > 0) {
       player.skipTurns--;
-      this._addLog(`${player.name} vynechává tah (nemocný kůň)`);
-      this._scheduleAction(ACTION_DELAY_MS * 2, () => this._advanceTurn());
+      this._addLog(`🚫 ${player.name} vynechává tah (${player.skipTurns} kol zbývá)`);
+      this._scheduleAction(ACTION_DELAY_MS * 1.5, () => this._advanceTurn());
       return;
     }
 
@@ -172,11 +173,21 @@ class GameEngine {
     if (this.pendingAction.type === 'wait_roll') {
       const dice = roll();
       this.lastDice = { value: dice, id: Math.random() };
-      if (dice === 6) player.bonusTurn = true;
+      
+      player.rollAccumulator = (player.rollAccumulator || 0) + dice;
 
-      this._addLog(`🎲 ${player.name} hodil(a) ${dice}`);
-      this.pendingAction = null;
-      this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, dice));
+      if (dice === 6) {
+        this._addLog(`🎲 ${player.name} hodil(a) 6! Celkem nasčítáno: ${player.rollAccumulator}. Hází znovu...`);
+        this.pendingAction = { type: 'wait_roll', targetId: pid };
+        this._broadcast();
+      } else {
+        const totalSteps = player.rollAccumulator;
+        player.rollAccumulator = 0;
+        this._addLog(`🎲 ${player.name} hodil(a) ${dice}. Celkem se posouvá o ${totalSteps} polí.`);
+        player.lastMoveForwardOnly = true;
+        this.pendingAction = null;
+        this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, totalSteps));
+      }
     } else if (this.pendingAction.type === 'service_roll') {
       const dice = roll();
       this.lastDice = { value: dice, id: Math.random() };
@@ -268,6 +279,7 @@ class GameEngine {
         if (p.inJail || p.bankrupt) { this._advanceTurn(); return; }
 
         if (['move_to', 'move_forward', 'move_backward'].includes(card.type)) {
+          p.lastMoveForwardOnly = (card.type === 'move_forward');
           this._evaluateSpace(pid);
         } else {
           this._offerTokensOrEnd(pid);
@@ -291,15 +303,26 @@ class GameEngine {
         if (dice === 6) {
           player.inJail = false;
           player.jailTurns = 0;
-          this._addLog(`🔓 ${player.name} hodil(a) šestku — volno!`);
-          this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, dice));
+          player.rollAccumulator = 6;
+          this._addLog(`🔓 ${player.name} hodil(a) šestku — je volný a sčítá tah!`);
+          this.pendingAction = { type: 'wait_roll', targetId: pid };
+          this._broadcast();
         } else {
           player.jailTurns--;
           this._addLog(`${player.name} zůstává v Distancu (${player.jailTurns} kol zbývá)`);
           this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
         }
+      } else if (decision === 'use_jail_card') {
+        const player = this.players.get(pid);
+        if (player.jailFreeCards > 0) {
+          player.jailFreeCards--;
+          player.inJail = false;
+          player.jailTurns = 0;
+          this._addLog(`${player.name} použil(a) kartu "Zrušen distanc" a opouští vězení!`);
+          this.pendingAction = { type: 'wait_roll', targetId: pid };
+          this._broadcast();
+        }
       }
-
     } else if (action === 'token_manage') {
       if (decision === 'add_token') {
         this._addToken(pid, spaceId, tokenType);
@@ -348,7 +371,7 @@ class GameEngine {
 
       case 'tax':
         player.balance -= space.amount;
-        this._addLog(`${player.name} platí daň ${fmt(space.amount)} Kč`);
+        this._addLog(`🧾 ${player.name} platí za ${space.name} ${fmt(space.amount)} Kč`);
         this._checkBankrupt(pid);
         this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
         break;
@@ -361,6 +384,12 @@ class GameEngine {
 
       case 'go_to_jail':
         this._sendToJail(pid);
+        this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
+        break;
+      
+      case 'skip_turn':
+        player.skipTurns = space.turns;
+        this._addLog(`🚫 ${player.name} zastavil(a) na poli ${space.name} — vynechává příští tah.`);
         this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
         break;
 
@@ -378,9 +407,14 @@ class GameEngine {
       case 'service': {
         const owner = this.ownerships[space.id];
         if (!owner) {
-          // Unowned — offer to buy
-          this.pendingAction = { type: 'buy_offer', targetId: pid, data: { spaceId: space.id } };
-          this._broadcast();
+          if (player.balance >= space.price) {
+            // Unowned — offer to buy
+            this.pendingAction = { type: 'buy_offer', targetId: pid, data: { spaceId: space.id } };
+            this._broadcast();
+          } else {
+            this._addLog(`${player.name} nemá dostatek prostředků ke koupi ${space.name} (${fmt(space.price)} Kč)`);
+            this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
+          }
         } else if (owner === pid) {
           // Own property
           this._addLog(`${player.name} stojí na vlastním ${space.name}`);
@@ -511,6 +545,69 @@ class GameEngine {
       case 'skip_turn':
         player.skipTurns += card.turns;
         break;
+      case 'jail_free_card':
+        player.jailFreeCards++;
+        break;
+      case 'pay_per_token_custom': {
+        let total = 0;
+        player.properties.forEach(id => {
+          const t = this.tokens[id];
+          if (!t) return;
+          if (t.big) total += card.big;
+          else total += t.small * card.small;
+        });
+        player.balance -= total;
+        this._addLog(`🏘️ ${player.name} platí celkem ${fmt(total)} Kč za své žetony.`);
+        this._checkBankrupt(pid);
+        break;
+      }
+      case 'move_nearest': {
+        const oldPos = player.position;
+        let found = -1;
+        for (let i = 1; i < 40; i++) {
+          const idx = (player.position + i) % 40;
+          const s = BOARD[idx];
+          if (card.serviceType && s.serviceType === card.serviceType) { found = idx; break; }
+          if (card.category === 'type' && s.type === card.value) { found = idx; break; }
+        }
+        if (found !== -1) {
+          player.position = found;
+          if (card.passStart && player.position < oldPos) {
+            player.balance += this.config.startBonus;
+            this._addLog(`${player.name} prošel(a) START — +${fmt(this.config.startBonus)} Kč`);
+          }
+        }
+        break;
+      }
+      case 'move_nearest_backward': {
+        let found = -1;
+        for (let i = 1; i < 40; i++) {
+          const idx = (player.position - i + 40) % 40;
+          const s = BOARD[idx];
+          if (card.serviceType && s.serviceType === card.serviceType) { found = idx; break; }
+          if (card.category === 'type' && s.type === card.value) { found = idx; break; }
+        }
+        if (found !== -1) {
+          const oldPos = player.position;
+          player.position = found;
+          // Card 8 specifically says pass start backward gets money
+          if (card.passStart && player.position > oldPos) {
+            player.balance += this.config.startBonus;
+            this._addLog(`${player.name} prošel(a) START (pozpátku) — +${fmt(this.config.startBonus)} Kč`);
+          }
+        }
+        break;
+      }
+      case 'move_backward_to': {
+        const oldPos = player.position;
+        player.position = card.space;
+        if (card.bonus) player.balance += card.bonus;
+        if (card.passStart && player.position > oldPos) {
+          player.balance += this.config.startBonus;
+          this._addLog(`${player.name} prošel(a) START (pozpátku) — +${fmt(this.config.startBonus)} Kč`);
+        }
+        break;
+      }
       case 'gain_per_property':
         player.balance += player.properties.length * card.amount;
         break;
@@ -616,16 +713,28 @@ class GameEngine {
     }
 
     // horse
-    const tok = this.tokens[spaceId] || { small: 0, big: false };
-    if (tok.big) return space.rents[5];
-    if (tok.small > 0) return space.rents[tok.small];
-
-    // base rent — doubled if owner has whole stáj
-    const base = space.rents[0];
-    const ownsGroup = BOARD
+    const ownerPlayer = this.players.get(owner);
+    const hasMonopoly = BOARD
       .filter(s => s.group === space.group)
       .every(s => this.ownerships[s.id] === owner);
-    return ownsGroup ? base * 2 : base;
+
+    const tok = this.tokens[spaceId] || { small: 0, big: false };
+    let rent = space.rents[0]; // Start with base
+
+    if (tok.big || tok.small > 0) {
+      if (ownerPlayer.inJail) {
+        this._addLog(`ℹ️ Majitel ${ownerPlayer.name} je v Distancu — žetony nefungují!`);
+      } else if (!hasMonopoly) {
+        this._addLog(`ℹ️ Majitel ${ownerPlayer.name} nemá celou stáj — žetony nefungují!`);
+      } else {
+        // Tokens work!
+        if (tok.big) return space.rents[5];
+        return space.rents[tok.small];
+      }
+    }
+
+    // fallback to base / double base
+    return hasMonopoly ? rent * 2 : rent;
   }
 
   _buyProperty(pid, spaceId) {

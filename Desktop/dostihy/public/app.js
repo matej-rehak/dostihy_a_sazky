@@ -191,13 +191,13 @@ function renderLobby(state, me) {
         : `▶ Spustit hru (${state.players.length} hráči)`;
       $('cfg-bal-disp').classList.add('hidden');
 
-      const c = state.config || { startBalance: 10000, startBonus: 4000, buyoutMultiplier: 0 };
+      const c = state.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
       if (document.activeElement !== $('cfg-startBal')) $('cfg-startBal').value = c.startBalance;
       if (document.activeElement !== $('cfg-startBon')) $('cfg-startBon').value = c.startBonus;
       if (document.activeElement !== $('cfg-buyout')) $('cfg-buyout').value = c.buyoutMultiplier;
     } else {
       $('cfg-bal-disp').classList.remove('hidden');
-      const c = state.config || { startBalance: 10000, startBonus: 4000, buyoutMultiplier: 0 };
+      const c = state.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
       $('cfg-bal-disp').innerHTML = `Pravidla hostitele: <strong>Kapitál ${fmt(c.startBalance)} Kč</strong>, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${c.buyoutMultiplier > 0 ? (c.buyoutMultiplier + 'x') : '<span style="color:var(--red)">Vypnuto</span>'}`;
     }
   }
@@ -318,7 +318,7 @@ function runStarterAnimation(winnerId, players) {
   const overlay = $('starter-overlay');
   const flicker = $('starter-flicker');
   const winnerEl = $('starter-winner');
-  
+
   if (!overlay || !flicker || !winnerEl) return;
 
   overlay.classList.remove('hidden');
@@ -331,7 +331,7 @@ function runStarterAnimation(winnerId, players) {
     const randomIdx = Math.floor(Math.random() * players.length);
     const p = players[randomIdx];
     flicker.innerHTML = `<div class="flicker-item" style="color:${esc(p.color)}">${esc(p.name)}</div>`;
-    
+
     count++;
     if (count >= max) {
       clearInterval(interval);
@@ -342,7 +342,7 @@ function runStarterAnimation(winnerId, players) {
       winnerEl.innerHTML = `🏁 ${esc(winner.name)} ZAČÍNÁ!`;
       winnerEl.style.color = winner.color;
       winnerEl.classList.add('winning-gold');
-      
+
       setTimeout(() => {
         overlay.classList.add('hidden');
       }, 2000);
@@ -562,7 +562,9 @@ function animatePawnsIfNeeded(state) {
         if (p.bankrupt) return;
         if (clientVisualPos[p.id] !== p.position) {
           const diff = (p.position - clientVisualPos[p.id] + 40) % 40;
-          if (diff <= 12) {
+          const forceForward = p.lastMoveForwardOnly;
+          
+          if (forceForward || diff <= 20) {
             clientVisualPos[p.id] = (clientVisualPos[p.id] + 1) % 40;
           } else {
             clientVisualPos[p.id] = (clientVisualPos[p.id] - 1 + 40) % 40;
@@ -868,8 +870,8 @@ function updateActionPanel(state) {
       let impactText = '';
       let impactClass = '';
       if (card.amount) {
-          impactText = (card.type==='pay'||card.type==='pay_to_all' ? '-' : '+') + fmt(card.amount) + ' Kč';
-          impactClass = (card.type==='pay'||card.type==='pay_to_all') ? 'neg' : 'pos';
+        impactText = (card.type === 'pay' || card.type === 'pay_to_all' ? '-' : '+') + fmt(card.amount) + ' Kč';
+        impactClass = (card.type === 'pay' || card.type === 'pay_to_all') ? 'neg' : 'pos';
       }
 
       const cardHTML = `
@@ -881,15 +883,15 @@ function updateActionPanel(state) {
       `;
 
       dom.actionTitle.textContent = 'Tažená karta';
-      
+
       if (isMe) {
-          dom.actionContent.innerHTML = `
+        dom.actionContent.innerHTML = `
             ${cardHTML}
             <button id="card-ack-btn" class="btn btn-gold btn-lg" style="width:100%">Rozumím</button>
           `;
-          $('card-ack-btn').onclick = () => socket.emit('game:respond', { decision: 'ok' });
+        $('card-ack-btn').onclick = () => socket.emit('game:respond', { decision: 'ok' });
       } else {
-          dom.actionContent.innerHTML = `
+        dom.actionContent.innerHTML = `
             ${cardHTML}
             ${waitHTML(p, 'čte kartu...')}
           `;
@@ -898,24 +900,24 @@ function updateActionPanel(state) {
       // Sync 3D card for consistency
       const cardEl = $('card-3d');
       if (cardOverlay && cardEl) {
-          cardOverlay.classList.remove('hidden');
-          $('card-3d-title').textContent = label;
-          $('card-3d-text').textContent = card.text;
-          $('card-3d-btn').classList.toggle('hidden', !isMe);
-          
-          if (!cardEl.classList.contains('flipped')) {
-              setTimeout(() => cardEl.classList.add('flipped'), 100);
-          }
-          
-          if (isMe) {
-              $('card-3d-btn').onclick = () => {
-                  cardEl.classList.remove('flipped');
-                  setTimeout(() => {
-                      cardOverlay.classList.add('hidden');
-                      socket.emit('game:respond', { decision: 'ok' });
-                  }, 400);
-              };
-          }
+        cardOverlay.classList.remove('hidden');
+        $('card-3d-title').textContent = label;
+        $('card-3d-text').textContent = card.text;
+        $('card-3d-btn').classList.toggle('hidden', !isMe);
+
+        if (!cardEl.classList.contains('flipped')) {
+          setTimeout(() => cardEl.classList.add('flipped'), 100);
+        }
+
+        if (isMe) {
+          $('card-3d-btn').onclick = () => {
+            cardEl.classList.remove('flipped');
+            setTimeout(() => {
+              cardOverlay.classList.add('hidden');
+              socket.emit('game:respond', { decision: 'ok' });
+            }, 400);
+          };
+        }
       }
       break;
     }
@@ -925,6 +927,10 @@ function updateActionPanel(state) {
       dom.actionTitle.textContent = 'Distanc 🔒';
       if (isTargeted) {
         const jt = targetPlayer?.jailTurns || 0;
+        const freeCardBtn = (targetPlayer?.jailFreeCards > 0)
+          ? `<button id="jail-card" class="btn btn-gold" style="width:100%; margin-top:8px;">🔓 Použít kartu "Zrušen distanc"</button>`
+          : '';
+          
         dom.actionContent.innerHTML = `
           <div class="jail-display">
             <div class="jail-icon">🔒</div>
@@ -933,10 +939,12 @@ function updateActionPanel(state) {
               <button id="jail-pay"  class="btn btn-gold">Zaplatit ${fmt(500)} Kč a hrát</button>
               <button id="jail-roll" class="btn btn-outline">🎲 Hodit (6 = volno)</button>
             </div>
+            ${freeCardBtn}
           </div>
         `;
         $('jail-pay').onclick = () => socket.emit('game:respond', { decision: 'pay_fine' });
         $('jail-roll').onclick = () => socket.emit('game:respond', { decision: 'roll_jail' });
+        if ($('jail-card')) $('jail-card').onclick = () => socket.emit('game:respond', { decision: 'use_jail_card' });
       } else {
         dom.actionContent.innerHTML = waitHTML(targetPlayer, 'je v Distancu...');
       }
@@ -1030,17 +1038,17 @@ function showTip(space, ev) {
 
   if (space.type === 'horse') {
     html += `<div class="tip-group">● Stáj ${esc(space.group || '')}</div>`;
-    
+
     // Rent Table
     html += `<table class="tip-table">`;
     const rents = space.rents || [];
     const labels = ['Základní nájem', 'S 1 dostihy', 'S 2 dostihy', 'S 3 dostihy', 'S 4 dostihy', 'HLAVNÍ DOSTIH'];
-    
+
     rents.forEach((r, i) => {
       let active = false;
       if (tok.big && i === 5) active = true;
       else if (!tok.big && tok.small === i) active = true;
-      
+
       html += `<tr class="${active ? 'active-rent' : ''}">
                  <td>${labels[i]}</td>
                  <td>${fmt(r)} Kč</td>
@@ -1092,7 +1100,7 @@ function moveTip(ev) {
   const tip = dom.tooltip;
   const tw = tip.offsetWidth || 240;
   const th = tip.offsetHeight || 200;
-  
+
   let x = ev.clientX + 14;
   let y = ev.clientY + 14;
 
