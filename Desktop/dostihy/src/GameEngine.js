@@ -5,7 +5,7 @@ const { FinanceDeck, NahodaDeck } = require('./Cards');
 
 const JAIL_SPACE = 10;
 const JAIL_TURNS_MAX = 3;
-const JAIL_FINE = 500;
+const JAIL_FINE = 3000;
 const ACTION_DELAY_MS = 2000; // pause between auto-actions for animation
 
 const PLAYER_COLORS = ['#e74c3c', '#3b82f6', '#10b981', '#f59e0b', '#a855f7', '#f97316'];
@@ -29,7 +29,7 @@ class GameEngine {
     this.round = 1;
     this.financeCards = FinanceDeck();
     this.nahodaCards = NahodaDeck();
-    this.config = { startBalance: 10000, startBonus: 4000, buyoutMultiplier: 0 };
+    this.config = { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
     this._timer = null;
     this._resumeFn = null;
   }
@@ -56,7 +56,7 @@ class GameEngine {
       position: 0, balance: this.config.startBalance,
       bankrupt: false, inJail: false, jailTurns: 0, skipTurns: 0,
       properties: [], rollAccumulator: 0, lastMoveForwardOnly: false,
-      jailFreeCards: 0,
+      jailFreeCards: 0, ready: false,
     };
     this.players.set(socket.id, player);
     this._addLog(`🐎 ${name} se připojil(a) k hře`);
@@ -68,6 +68,14 @@ class GameEngine {
     const player = this.players.get(socket.id);
     if (!player || !player.isHost) return;
     this.config = { ...this.config, ...config };
+    this._broadcast();
+  }
+
+  toggleReady(socketId) {
+    if (this.phase !== 'lobby') return;
+    const player = this.players.get(socketId);
+    if (!player) return;
+    player.ready = !player.ready;
     this._broadcast();
   }
 
@@ -101,9 +109,16 @@ class GameEngine {
     if (!host?.isHost) { socket.emit('game:error', { message: 'Hru může spustit pouze host.' }); return; }
     if (this.players.size < 2) { socket.emit('game:error', { message: 'Potřeba alespoň 2 hráče.' }); return; }
 
+    const unready = [...this.players.values()].filter(p => !p.ready);
+    if (unready.length > 0) {
+      const names = unready.map(p => p.name).join(', ');
+      socket.emit('game:error', { message: `Všichni hráči musí být připraveni! Čeká se na: ${names}` });
+      return;
+    }
+
     this.phase = 'playing';
     this.players.forEach(p => p.balance = this.config.startBalance);
-    
+
     // Shuffle turn order (Fisher-Yates)
     const keys = [...this.players.keys()];
     for (let i = keys.length - 1; i > 0; i--) {
@@ -114,8 +129,8 @@ class GameEngine {
     this.currentTurnIdx = 0;
 
     // Set starting animation action
-    this.pendingAction = { 
-      type: 'selecting_starter', 
+    this.pendingAction = {
+      type: 'selecting_starter',
       targetId: this.turnOrder[0],
       data: { starterId: this.turnOrder[0] }
     };
@@ -173,7 +188,7 @@ class GameEngine {
     if (this.pendingAction.type === 'wait_roll') {
       const dice = roll();
       this.lastDice = { value: dice, id: Math.random() };
-      
+
       player.rollAccumulator = (player.rollAccumulator || 0) + dice;
 
       if (dice === 6) {
@@ -195,12 +210,12 @@ class GameEngine {
       const space = BOARD[spaceId];
       const owner = this.ownerships[spaceId];
       const ownerPlayer = this.players.get(owner);
-      
+
       this._addLog(`🎲 ${player.name} hází pro poplatek: ${dice}`);
-      
+
       const rent = this._calcRent(spaceId, dice);
       this._addLog(`💸 ${player.name} platí poplatek ${fmt(rent)} Kč → ${ownerPlayer.name} (${space.name})`);
-      
+
       this.pendingAction = null;
       this._transfer(pid, owner, rent);
       this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
@@ -386,7 +401,7 @@ class GameEngine {
         this._sendToJail(pid);
         this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
         break;
-      
+
       case 'skip_turn':
         player.skipTurns = space.turns;
         this._addLog(`🚫 ${player.name} zastavil(a) na poli ${space.name} — vynechává příští tah.`);
@@ -707,7 +722,7 @@ class GameEngine {
       }
       // preprava / staje
       const hasPreprava = ownerPlayer.properties.some(sid => BOARD[sid].serviceType === 'preprava');
-      const hasStaje    = ownerPlayer.properties.some(sid => BOARD[sid].serviceType === 'staje');
+      const hasStaje = ownerPlayer.properties.some(sid => BOARD[sid].serviceType === 'staje');
       const multiplier = (hasPreprava && hasStaje) ? 200 : 80;
       return multiplier * dice;
     }

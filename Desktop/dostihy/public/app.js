@@ -1,1193 +1,1399 @@
 'use strict';
-/* ─── State ──────────────────────────────────────────────────────────────── */
-let myId = null;
-let boardData = null;
-let gameState = null;
-let boardBuilt = false;
-let clientVisualPos = {};
-let isAnimatingPawn = false;
-let prevOwnerships = {};
-let prevTokens = {};
-let prevBalances = {};
-let allColors = []; // Store full color list from server
-let isStarterAnimating = false;
 
-const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-const fmt = n => Number(n).toLocaleString('cs-CZ');
-const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// ─── Celý kód je zapouzdřen v IIFE → žádné globální proměnné nejsou
+//     přístupné z DevTools / konzole (oprava: globální scope pollution)
+(function () {
 
-/* ─── DOM refs ───────────────────────────────────────────────────────────── */
-const $ = id => document.getElementById(id);
-const dom = {
-  introView: $('intro-view'),
-  roomList: $('room-list'),
-  lobbyView: $('lobby-view'),
-  gameView: $('game-view'),
-  joinForm: $('join-form'),
-  joinedWait: $('joined-wait'),
-  nameInput: $('name-input'),
-  colorPicker: $('color-picker'),
-  joinBtn: $('join-btn'),
-  lobbyPlayers: $('lobby-players'),
-  hostControls: $('host-controls'),
-  startBtn: $('start-btn'),
-  board: $('board'),
-  playersList: $('players-list'),
-  actionTitle: $('action-title'),
-  actionContent: $('action-content'),
-  logList: $('log-list'),
-  bcDice: $('bc-dice'),
-  bcTurn: $('bc-turn'),
-  bcRound: $('bc-round'),
-  toast: $('toast'),
-  tooltip: $('space-tip'),
-};
+  /* ─── State ──────────────────────────────────────────────────────────────── */
+  let myId = null;
+  let boardData = null;
+  let gameState = null;
+  let boardBuilt = false;
+  let clientVisualPos = {};
+  let isAnimatingPawn = false;
+  let prevOwnerships = {};
+  let prevTokens = {};
+  let prevBalances = {};
+  let allColors = [];
+  let isStarterAnimating = false;
 
-/* ─── Socket ─────────────────────────────────────────────────────────────── */
-const socket = io();
-let myColor = null;
-let selectedColor = null;
+  // Interval handles — aby šly zastavit a nevznikaly memory leaky
+  let particleIntervalId = null;
+  let roomListIntervalId = null;
 
-socket.on('room:list', list => renderRoomList(list));
+  const DICE_FACES = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+  const fmt = n => Number(n).toLocaleString('cs-CZ');
 
-socket.on('room:created', ({ roomId, password }) => {
-  // Automatically join created room
-  socket.emit('room:join', { roomId, password });
-  $('room-create-form').classList.add('hidden');
-  // We don't restore room-selection here because we're entering the room
-});
+  // ─── Bezpečná sanitizace (oprava: neúplná esc() — chyběly apostrofy a lomítka)
+  const esc = s => String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;');
 
-socket.on('game:init', ({ roomId, board, colors, state }) => {
-  boardData = board;
-  allColors = colors;
-  // Initially build picker with used colors from state
-  buildColorPicker(allColors, state.players.map(p => p.color));
-  // Hide intro, show lobby or game
-  dom.introView.classList.add('hidden');
-  processState(state);
+  // ─── Validace CSS barev ze serveru (oprava: nekontrolované hodnoty do style=)
+  const isSafeColor = v =>
+    typeof v === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(v.trim());
+  const safeColor = (v, fallback = '#888888') =>
+    isSafeColor(v) ? v.trim() : fallback;
 
-  // Focus name input if not joined
-  if (!state.players.find(p => p.id === socket.id)) {
-    setTimeout(() => dom.nameInput.focus(), 100);
+  /* ─── DOM refs ───────────────────────────────────────────────────────────── */
+  // Wrapper s null-checkem (oprava: přímé volání .onclick na null způsobovalo TypeError)
+  const getEl = id => {
+    const el = document.getElementById(id);
+    if (!el) console.warn(`[client] Element #${id} nenalezen`);
+    return el;
+  };
+
+  const dom = {
+    introView: getEl('intro-view'),
+    roomList: getEl('room-list'),
+    lobbyView: getEl('lobby-view'),
+    gameView: getEl('game-view'),
+    joinForm: getEl('join-form'),
+    joinedWait: getEl('joined-wait'),
+    nameInput: getEl('name-input'),
+    colorPicker: getEl('color-picker'),
+    joinBtn: getEl('join-btn'),
+    lobbyPlayers: getEl('lobby-players'),
+    hostControls: getEl('host-controls'),
+    startBtn: getEl('start-btn'),
+    board: getEl('board'),
+    playersList: getEl('players-list'),
+    actionTitle: getEl('action-title'),
+    actionContent: getEl('action-content'),
+    logList: getEl('log-list'),
+    bcDice: getEl('bc-dice'),
+    bcTurn: getEl('bc-turn'),
+    bcRound: getEl('bc-round'),
+    toast: getEl('toast'),
+    tooltip: getEl('space-tip'),
+  };
+
+  /* ─── Pomocné DOM utility ────────────────────────────────────────────────── */
+
+  // Bezpečná alternativa k innerHTML pro jednoduché textové uzly
+  function setText(el, text) {
+    if (!el) return;
+    el.textContent = text;
   }
-});
 
-socket.on('game:state', state => processState(state));
+  // Vytvoří element a nastaví textContent — žádný innerHTML pro uživatelská data
+  function makeEl(tag, cls, text) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
 
-socket.on('game:error', ({ message }) => showToast(message, true));
+  /* ─── Socket ─────────────────────────────────────────────────────────────── */
+  const socket = io();
+  let myColor = null;
+  let selectedColor = null;
 
-/* ─── State processing ──────────────────────────────────────────────────── */
-function processState(state) {
-  if (!state) {
-    // No state = we are in room list
+  socket.on('room:list', list => renderRoomList(list));
+
+  socket.on('room:created', ({ roomId, password }) => {
+    socket.emit('room:join', { roomId, password });
+    const createForm = getEl('room-create-form');
+    if (createForm) createForm.classList.add('hidden');
+  });
+
+  socket.on('game:init', ({ roomId, board, colors, state }) => {
+    boardData = board;
+    allColors = colors;
+    buildColorPicker(allColors, state.players.map(p => p.color));
+    dom.introView.classList.add('hidden');
+    processState(state);
+    if (!state.players.find(p => p.id === socket.id)) {
+      setTimeout(() => { if (dom.nameInput) dom.nameInput.focus(); }, 100);
+    }
+  });
+
+  socket.on('game:state', state => processState(state));
+  socket.on('game:error', ({ message }) => showToast(message, true));
+
+  /* ─── Identita hráče ─────────────────────────────────────────────────────── */
+  // (oprava: odstraněn fallback na jméno — hráči se stejným jménem si vyměnili identitu)
+  function identifyMe(players) {
+    if (myId) return;
+    if (socket.id && players.find(p => p.id === socket.id)) {
+      myId = socket.id;
+    }
+    // Fallback na jméno záměrně odstraněn — server by měl vrátit
+    // playerId spolehlivě přes socket.id nebo dedikovanou událost.
+  }
+
+  /* ─── State processing ──────────────────────────────────────────────────── */
+  function processState(state) {
+    if (!state) {
+      dom.introView.classList.remove('hidden');
+      dom.lobbyView.classList.add('hidden');
+      dom.gameView.classList.add('hidden');
+      return;
+    }
+    gameState = state;
+    identifyMe(state.players);
+
+    const me = state.players.find(p => p.id === myId);
+
+    if (state.phase === 'lobby') {
+      renderLobby(state, me);
+      if (!me && allColors.length > 0) {
+        buildColorPicker(allColors, state.players.map(p => p.color));
+      }
+    } else {
+      dom.lobbyView.classList.add('hidden');
+      dom.gameView.classList.remove('hidden');
+
+      if (!boardBuilt && boardData) {
+        buildBoard(boardData);
+        generateParticles();
+        boardBuilt = true;
+      }
+
+      const currentOwn = state.ownerships || {};
+      const currentTok = state.tokens || {};
+
+      if (boardBuilt) {
+        Object.keys(currentOwn).forEach(sid => {
+          if (currentOwn[sid] !== prevOwnerships[sid]) {
+            const owner = state.players.find(p => p.id === currentOwn[sid]);
+            if (owner) playBuyAnimation(sid, owner);
+          }
+        });
+        Object.keys(currentTok).forEach(sid => {
+          const tNew = currentTok[sid];
+          const tOld = prevTokens[sid] || { small: 0, big: false };
+          if (tNew.small > tOld.small) playTokenAnimation(sid, false);
+          if (tNew.big && !tOld.big) playTokenAnimation(sid, true);
+        });
+      }
+
+      prevOwnerships = { ...currentOwn };
+      // (oprava: JSON round-trip nahrazen strukturovaným klonem — bezpečnější a rychlejší)
+      try {
+        prevTokens = structuredClone(currentTok);
+      } catch {
+        prevTokens = JSON.parse(JSON.stringify(currentTok));
+      }
+
+      state.players.forEach(p => {
+        if (clientVisualPos[p.id] === undefined) clientVisualPos[p.id] = p.position;
+      });
+
+      const balanceDiffs = [];
+      state.players.forEach(p => {
+        if (prevBalances[p.id] !== undefined && prevBalances[p.id] !== p.balance) {
+          balanceDiffs.push({ id: p.id, diff: p.balance - prevBalances[p.id] });
+        }
+        prevBalances[p.id] = p.balance;
+      });
+
+      updatePlayers(state);
+
+      balanceDiffs.forEach(({ id, diff }) => {
+        const balEl = getEl(`pb-${id}`);
+        if (balEl) {
+          const diffEl = makeEl('div', `balance-diff ${diff > 0 ? 'pos' : 'neg'}`);
+          diffEl.textContent = (diff > 0 ? '+' : '') + fmt(diff) + ' Kč';
+          balEl.appendChild(diffEl);
+          setTimeout(() => { if (diffEl.parentNode) diffEl.remove(); }, 2000);
+        }
+      });
+
+      updateBoard(state);
+      animatePawnsIfNeeded(state);
+      updateActionPanel(state);
+      updateLog(state);
+      updateCenter(state);
+    }
+  }
+
+  /* ─── Lobby ──────────────────────────────────────────────────────────────── */
+  function renderLobby(state, me) {
+    dom.lobbyView.classList.remove('hidden');
+    dom.gameView.classList.add('hidden');
+
+    // Hráči — DOM API místo innerHTML (oprava: XSS přes jméno hráče)
+    const lpContainer = dom.lobbyPlayers;
+    if (lpContainer) {
+      lpContainer.innerHTML = '';
+      if (!state.players.length) {
+        lpContainer.appendChild(makeEl('p', 'dim', 'Zatím nikdo...'));
+      } else {
+        state.players.forEach(p => {
+          const row = makeEl('div', 'lp-row');
+
+          const avatar = makeEl('div', 'lp-avatar');
+          avatar.style.background = safeColor(p.color);
+          avatar.textContent = p.name[0].toUpperCase();
+
+          const name = makeEl('span', 'lp-name', p.name);
+          row.appendChild(avatar);
+          row.appendChild(name);
+
+          if (p.isHost) row.appendChild(makeEl('span', 'lp-host', 'HOST'));
+          if (p.ready) row.appendChild(makeEl('span', 'lp-ready-text', 'PŘIPRAVEN'));
+
+          const dot = makeEl('div', `lp-ready-dot${p.ready ? ' is-ready' : ''}`);
+          row.appendChild(dot);
+          lpContainer.appendChild(row);
+        });
+      }
+    }
+
+    if (me) {
+      if (dom.joinForm) dom.joinForm.classList.add('hidden');
+      if (dom.joinedWait) dom.joinedWait.classList.remove('hidden');
+
+      if (me.isHost) {
+        if (dom.hostControls) dom.hostControls.classList.remove('hidden');
+        const allReady = state.players.every(p => p.ready);
+        if (dom.startBtn) {
+          dom.startBtn.disabled = state.players.length < 2 || !allReady;
+          if (state.players.length < 2) {
+            dom.startBtn.textContent = `▶ Spustit hru (min. 2 hráče — ${state.players.length}/2)`;
+          } else if (!allReady) {
+            dom.startBtn.textContent = `▶ Čeká se na připravenost všech...`;
+          } else {
+            dom.startBtn.textContent = `▶ Spustit hru! (${state.players.length} hráčů připraveno)`;
+          }
+        }
+        const balDisp = getEl('cfg-bal-disp');
+        if (balDisp) balDisp.classList.add('hidden');
+
+        const c = state.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
+        const cfgBal = getEl('cfg-startBal');
+        const cfgBon = getEl('cfg-startBon');
+        const cfgBuy = getEl('cfg-buyout');
+        if (cfgBal && document.activeElement !== cfgBal) cfgBal.value = c.startBalance;
+        if (cfgBon && document.activeElement !== cfgBon) cfgBon.value = c.startBonus;
+        if (cfgBuy && document.activeElement !== cfgBuy) cfgBuy.value = c.buyoutMultiplier;
+      } else {
+        const balDisp = getEl('cfg-bal-disp');
+        if (balDisp) {
+          balDisp.classList.remove('hidden');
+          const c = state.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
+          // DOM API pro obsah s daty (oprava: innerHTML s interpolovanými hodnotami)
+          balDisp.textContent = '';
+          balDisp.appendChild(document.createTextNode('Pravidla hostitele: '));
+          const strong = makeEl('strong', '', `Kapitál ${fmt(c.startBalance)} Kč`);
+          balDisp.appendChild(strong);
+          const buyoutText = c.buyoutMultiplier > 0
+            ? `${c.buyoutMultiplier}x`
+            : 'Vypnuto';
+          balDisp.appendChild(document.createTextNode(
+            `, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${buyoutText}`
+          ));
+        }
+      }
+
+      const readyBtn = getEl('toggle-ready-btn');
+      if (readyBtn) {
+        readyBtn.textContent = me.ready ? 'RUŠÍM PŘIPRAVENOST' : 'JSEM PŘIPRAVEN';
+        readyBtn.className = me.ready ? 'btn btn-ready-waiting' : 'btn btn-ready-active';
+      }
+    }
+  }
+
+  // Bind config inputs
+  ['cfg-startBal', 'cfg-startBon', 'cfg-buyout'].forEach(id => {
+    const el = getEl(id);
+    if (!el) return;
+    el.addEventListener('change', () => {
+      const bal = getEl('cfg-startBal');
+      const bon = getEl('cfg-startBon');
+      const buy = getEl('cfg-buyout');
+      socket.emit('game:update_config', {
+        startBalance: Number(bal?.value ?? 30000),
+        startBonus: Number(bon?.value ?? 4000),
+        buyoutMultiplier: Number(buy?.value ?? 0),
+      });
+    });
+  });
+
+  /* ─── Intro Screen ──────────────────────────────────────────────────────── */
+  function renderRoomList(list) {
+    if (!dom.roomList) return;
+    dom.roomList.innerHTML = '';
+
+    if (!list.length) {
+      dom.roomList.appendChild(makeEl('p', 'dim', 'Žádné aktivní místnosti.'));
+      return;
+    }
+
+    list.forEach(r => {
+      const item = makeEl('div', 'room-item');
+
+      const main = makeEl('div', 'room-main');
+      main.appendChild(makeEl('div', 'room-name', r.name));
+
+      const meta = makeEl('div', 'room-meta');
+      meta.appendChild(makeEl('span', '', `👥 ${r.players}/6`));
+      const statusCls = r.phase === 'lobby' ? 'status-lobby' : 'status-playing';
+      meta.appendChild(makeEl('span', `room-status ${statusCls}`, r.phase === 'lobby' ? 'Lobby' : 'Probíhá'));
+      if (r.hasPassword) meta.appendChild(makeEl('span', '', '🔒 Heslo'));
+      main.appendChild(meta);
+
+      item.appendChild(main);
+      item.appendChild(makeEl('div', 'room-join-btn', 'Vstoupit →'));
+
+      item.addEventListener('click', () => {
+        let password = '';
+        if (r.hasPassword) {
+          // (poznámka: prompt() posílá heslo jako plaintext — ideálně nahradit
+          //  vlastním modálním formulářem s masked inputem)
+          password = prompt('Zadejte heslo k místnosti:');
+          if (password === null) return;
+        }
+        socket.emit('room:join', { roomId: r.id, password });
+      });
+
+      dom.roomList.appendChild(item);
+    });
+  }
+
+  // Tlačítka intro obrazovky — null-safe
+  const showCreateRoom = getEl('show-create-room');
+  const cancelCreateBtn = getEl('cancel-create-btn');
+  const roomCreateBtn = getEl('room-create-btn');
+  const roomSelection = getEl('room-selection');
+  const roomCreateForm = getEl('room-create-form');
+
+  if (showCreateRoom) showCreateRoom.addEventListener('click', () => { roomSelection?.classList.add('hidden'); roomCreateForm?.classList.remove('hidden'); });
+  if (cancelCreateBtn) cancelCreateBtn.addEventListener('click', () => { roomCreateForm?.classList.add('hidden'); roomSelection?.classList.remove('hidden'); });
+  if (roomCreateBtn) roomCreateBtn.addEventListener('click', () => {
+    const name = getEl('new-room-name')?.value.trim();
+    const password = getEl('new-room-pass')?.value ?? '';
+    if (!name) { showToast('Zadejte název místnosti!', true); return; }
+    socket.emit('room:create', { name, password });
+  });
+
+  // Leave buttons
+  const lobbyLeaveBtn = getEl('lobby-leave-btn');
+  const gameLeaveBtn = getEl('game-leave-btn');
+
+  if (lobbyLeaveBtn) {
+    lobbyLeaveBtn.addEventListener('click', () => {
+      if (confirm('Opravdu chcete opustit místnost?')) {
+        socket.emit('game:leave');
+        resetLocalState();
+      }
+    });
+  }
+  if (gameLeaveBtn) {
+    gameLeaveBtn.addEventListener('click', () => {
+      if (confirm('Opravdu chcete opustit hru? Pokud odejdete během zápasu, zbankrotujete.')) {
+        socket.emit('game:leave');
+        resetLocalState();
+      }
+    });
+  }
+
+  // (oprava: location.reload() nahrazeno explicitním resetem stavu + přechodem na intro)
+  function resetLocalState() {
+    myId = null;
+    boardData = null;
+    gameState = null;
+    boardBuilt = false;
+    clientVisualPos = {};
+    isAnimatingPawn = false;
+    prevOwnerships = {};
+    prevTokens = {};
+    prevBalances = {};
+    allColors = [];
+    isStarterAnimating = false;
+
+    if (particleIntervalId) { clearInterval(particleIntervalId); particleIntervalId = null; }
+    if (dom.board) dom.board.innerHTML = '';
+
     dom.introView.classList.remove('hidden');
     dom.lobbyView.classList.add('hidden');
     dom.gameView.classList.add('hidden');
-    return;
+
+    socket.emit('room:list');
   }
-  gameState = state;
-  identifyMe(state.players);                           // ← vždy, i v lobby
 
-  const me = state.players.find(p => p.id === myId);
+  // Initial room list + polling (oprava: interval uložen do proměnné pro pozdější cleanup)
+  socket.emit('room:list');
+  roomListIntervalId = setInterval(() => {
+    if (!dom.introView?.classList.contains('hidden')) socket.emit('room:list');
+  }, 5000);
 
-  if (state.phase === 'lobby') {
-    renderLobby(state, me);
-    // If I'm not joined yet, refresh color picker to show only available colors
-    if (!me && allColors.length > 0) {
-      buildColorPicker(allColors, state.players.map(p => p.color));
-    }
-  } else {
-    dom.lobbyView.classList.add('hidden');
-    dom.gameView.classList.remove('hidden');
-    if (!boardBuilt && boardData) {
-      buildBoard(boardData);
-      generateParticles();
-      boardBuilt = true;
+  /* ─── Color picker ───────────────────────────────────────────────────────── */
+  function buildColorPicker(colors, usedColors = []) {
+    if (!dom.colorPicker) return;
+    dom.colorPicker.innerHTML = '';
+
+    if (selectedColor && usedColors.includes(selectedColor)) {
+      selectedColor = null;
     }
 
-    // Check animations
-    const currentOwn = state.ownerships || {};
-    const currentTok = state.tokens || {};
-    if (boardBuilt) {
-      Object.keys(currentOwn).forEach(sid => {
-        if (currentOwn[sid] !== prevOwnerships[sid]) {
-          const owner = state.players.find(p => p.id === currentOwn[sid]);
-          if (owner) playBuyAnimation(sid, owner);
+    colors.forEach(c => {
+      if (usedColors.includes(c)) return;
+      if (!isSafeColor(c)) return; // přeskočit nebezpečné hodnoty barev
+
+      const btn = makeEl('button', 'color-btn');
+      if (selectedColor === c) btn.classList.add('selected');
+      btn.style.background = c;
+      btn.title = c;
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedColor = c;
+      });
+      dom.colorPicker.appendChild(btn);
+    });
+
+    if (!selectedColor && dom.colorPicker.firstChild) {
+      dom.colorPicker.firstChild.click();
+    }
+  }
+
+  /* ─── Starter animation ──────────────────────────────────────────────────── */
+  function runStarterAnimation(winnerId, players) {
+    const overlay = getEl('starter-overlay');
+    const flicker = getEl('starter-flicker');
+    const winnerEl = getEl('starter-winner');
+    if (!overlay || !flicker || !winnerEl) return;
+
+    overlay.classList.remove('hidden');
+    winnerEl.classList.add('hidden');
+    flicker.classList.remove('hidden');
+
+    let count = 0;
+    const max = 30;
+    const interval = setInterval(() => {
+      const p = players[Math.floor(Math.random() * players.length)];
+      // DOM API — žádný innerHTML s daty hráče
+      flicker.innerHTML = '';
+      const item = makeEl('div', 'flicker-item');
+      item.style.color = safeColor(p.color);
+      item.textContent = p.name;
+      flicker.appendChild(item);
+
+      count++;
+      if (count >= max) {
+        clearInterval(interval);
+        const winner = players.find(pl => pl.id === winnerId);
+        flicker.classList.add('hidden');
+        winnerEl.classList.remove('hidden');
+        winnerEl.textContent = `🏁 ${winner?.name ?? '?'} ZAČÍNÁ!`;
+        winnerEl.style.color = safeColor(winner?.color ?? '#fff');
+        winnerEl.classList.add('winning-gold');
+        setTimeout(() => overlay.classList.add('hidden'), 2000);
+      }
+    }, 100);
+  }
+
+  /* ─── Join ───────────────────────────────────────────────────────────────── */
+  if (dom.joinBtn) {
+    dom.joinBtn.addEventListener('click', () => {
+      const name = dom.nameInput?.value.trim();
+      if (!name) { showToast('Zadejte jméno!', true); return; }
+      // (oprava: tlačítko deaktivováno ihned → prevence flood/double-click)
+      dom.joinBtn.disabled = true;
+      socket.emit('game:join', { name, color: selectedColor });
+    });
+  }
+
+  if (dom.nameInput) {
+    dom.nameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') dom.joinBtn?.click();
+    });
+  }
+
+  if (dom.startBtn) {
+    dom.startBtn.addEventListener('click', () => {
+      dom.startBtn.disabled = true; // prevence double-click
+      socket.emit('game:start');
+    });
+  }
+
+  const toggleReadyBtn = getEl('toggle-ready-btn');
+  if (toggleReadyBtn) {
+    toggleReadyBtn.addEventListener('click', () => {
+      toggleReadyBtn.disabled = true;
+      socket.emit('game:ready');
+      // Re-enable po krátké prodlevě (server odpoví stavem)
+      setTimeout(() => { if (toggleReadyBtn) toggleReadyBtn.disabled = false; }, 800);
+    });
+  }
+
+  /* ─── Board Building ─────────────────────────────────────────────────────── */
+  function buildBoard(board) {
+    board.forEach(space => {
+      const [row, col] = getGridPos(space.id);
+      const side = getSide(space.id);
+
+      const el = makeEl('div', `space space-${space.type} side-${side}`);
+      el.dataset.id = String(space.id);
+      el.style.gridRow = row;
+      el.style.gridColumn = col;
+
+      if (space.type === 'horse') {
+        const stripe = makeEl('div', 'stripe');
+        stripe.style.background = safeColor(space.groupColor);
+        el.appendChild(stripe);
+      } else if (space.type === 'service') {
+        const stripe = makeEl('div', 'stripe');
+        stripe.style.background = '#5b8dee';
+        el.appendChild(stripe);
+      }
+
+      if (side === 'corner') {
+        el.classList.add('space-corner');
+        const icon = makeEl('div', 'corner-icon', cornerIcon(space.id));
+        const name = makeEl('div', 'corner-name', space.name);
+        el.appendChild(icon);
+        el.appendChild(name);
+        if (space.id === 10) {
+          el.appendChild(makeEl('div', 'corner-sub', 'Jen návštěva / Distanc'));
         }
-      });
-      Object.keys(currentTok).forEach(sid => {
-        const tNew = currentTok[sid];
-        const tOld = prevTokens[sid] || { small: 0, big: false };
-        if (tNew.small > tOld.small) playTokenAnimation(sid, false);
-        if (tNew.big && !tOld.big) playTokenAnimation(sid, true);
-      });
-    }
-    prevOwnerships = { ...currentOwn };
-    prevTokens = JSON.parse(JSON.stringify(currentTok));
+      } else {
+        const inner = makeEl('div', 'space-inner');
+        const icon = typeIcon(space);
+        if (icon) inner.appendChild(makeEl('div', 'space-icon', icon));
+        inner.appendChild(makeEl('div', 'space-name', space.name));
+        if (space.price) inner.appendChild(makeEl('div', 'space-price', `${fmt(space.price)} Kč`));
+        el.appendChild(inner);
+      }
 
-    // Inicializace vizuálních poloh pro plynulý start
+      const ownOverlay = makeEl('div', 'own-overlay hidden');
+      ownOverlay.id = `ov-${space.id}`;
+      el.appendChild(ownOverlay);
+
+      const ownBadge = makeEl('div', 'own-badge hidden');
+      ownBadge.id = `ob-${space.id}`;
+      el.appendChild(ownBadge);
+
+      const tokenDots = makeEl('div', 'token-dots');
+      tokenDots.id = `td-${space.id}`;
+      el.appendChild(tokenDots);
+
+      const pawns = makeEl('div', 'space-pawns');
+      pawns.id = `pw-${space.id}`;
+      el.appendChild(pawns);
+
+      el.addEventListener('mouseenter', ev => showTip(space, ev));
+      el.addEventListener('mousemove', ev => moveTip(ev));
+      el.addEventListener('mouseleave', () => dom.tooltip?.classList.add('hidden'));
+
+      dom.board.appendChild(el);
+    });
+  }
+
+  function getGridPos(id) {
+    if (id === 0) return [11, 11];
+    if (id === 10) return [11, 1];
+    if (id === 20) return [1, 1];
+    if (id === 30) return [1, 11];
+    if (id >= 1 && id <= 9) return [11, 11 - id];
+    if (id >= 11 && id <= 19) return [11 - (id - 10), 1];
+    if (id >= 21 && id <= 29) return [1, id - 19];
+    if (id >= 31 && id <= 39) return [id - 29, 11];
+  }
+
+  function getSide(id) {
+    if ([0, 10, 20, 30].includes(id)) return 'corner';
+    if (id >= 1 && id <= 9) return 'bottom';
+    if (id >= 11 && id <= 19) return 'left';
+    if (id >= 21 && id <= 29) return 'top';
+    if (id >= 31 && id <= 39) return 'right';
+  }
+
+  function cornerIcon(id) {
+    return { 0: '🚩', 10: '✋', 20: '🅿️', 30: '🚫' }[id] ?? '⬜';
+  }
+  function typeIcon(space) {
+    return {
+      finance: '💱', nahoda: '❓', tax: '📉', go_to_jail: '🚔',
+      free_parking: '🅿️', service: '👤', start: '🚩'
+    }[space.type] ?? '';
+  }
+
+  /* ─── Board Update ───────────────────────────────────────────────────────── */
+  function updateBoard(state) {
+    document.querySelectorAll('.space.current-turn').forEach(el => el.classList.remove('current-turn'));
+
+    const currentPlayer = state.players.find(p => p.id === state.currentTurnId);
+    if (currentPlayer) {
+      const spaceEl = dom.board?.querySelector(`.space[data-id="${currentPlayer.position}"]`);
+      if (spaceEl) spaceEl.classList.add('current-turn');
+    }
+
+    document.querySelectorAll('.own-badge, .own-overlay').forEach(el => el.classList.add('hidden'));
+    Object.entries(state.ownerships || {}).forEach(([spaceId, playerId]) => {
+      const ob = getEl(`ob-${spaceId}`);
+      const ov = getEl(`ov-${spaceId}`);
+      if (!ob || !ov) return;
+      const owner = state.players.find(p => p.id === playerId);
+      if (owner) {
+        const color = safeColor(owner.color);
+        ob.style.background = color;
+        ob.classList.remove('hidden');
+        ov.style.background = color;
+        ov.classList.remove('hidden');
+      }
+    });
+
+    document.querySelectorAll('.token-dots').forEach(el => { el.innerHTML = ''; });
+    Object.entries(state.tokens || {}).forEach(([spaceId, tok]) => {
+      const el = getEl(`td-${spaceId}`);
+      if (!el) return;
+      if (tok.big) {
+        el.appendChild(makeEl('div', 'dot-big'));
+      } else {
+        for (let i = 0; i < tok.small; i++) el.appendChild(makeEl('div', 'dot-small'));
+      }
+    });
+  }
+
+  /* ─── Pawns ──────────────────────────────────────────────────────────────── */
+  function renderPawns(state) {
+    document.querySelectorAll('.space-pawns').forEach(el => { el.innerHTML = ''; });
+
     state.players.forEach(p => {
-      if (clientVisualPos[p.id] === undefined) clientVisualPos[p.id] = p.position;
-    });
+      if (p.bankrupt) return;
+      const pos = clientVisualPos[p.id] !== undefined ? clientVisualPos[p.id] : p.position;
+      const pawnsEl = getEl(`pw-${pos}`);
+      if (!pawnsEl) return;
 
-    const balanceDiffs = [];
-    state.players.forEach(p => {
-      if (prevBalances[p.id] !== undefined && prevBalances[p.id] !== p.balance) {
-        balanceDiffs.push({ id: p.id, diff: p.balance - prevBalances[p.id] });
-      }
-      prevBalances[p.id] = p.balance;
-    });
+      const color = safeColor(p.color, '#888888');
+      // SVG vytvořen přes DOM API — žádný innerHTML s proměnnými
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 100 150');
+      svg.setAttribute('fill', color);
+      svg.setAttribute('stroke', 'rgba(0,0,0,0.4)');
+      svg.setAttribute('stroke-width', '4');
+      svg.style.cssText = 'width:100%;height:100%';
 
-    updatePlayers(state);
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', '50'); circle.setAttribute('cy', '30'); circle.setAttribute('r', '25');
 
-    // Append balance animations
-    balanceDiffs.forEach(({ id, diff }) => {
-      const balEl = $(`pb-${id}`);
-      if (balEl) {
-        const diffEl = document.createElement('div');
-        diffEl.className = `balance-diff ${diff > 0 ? 'pos' : 'neg'}`;
-        diffEl.textContent = (diff > 0 ? '+' : '') + fmt(diff) + ' Kč';
-        balEl.appendChild(diffEl);
-        setTimeout(() => { if (diffEl.parentNode) diffEl.remove(); }, 2000);
-      }
-    });
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M30 60 L70 60 L80 140 L20 140 Z');
 
-    updateBoard(state);
-    animatePawnsIfNeeded(state);
-    updateActionPanel(state);
-    updateLog(state);
-    updateCenter(state);
-  }
-}
+      const ellipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+      ellipse.setAttribute('cx', '50'); ellipse.setAttribute('cy', '140');
+      ellipse.setAttribute('rx', '35'); ellipse.setAttribute('ry', '10');
 
-/* ─── Lobby ──────────────────────────────────────────────────────────────── */
-function renderLobby(state, me) {
-  dom.lobbyView.classList.remove('hidden');
-  dom.gameView.classList.add('hidden');
+      svg.appendChild(circle);
+      svg.appendChild(path);
+      svg.appendChild(ellipse);
 
-  // Player list
-  if (!state.players.length) {
-    dom.lobbyPlayers.innerHTML = '<p class="dim">Zatím nikdo...</p>';
-  } else {
-    dom.lobbyPlayers.innerHTML = state.players.map(p => `
-      <div class="lp-row">
-        <div class="lp-avatar" style="background:${esc(p.color)}">${esc(p.name[0]).toUpperCase()}</div>
-        <span class="lp-name">${esc(p.name)}</span>
-        ${p.isHost ? '<span class="lp-host">HOST</span>' : ''}
-      </div>
-    `).join('');
-  }
-
-  if (me) {
-    // Already joined
-    dom.joinForm.classList.add('hidden');
-    dom.joinedWait.classList.remove('hidden');
-
-    if (me.isHost) {
-      dom.hostControls.classList.remove('hidden');
-      dom.startBtn.disabled = state.players.length < 2;
-      dom.startBtn.textContent = state.players.length < 2
-        ? `▶ Spustit hru (min. 2 hráče — ${state.players.length}/2)`
-        : `▶ Spustit hru (${state.players.length} hráči)`;
-      $('cfg-bal-disp').classList.add('hidden');
-
-      const c = state.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
-      if (document.activeElement !== $('cfg-startBal')) $('cfg-startBal').value = c.startBalance;
-      if (document.activeElement !== $('cfg-startBon')) $('cfg-startBon').value = c.startBonus;
-      if (document.activeElement !== $('cfg-buyout')) $('cfg-buyout').value = c.buyoutMultiplier;
-    } else {
-      $('cfg-bal-disp').classList.remove('hidden');
-      const c = state.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
-      $('cfg-bal-disp').innerHTML = `Pravidla hostitele: <strong>Kapitál ${fmt(c.startBalance)} Kč</strong>, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${c.buyoutMultiplier > 0 ? (c.buyoutMultiplier + 'x') : '<span style="color:var(--red)">Vypnuto</span>'}`;
-    }
-  }
-}
-
-// Bind config inputs
-['cfg-startBal', 'cfg-startBon', 'cfg-buyout'].forEach(id => {
-  const el = $(id);
-  if (el) {
-    el.addEventListener('change', () => {
-      socket.emit('game:update_config', {
-        startBalance: Number($('cfg-startBal').value),
-        startBonus: Number($('cfg-startBon').value),
-        buyoutMultiplier: Number($('cfg-buyout').value)
-      });
+      const pawn = makeEl('div', `pawn${p.id === state.currentTurnId ? ' is-active' : ''}`);
+      pawn.title = p.name;
+      pawn.appendChild(svg);
+      pawnsEl.appendChild(pawn);
     });
   }
-});
 
-/* ─── Intro Screen Items ────────────────────────────────────────────────── */
-function renderRoomList(list) {
-  if (!list.length) {
-    dom.roomList.innerHTML = '<p class="dim">Žádné aktivní místnosti.</p>';
-    return;
-  }
-  dom.roomList.innerHTML = list.map(r => `
-    <div class="room-item" data-id="${r.id}" data-pw="${r.hasPassword}">
-      <div class="room-main">
-        <div class="room-name">${esc(r.name)}</div>
-        <div class="room-meta">
-          <span>👥 ${r.players}/6</span>
-          <span class="room-status ${r.phase === 'lobby' ? 'status-lobby' : 'status-playing'}">${r.phase === 'lobby' ? 'Lobby' : 'Probíhá'}</span>
-          ${r.hasPassword ? '<span>🔒 Heslo</span>' : ''}
-        </div>
-      </div>
-      <div class="room-join-btn">Vstoupit →</div>
-    </div>
-  `).join('');
+  function animatePawnsIfNeeded(state) {
+    const needsAnim = state.players.some(p => !p.bankrupt && clientVisualPos[p.id] !== p.position);
 
-  document.querySelectorAll('.room-item').forEach(el => {
-    el.onclick = () => {
-      const roomId = el.dataset.id;
-      const hasPw = el.dataset.pw === 'true';
-      let password = '';
-      if (hasPw) {
-        password = prompt('Zadejte heslo k místnosti:');
-        if (password === null) return;
-      }
-      socket.emit('room:join', { roomId, password });
-    };
-  });
-}
-
-$('show-create-room').onclick = () => {
-  $('room-selection').classList.add('hidden');
-  $('room-create-form').classList.remove('hidden');
-};
-$('cancel-create-btn').onclick = () => {
-  $('room-create-form').classList.add('hidden');
-  $('room-selection').classList.remove('hidden');
-};
-$('room-create-btn').onclick = () => {
-  const name = $('new-room-name').value.trim();
-  const password = $('new-room-pass').value;
-  if (!name) return showToast('Zadejte název místnosti!', true);
-  socket.emit('room:create', { name, password });
-};
-
-// Leave buttons
-$('lobby-leave-btn').onclick = () => {
-  if (confirm('Opravdu chcete opustit místnost?')) {
-    socket.emit('game:leave');
-    location.reload(); // Refresh is simplest way to reset local state
-  }
-};
-$('game-leave-btn').onclick = () => {
-  if (confirm('Opravdu chcete opustit hru? Pokud odejdete během zápasu, zbankrotujete.')) {
-    socket.emit('game:leave');
-    location.reload();
-  }
-};
-
-// Initial room list request
-socket.emit('room:list');
-setInterval(() => { if (!dom.introView.classList.contains('hidden')) socket.emit('room:list'); }, 5000);
-
-
-function buildColorPicker(colors, usedColors = []) {
-  dom.colorPicker.innerHTML = '';
-  // Clean selectedColor if it's now taken
-  if (selectedColor && usedColors.includes(selectedColor)) {
-    selectedColor = null;
-  }
-
-  colors.forEach(c => {
-    if (usedColors.includes(c)) return; // Hide taken colors
-
-    const btn = document.createElement('button');
-    btn.className = 'color-btn';
-    if (selectedColor === c) btn.classList.add('selected');
-    btn.style.background = c;
-    btn.title = c;
-    btn.onclick = () => {
-      document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      selectedColor = c;
-    };
-    dom.colorPicker.appendChild(btn);
-  });
-  // Select first available by default if none selected
-  if (!selectedColor && dom.colorPicker.firstChild) {
-    dom.colorPicker.firstChild.click();
-  }
-}
-
-/* ─── Starter Animation ─── */
-function runStarterAnimation(winnerId, players) {
-  const overlay = $('starter-overlay');
-  const flicker = $('starter-flicker');
-  const winnerEl = $('starter-winner');
-
-  if (!overlay || !flicker || !winnerEl) return;
-
-  overlay.classList.remove('hidden');
-  winnerEl.classList.add('hidden');
-  flicker.classList.remove('hidden');
-
-  let count = 0;
-  const max = 30; // Number of flickers
-  const interval = setInterval(() => {
-    const randomIdx = Math.floor(Math.random() * players.length);
-    const p = players[randomIdx];
-    flicker.innerHTML = `<div class="flicker-item" style="color:${esc(p.color)}">${esc(p.name)}</div>`;
-
-    count++;
-    if (count >= max) {
-      clearInterval(interval);
-      // Reveal winner
-      const winner = players.find(p => p.id === winnerId);
-      flicker.classList.add('hidden');
-      winnerEl.classList.remove('hidden');
-      winnerEl.innerHTML = `🏁 ${esc(winner.name)} ZAČÍNÁ!`;
-      winnerEl.style.color = winner.color;
-      winnerEl.classList.add('winning-gold');
-
-      setTimeout(() => {
-        overlay.classList.add('hidden');
-      }, 2000);
-    }
-  }, 100);
-}
-
-dom.joinBtn.onclick = () => {
-  const name = dom.nameInput.value.trim();
-  if (!name) { showToast('Zadejte jméno!', true); return; }
-  socket.emit('game:join', { name, color: selectedColor });
-  // After join, myId is our socket id — track it via a special event or on first state
-  // We identify ourselves by matching name in players list on next state update
-  dom.joinBtn.disabled = true;
-};
-
-dom.nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') dom.joinBtn.click(); });
-
-// Identify ourselves: after joining, find our player by matching name (best effort)
-// Server sends updated state; we check for our socket's name
-const _origOn = socket.on.bind(socket);
-socket.id; // ensure id is available
-
-// Use connect event to get socket id
-socket.on('connect', () => { /* myId set below */ });
-
-// Patch: after joining, we identify ourselves in the next state update
-let pendingName = null;
-dom.joinBtn.addEventListener('click', () => { pendingName = dom.nameInput.value.trim(); });
-
-function identifyMe(players) {
-  if (myId) return;
-  // Try to match our socket.id
-  if (socket.id && players.find(p => p.id === socket.id)) {
-    myId = socket.id;
-    return;
-  }
-  // Fallback: match by pending name
-  if (pendingName) {
-    const me = players.find(p => p.name === pendingName);
-    if (me) { myId = me.id; }
-  }
-}
-
-dom.startBtn.onclick = () => socket.emit('game:start');
-
-/* ─── Board Building (once) ─────────────────────────────────────────────── */
-function buildBoard(board) {
-  board.forEach(space => {
-    const [row, col] = getGridPos(space.id);
-    const side = getSide(space.id);
-
-    const el = document.createElement('div');
-    el.className = `space space-${space.type} side-${side}`;
-    el.dataset.id = String(space.id);
-    el.style.gridRow = row;
-    el.style.gridColumn = col;
-
-    // Color stripe
-    if (space.type === 'horse') {
-      const stripe = document.createElement('div');
-      stripe.className = 'stripe';
-      stripe.style.background = space.groupColor;
-      el.appendChild(stripe);
-    } else if (space.type === 'service') {
-      const stripe = document.createElement('div');
-      stripe.className = 'stripe';
-      stripe.style.background = '#5b8dee';
-      el.appendChild(stripe);
-    }
-
-    if (side === 'corner') {
-      el.classList.add('space-corner');
-      el.innerHTML += `
-        <div class="corner-icon">${cornerIcon(space.id)}</div>
-        <div class="corner-name">${esc(space.name)}</div>
-        ${space.id === 10 ? '<div class="corner-sub">Jen návštěva / Distanc</div>' : ''}
-      `;
-    } else {
-      el.innerHTML += `
-        <div class="space-inner">
-          ${typeIcon(space) ? `<div class="space-icon">${typeIcon(space)}</div>` : ''}
-          <div class="space-name">${esc(space.name)}</div>
-          ${space.price ? `<div class="space-price">${fmt(space.price)} Kč</div>` : ''}
-        </div>
-      `;
-    }
-
-    // Dynamic elements (updated per state)
-    const ownOverlay = document.createElement('div');
-    ownOverlay.id = `ov-${space.id}`;
-    ownOverlay.className = 'own-overlay hidden';
-    el.appendChild(ownOverlay);
-
-    const ownBadge = document.createElement('div');
-    ownBadge.id = `ob-${space.id}`;
-    ownBadge.className = 'own-badge hidden';
-    el.appendChild(ownBadge);
-
-    const tokenDots = document.createElement('div');
-    tokenDots.id = `td-${space.id}`;
-    tokenDots.className = 'token-dots';
-    el.appendChild(tokenDots);
-
-    const pawns = document.createElement('div');
-    pawns.id = `pw-${space.id}`;
-    pawns.className = 'space-pawns';
-    el.appendChild(pawns);
-
-    // Tooltip
-    el.addEventListener('mouseenter', ev => showTip(space, ev));
-    el.addEventListener('mousemove', ev => moveTip(ev));
-    el.addEventListener('mouseleave', () => dom.tooltip.classList.add('hidden'));
-
-    dom.board.appendChild(el);
-  });
-}
-
-function getGridPos(id) {
-  if (id === 0) return [11, 11];
-  if (id === 10) return [11, 1];
-  if (id === 20) return [1, 1];
-  if (id === 30) return [1, 11];
-  if (id >= 1 && id <= 9) return [11, 11 - id];
-  if (id >= 11 && id <= 19) return [11 - (id - 10), 1];
-  if (id >= 21 && id <= 29) return [1, id - 19];
-  if (id >= 31 && id <= 39) return [id - 29, 11];
-}
-
-function getSide(id) {
-  if ([0, 10, 20, 30].includes(id)) return 'corner';
-  if (id >= 1 && id <= 9) return 'bottom';
-  if (id >= 11 && id <= 19) return 'left';
-  if (id >= 21 && id <= 29) return 'top';
-  if (id >= 31 && id <= 39) return 'right';
-}
-
-function cornerIcon(id) {
-  return { 0: '🏁', 10: '🔒', 20: '🅿️', 30: '➡️' }[id] || '⬜';
-}
-function typeIcon(space) {
-  return {
-    finance: '💰', nahoda: '🎁', tax: '💸', go_to_jail: '🚔',
-    free_parking: '🅿️', service: '👤', start: '🏁'
-  }[space.type] || '';
-}
-
-/* ─── Board Update (per state) ──────────────────────────────────────────── */
-function updateBoard(state) {
-  // Reset highlights
-  document.querySelectorAll('.space.current-turn').forEach(el => el.classList.remove('current-turn'));
-
-  const currentPlayer = state.players.find(p => p.id === state.currentTurnId);
-
-  // Highlight current player's space
-  if (currentPlayer) {
-    const spaceEl = document.querySelector(`.space[data-id="${currentPlayer.position}"]`);
-    if (spaceEl) spaceEl.classList.add('current-turn');
-  }
-
-  // Ownership badges & overlays
-  document.querySelectorAll('.own-badge, .own-overlay').forEach(el => el.classList.add('hidden'));
-  Object.entries(state.ownerships || {}).forEach(([spaceId, playerId]) => {
-    const ob = $(`ob-${spaceId}`);
-    const ov = $(`ov-${spaceId}`);
-    if (!ob || !ov) return;
-    const owner = state.players.find(p => p.id === playerId);
-    if (owner) {
-      ob.style.background = owner.color;
-      ob.classList.remove('hidden');
-      ov.style.background = owner.color;
-      ov.classList.remove('hidden');
-    }
-  });
-
-  // Dostih token dots
-  document.querySelectorAll('.token-dots').forEach(el => el.innerHTML = '');
-  Object.entries(state.tokens || {}).forEach(([spaceId, tok]) => {
-    const el = $(`td-${spaceId}`);
-    if (!el) return;
-    if (tok.big) {
-      el.innerHTML = '<div class="dot-big"></div>';
-    } else {
-      el.innerHTML = Array(tok.small).fill('<div class="dot-small"></div>').join('');
-    }
-  });
-}
-
-function renderPawns(state) {
-  document.querySelectorAll('.space-pawns').forEach(el => el.innerHTML = '');
-  state.players.forEach(p => {
-    if (p.bankrupt) return;
-    const pos = clientVisualPos[p.id] !== undefined ? clientVisualPos[p.id] : p.position;
-    const pawnsEl = $(`pw-${pos}`);
-    if (!pawnsEl) return;
-    const pawnSVG = (color) => `<svg viewBox="0 0 320 512" fill="${esc(color)}" stroke="rgba(255,255,255,0.7)" stroke-width="12" style="width:100%;height:100%;filter:drop-shadow(0 2px 2px rgba(0,0,0,0.8));"><path d="M208 48c0-26.5-21.5-48-48-48S112 21.5 112 48s21.5 48 48 48 48-21.5 48-48zm-16 128V128H128v48c-17.7 0-32 14.3-32 32v12.2c0 23.3 9.4 45.6 25.8 61.8L145 305c4 4 6.2 9.4 6.2 15v32h17.6 15.6V320c0-5.6 2.2-11 6.2-15l23.2-23.2c16.4-16.4 25.8-38.6 25.8-61.9V208c0-17.7-14.3-32-32-32zM32 400v48c0 17.7 14.3 32 32 32h192c17.7 0 32-14.3 32-32v-48c0-17.7-14.3-32-32-32H64c-17.7 0-32 14.3-32 32z"/></svg>`;
-
-    const pawn = document.createElement('div');
-    pawn.className = 'pawn' + (p.id === state.currentTurnId ? ' is-active' : '');
-    pawn.title = p.name;
-    pawn.innerHTML = pawnSVG(p.color);
-    pawnsEl.appendChild(pawn);
-  });
-}
-
-function animatePawnsIfNeeded(state) {
-  let needsAnim = false;
-  state.players.forEach(p => {
-    if (clientVisualPos[p.id] !== p.position && !p.bankrupt) needsAnim = true;
-  });
-
-  if (needsAnim && !isAnimatingPawn) {
-    isAnimatingPawn = true;
-    const step = () => {
-      let stillNeeds = false;
-      state.players.forEach(p => {
-        if (p.bankrupt) return;
-        if (clientVisualPos[p.id] !== p.position) {
-          const diff = (p.position - clientVisualPos[p.id] + 40) % 40;
-          const forceForward = p.lastMoveForwardOnly;
-          
-          if (forceForward || diff <= 20) {
-            clientVisualPos[p.id] = (clientVisualPos[p.id] + 1) % 40;
-          } else {
-            clientVisualPos[p.id] = (clientVisualPos[p.id] - 1 + 40) % 40;
-          }
-          // Bounce effect
-          const space = document.querySelector(`.space[data-id="${clientVisualPos[p.id]}"]`);
-          if (space) {
-            space.style.transform = 'translateY(-4px)';
-            setTimeout(() => { if (space) space.style.transform = ''; }, 150);
-          }
-          if (clientVisualPos[p.id] !== p.position) stillNeeds = true;
-        }
-      });
-      renderPawns(state);
-      if (stillNeeds) setTimeout(step, 180);
-      else {
-        isAnimatingPawn = false;
-        renderPawns(state);
-      }
-    };
-    step();
-  } else if (!isAnimatingPawn) {
-    renderPawns(state);
-  }
-}
-
-/* ─── Players list ──────────────────────────────────────────────────────── */
-function updatePlayers(state) {
-  identifyMe(state.players);
-  dom.playersList.innerHTML = state.players.map(p => {
-    const isMe = p.id === myId;
-    const isTurn = p.id === state.currentTurnId;
-    let badges = '';
-    if (p.inJail) badges += '<span class="p-badge jail">🔒 Distanc</span>';
-    if (p.bankrupt) badges += '<span class="p-badge bankrupt-badge">💀 Bankrot</span>';
-    if (isTurn) badges += '<span class="p-badge">▶ Na tahu</span>';
-    const pos = boardData ? (boardData[p.position]?.name || '?') : '?';
-
-    let invHtml = '';
-    if (boardData && p.properties && p.properties.length > 0) {
-      const ownedSpaces = p.properties.map(id => boardData.find(s => s.id === id)).filter(Boolean);
-
-      const groups = {};
-      ownedSpaces.forEach(sp => {
-        const g = sp.type === 'service' ? 'S' : (sp.groupColor || '#000');
-        if (!groups[g]) groups[g] = [];
-        groups[g].push(sp);
-      });
-
-      invHtml = '<div class="p-inventory">';
-      Object.entries(groups).forEach(([gColor, spcList]) => {
-        const totalInGroup = boardData.filter(s => s.type === 'horse' && s.groupColor === gColor).length;
-        const isMonopoly = (spcList.length === totalInGroup && totalInGroup > 0) && spcList[0].type !== 'service';
-
-        invHtml += `<div class="inv-group ${isMonopoly ? 'monopoly-glow' : ''}">`;
-
-        spcList.forEach(sp => {
-          if (sp.type === 'service') {
-            const isTrainer = sp.name.toLowerCase().includes('trenér');
-            const icon = isTrainer ? '👤' : '🚐';
-            invHtml += `<div class="inv-service" data-sid="${sp.id}">${icon}</div>`;
-          } else {
-            const tok = (gameState && gameState.tokens) ? gameState.tokens[sp.id] : null;
-            let inner = '';
-            if (tok && tok.big) inner = '<span class="inv-crown">👑</span>';
-            else if (tok && tok.small > 0) {
-              inner = Array(tok.small).fill('<span class="inv-dot"></span>').join('');
+    if (needsAnim && !isAnimatingPawn) {
+      isAnimatingPawn = true;
+      const step = () => {
+        let stillNeeds = false;
+        state.players.forEach(p => {
+          if (p.bankrupt) return;
+          if (clientVisualPos[p.id] !== p.position) {
+            const diff = (p.position - clientVisualPos[p.id] + 40) % 40;
+            if (p.lastMoveForwardOnly || diff <= 20) {
+              clientVisualPos[p.id] = (clientVisualPos[p.id] + 1) % 40;
+            } else {
+              clientVisualPos[p.id] = (clientVisualPos[p.id] - 1 + 40) % 40;
             }
-            invHtml += `<div class="inv-bar" data-sid="${sp.id}" style="background:${esc(sp.groupColor)}">${inner}</div>`;
+            const space = dom.board?.querySelector(`.space[data-id="${clientVisualPos[p.id]}"]`);
+            if (space) {
+              space.style.transform = 'translateY(-4px)';
+              setTimeout(() => { if (space) space.style.transform = ''; }, 150);
+            }
+            if (clientVisualPos[p.id] !== p.position) stillNeeds = true;
           }
         });
-        invHtml += '</div>';
-      });
-      invHtml += '</div>';
-    }
-
-    return `
-      <div class="player-row ${isTurn ? 'is-turn' : ''} ${p.bankrupt ? 'bankrupt' : ''}">
-        <div class="p-avatar" style="background:${esc(p.color)}">${esc(p.name[0]).toUpperCase()}</div>
-        <div class="p-info">
-          <div class="p-name">${esc(p.name)}${isMe ? ' <span style="color:var(--gold);font-size:10px">(ty)</span>' : ''}</div>
-          <div class="p-pos">${esc(pos)} ${badges}</div>
-          ${invHtml}
-        </div>
-        <div class="p-balance ${p.balance < 2000 ? 'low' : ''}" id="pb-${p.id}">${fmt(p.balance)} Kč</div>
-      </div>
-    `;
-  }).join('');
-}
-
-/* ─── Board Center ──────────────────────────────────────────────────────── */
-let prevDice = null;
-function updateCenter(state) {
-  dom.bcRound.textContent = `Kolo ${state.round}`;
-
-  if (state.lastDice && state.lastDice.id !== prevDice?.id) {
-    prevDice = state.lastDice;
-
-    // 3D dice 
-    const diceEl = $('dice-3d');
-    if (diceEl) {
-      diceEl.classList.add('rolling');
-      diceEl.style.transition = 'none';
-      setTimeout(() => {
-        diceEl.classList.remove('rolling');
-
-        let rotX = 0, rotY = 0;
-        switch (state.lastDice.value) {
-          case 1: rotX = 0; rotY = 0; break;
-          case 6: rotX = 0; rotY = -180; break;
-          case 3: rotX = 0; rotY = -90; break;
-          case 4: rotX = 0; rotY = 90; break;
-          case 5: rotX = -90; rotY = 0; break;
-          case 2: rotX = 90; rotY = 0; break;
-        }
-        rotX += (Math.random() * 20 - 10);
-        rotY += (Math.random() * 20 - 10);
-
-        diceEl.style.transform = `rotateX(${rotX - 360}deg) rotateY(${rotY - 360}deg)`;
-        void diceEl.offsetWidth; // hard reflow
-        diceEl.style.transition = 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
-        diceEl.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
-      }, 400); // roll duration
+        renderPawns(state);
+        if (stillNeeds) setTimeout(step, 180);
+        else { isAnimatingPawn = false; renderPawns(state); }
+      };
+      step();
+    } else if (!isAnimatingPawn) {
+      renderPawns(state);
     }
   }
 
-  const current = state.players.find(p => p.id === state.currentTurnId);
-  if (current) {
-    dom.bcTurn.innerHTML = `<span style="color:${esc(current.color)};font-weight:700">${esc(current.name)}</span>`;
-  }
-}
+  /* ─── Players list ──────────────────────────────────────────────────────── */
+  function updatePlayers(state) {
+    identifyMe(state.players);
+    if (!dom.playersList) return;
+    dom.playersList.innerHTML = '';
 
-/* ─── Action Panel ──────────────────────────────────────────────────────── */
-function updateActionPanel(state) {
-  const pa = state.pendingAction;
+    state.players.forEach(p => {
+      const isMe = p.id === myId;
+      const isTurn = p.id === state.currentTurnId;
 
-  // Hide 3D Card logic if not card_ack
-  const cardOverlay = $('card-3d-overlay');
-  if (cardOverlay && (!pa || pa.type !== 'card_ack')) {
-    cardOverlay.classList.add('hidden');
-  }
+      const row = makeEl('div', `player-row${isTurn ? ' is-turn' : ''}${p.bankrupt ? ' bankrupt' : ''}`);
 
-  if (!pa) {
-    dom.actionTitle.textContent = 'Akce';
-    dom.actionContent.innerHTML = '<p class="dim" style="text-align:center;padding:20px 0">⏳ Zpracovávám...</p>';
-    return;
-  }
+      const avatar = makeEl('div', 'p-avatar');
+      avatar.style.background = safeColor(p.color);
+      avatar.textContent = p.name[0].toUpperCase();
+      row.appendChild(avatar);
 
-  const isTargeted = pa.targetId === myId;
-  const targetPlayer = state.players.find(p => p.id === pa.targetId);
-  const targetName = targetPlayer?.name || '?';
-  const me = state.players.find(p => p.id === myId);
+      const info = makeEl('div', 'p-info');
 
-  // Starter Overlay Handling
-  if (pa.type === 'selecting_starter') {
-    if (!isStarterAnimating) {
-      isStarterAnimating = true;
-      runStarterAnimation(pa.data.starterId, state.players);
-    }
-  } else {
-    isStarterAnimating = false;
-    $('starter-overlay').classList.add('hidden');
-  }
-
-  switch (pa.type) {
-    // ── Roll ──
-    case 'wait_roll':
-      dom.actionTitle.textContent = isTargeted ? 'Váš tah' : 'Čeká se...';
-      if (isTargeted) {
-        dom.actionContent.innerHTML = `
-          <p class="action-desc">Jste na řadě, ${esc(targetName)}!</p>
-          <button id="roll-btn" class="btn btn-gold btn-lg">🎲 Hodit kostkou</button>
-        `;
-        $('roll-btn').onclick = () => socket.emit('game:roll');
-      } else {
-        dom.actionContent.innerHTML = waitHTML(targetPlayer, 'čeká na hod kostkou...');
-      }
-      break;
-
-    case 'service_roll':
-      dom.actionTitle.textContent = isTargeted ? 'Poplatek za služby' : 'Čeká se...';
-      if (isTargeted) {
-        dom.actionContent.innerHTML = `
-          <div class="jail-display" style="border-color:var(--blue);padding:10px;margin-bottom:10px;border: 1px solid var(--blue);">
-            🏠 <strong>Musíte hodit kostkou pro určení poplatku!</strong><br/>
-            Pole: ${esc(boardData[pa.data.spaceId].name)}
-          </div>
-          <button id="roll-service-btn" class="btn btn-gold btn-lg">🎲 Hodit pro poplatek</button>
-        `;
-        $('roll-service-btn').onclick = () => socket.emit('game:roll');
-      } else {
-        dom.actionContent.innerHTML = waitHTML(targetPlayer, 'hází kostkou pro určení poplatku...');
-      }
-      break;
-
-    // ── Buy offer ──
-    case 'buy_offer': {
-      const space = boardData[pa.data.spaceId];
-      const rents = space.rents || [];
-      dom.actionTitle.textContent = 'Nabídka koupě';
-      if (isTargeted) {
-        const balAfter = (me?.balance || 0) - space.price;
-        dom.actionContent.innerHTML = `
-          <div class="buy-card">
-            <div class="buy-strip" style="background:${esc(space.groupColor || '#5b8dee')}"></div>
-            <div class="buy-body">
-              <div class="buy-name">${esc(space.name)}</div>
-              <div class="buy-price">Cena: ${fmt(space.price)} Kč</div>
-              ${rents.length ? `
-                <div class="rent-table">
-                  <div class="rent-row"><span>Základní:</span><span class="rent-val">${fmt(rents[0])} Kč</span></div>
-                  <div class="rent-row"><span>1 žeton:</span><span class="rent-val">${fmt(rents[1])} Kč</span></div>
-                  <div class="rent-row"><span>Velký dostih:</span><span class="rent-val">${fmt(rents[5])} Kč</span></div>
-                </div>` : ''}
-              <div class="buy-rest">Zůstatek po koupi: <strong style="color:${balAfter < 0 ? 'var(--red)' : 'var(--green)'}">${fmt(balAfter)} Kč</strong></div>
-              <div class="action-buttons row" style="margin-top:6px">
-                ${balAfter >= 0 ? `<button id="buy-yes" class="btn btn-green" style="flex:1">Koupit</button>` : ''}
-                <button id="buy-no"  class="btn btn-outline" style="flex:1">Pas</button>
-              </div>
-            </div>
-          </div>
-        `;
-        if ($('buy-yes')) $('buy-yes').onclick = () => socket.emit('game:respond', { decision: 'buy', spaceId: pa.data.spaceId });
-        if ($('buy-no')) $('buy-no').onclick = () => socket.emit('game:respond', { decision: 'pass', spaceId: pa.data.spaceId });
-      } else {
-        dom.actionContent.innerHTML = waitHTML(targetPlayer, `zvažuje koupi <strong>${esc(space.name)}</strong>`);
-      }
-      break;
-    }
-
-    // ── Debt Manage ──
-    case 'debt_manage': {
-      dom.actionTitle.textContent = 'Dluh! Prodejte majetek';
-      if (isTargeted) {
-        const p = state.players.find(p => p.id === myId);
-        const props = (p.properties || []).map(sid => {
-          const sp = boardData[sid];
-          let val = Math.floor(sp.price / 2);
-          const tok = state.tokens[sid];
-          if (tok) {
-            if (tok.big) val += Math.floor(sp.bigTokenCost / 2) + Math.floor(sp.tokenCost / 2) * 4;
-            else if (tok.small) val += Math.floor(sp.tokenCost / 2) * tok.small;
-          }
-          return `<div class="token-item">
-                      <div class="tok-name" style="border-left:3px solid ${esc(sp.groupColor || '#5b8dee')};padding-left:6px">
-                        ${esc(sp.name)} <span class="dim">(+ ${fmt(val)} Kč)</span>
-                      </div>
-                      <div class="tok-btns">
-                        <button class="btn btn-xs btn-outline sell-btn" data-sid="${sid}">Prodat</button>
-                      </div>
-                    </div>`;
-        }).join('');
-
-        dom.actionContent.innerHTML = `
-           <div class="jail-display" style="border-color:var(--red);padding:10px;margin-bottom:10px;border: 1px solid var(--red);">
-             ⚠️ <strong style="color:var(--red)">Jste v mínusu: ${fmt(p.balance)} Kč!</strong><br/>
-             Musíte prodat majetek nebo zkrachovat.
-           </div>
-           <div class="token-list" style="margin-top:10px">${props || '<p class="dim">Žádný majetek k prodeji.</p>'}</div>
-           <button id="debt-bankrupt" class="btn btn-red" style="margin-top:10px;width:100%">Vyhlásit bankrot 💀</button>
-         `;
-        document.querySelectorAll('.sell-btn').forEach(b => {
-          b.onclick = () => socket.emit('game:respond', { decision: 'sell_property', spaceId: +b.dataset.sid });
-        });
-        $('debt-bankrupt').onclick = () => socket.emit('game:respond', { decision: 'declare_bankrupt' });
-      } else {
-        dom.actionContent.innerHTML = waitHTML(targetPlayer, 'řeší své dluhy...');
-      }
-      break;
-    }
-
-    // ── Buyout Offer ──
-    case 'buyout_offer': {
-      const space = boardData[pa.data.spaceId];
-      const cost = pa.data.buyoutCost;
-      dom.actionTitle.textContent = 'Nepřátelský odkup';
-      if (isTargeted) {
-        dom.actionContent.innerHTML = `
-           <div class="jail-display" style="border-color:var(--gold);padding:10px;margin-bottom:10px;border: 1px solid var(--gold);">
-             Chcete nuceně odkoupit stáj <strong>${esc(space.name)}</strong>?<br/>
-             Stojí to <strong style="color:var(--gold)">${fmt(cost)} Kč</strong>.
-           </div>
-           <div class="action-buttons row">
-             <button id="buyout-yes" class="btn btn-gold" style="flex:1">Odkoupit</button>
-             <button id="buyout-no"  class="btn btn-outline" style="flex:1">Ne, díky</button>
-           </div>
-         `;
-        if ($('buyout-yes')) $('buyout-yes').onclick = () => socket.emit('game:respond', { decision: 'buy' });
-        if ($('buyout-no')) $('buyout-no').onclick = () => socket.emit('game:respond', { decision: 'pass' });
-      } else {
-        dom.actionContent.innerHTML = waitHTML(targetPlayer, `zvažuje odkup cizí stáje...`);
-      }
-      break;
-    }
-
-    // ── Card ──
-    case 'card_ack': {
-      const { card, label } = pa.data;
-      const isMe = pa.targetId === myId;
-      const p = state.players.find(pl => pl.id === pa.targetId);
-
-      // Impact calculation
-      let impactText = '';
-      let impactClass = '';
-      if (card.amount) {
-        impactText = (card.type === 'pay' || card.type === 'pay_to_all' ? '-' : '+') + fmt(card.amount) + ' Kč';
-        impactClass = (card.type === 'pay' || card.type === 'pay_to_all') ? 'neg' : 'pos';
-      }
-
-      const cardHTML = `
-        <div class="card-display">
-          <div class="card-header">${esc(label)}</div>
-          ${impactText ? `<div class="card-impact ${impactClass}">${impactText}</div>` : ''}
-          <div class="card-text">${esc(card.text)}</div>
-        </div>
-      `;
-
-      dom.actionTitle.textContent = 'Tažená karta';
-
+      // Jméno — DOM API, žádný innerHTML
+      const nameEl = makeEl('div', 'p-name', p.name);
       if (isMe) {
-        dom.actionContent.innerHTML = `
-            ${cardHTML}
-            <button id="card-ack-btn" class="btn btn-gold btn-lg" style="width:100%">Rozumím</button>
-          `;
-        $('card-ack-btn').onclick = () => socket.emit('game:respond', { decision: 'ok' });
-      } else {
-        dom.actionContent.innerHTML = `
-            ${cardHTML}
-            ${waitHTML(p, 'čte kartu...')}
-          `;
+        const youBadge = makeEl('span', '', ' (ty)');
+        youBadge.style.cssText = 'color:var(--gold);font-size:10px';
+        nameEl.appendChild(youBadge);
+      }
+      info.appendChild(nameEl);
+
+      // Pozice + badges
+      const pos = boardData ? (boardData[p.position]?.name ?? '?') : '?';
+      const posEl = makeEl('div', 'p-pos', pos + ' ');
+      if (p.inJail) posEl.appendChild(makeEl('span', 'p-badge jail', '🔒 Distanc'));
+      if (p.bankrupt) posEl.appendChild(makeEl('span', 'p-badge bankrupt-badge', '💀 Bankrot'));
+      if (isTurn) posEl.appendChild(makeEl('span', 'p-badge', '▶ Na tahu'));
+      info.appendChild(posEl);
+
+      // Inventory
+      if (boardData && p.properties?.length > 0) {
+        const ownedSpaces = p.properties
+          .map(id => boardData.find(s => s.id === id))
+          .filter(Boolean);
+
+        const groups = {};
+        ownedSpaces.forEach(sp => {
+          const g = sp.type === 'service' ? 'S' : (sp.groupColor || '#000');
+          if (!groups[g]) groups[g] = [];
+          groups[g].push(sp);
+        });
+
+        const invDiv = makeEl('div', 'p-inventory');
+        Object.entries(groups).forEach(([gColor, spcList]) => {
+          const totalInGroup = boardData.filter(s => s.type === 'horse' && s.groupColor === gColor).length;
+          const isMonopoly = spcList.length === totalInGroup && totalInGroup > 0 && spcList[0].type !== 'service';
+
+          const grpDiv = makeEl('div', `inv-group${isMonopoly ? ' monopoly-glow' : ''}`);
+
+          spcList.forEach(sp => {
+            if (sp.type === 'service') {
+              const isTrainer = sp.name.toLowerCase().includes('trenér');
+              const svc = makeEl('div', 'inv-service', isTrainer ? '👤' : '🚐');
+              svc.dataset.sid = sp.id;
+              grpDiv.appendChild(svc);
+            } else {
+              const tok = gameState?.tokens?.[sp.id];
+              const bar = makeEl('div', 'inv-bar');
+              bar.dataset.sid = sp.id;
+              bar.style.background = safeColor(sp.groupColor);
+
+              if (tok?.big) {
+                bar.appendChild(makeEl('span', 'inv-crown', '👑'));
+              } else if (tok?.small > 0) {
+                for (let i = 0; i < tok.small; i++) bar.appendChild(makeEl('span', 'inv-dot'));
+              }
+              grpDiv.appendChild(bar);
+            }
+          });
+          invDiv.appendChild(grpDiv);
+        });
+        info.appendChild(invDiv);
       }
 
-      // Sync 3D card for consistency
-      const cardEl = $('card-3d');
-      if (cardOverlay && cardEl) {
-        cardOverlay.classList.remove('hidden');
-        $('card-3d-title').textContent = label;
-        $('card-3d-text').textContent = card.text;
-        $('card-3d-btn').classList.toggle('hidden', !isMe);
+      row.appendChild(info);
 
-        if (!cardEl.classList.contains('flipped')) {
-          setTimeout(() => cardEl.classList.add('flipped'), 100);
+      const balEl = makeEl('div', `p-balance${p.balance < 2000 ? ' low' : ''}`, `${fmt(p.balance)} Kč`);
+      balEl.id = `pb-${p.id}`;
+      row.appendChild(balEl);
+
+      dom.playersList.appendChild(row);
+    });
+  }
+
+  /* ─── Board Center ──────────────────────────────────────────────────────── */
+  let prevDice = null;
+  function updateCenter(state) {
+    if (dom.bcRound) dom.bcRound.textContent = `Kolo ${state.round}`;
+
+    if (state.lastDice && state.lastDice.id !== prevDice?.id) {
+      prevDice = state.lastDice;
+      const diceEl = getEl('dice-3d');
+      if (diceEl) {
+        diceEl.classList.add('rolling');
+        diceEl.style.transition = 'none';
+        setTimeout(() => {
+          diceEl.classList.remove('rolling');
+          const rotMap = { 1: [0, 0], 6: [0, -180], 3: [0, -90], 4: [0, 90], 5: [-90, 0], 2: [90, 0] };
+          const [rx, ry] = rotMap[state.lastDice.value] ?? [0, 0];
+          const fRx = rx + (Math.random() * 20 - 10);
+          const fRy = ry + (Math.random() * 20 - 10);
+          diceEl.style.transform = `rotateX(${fRx - 360}deg) rotateY(${fRy - 360}deg)`;
+          void diceEl.offsetWidth;
+          diceEl.style.transition = 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+          diceEl.style.transform = `rotateX(${fRx}deg) rotateY(${fRy}deg)`;
+        }, 400);
+      }
+    }
+
+    const current = state.players.find(p => p.id === state.currentTurnId);
+    if (current && dom.bcTurn) {
+      dom.bcTurn.textContent = '';
+      const span = makeEl('span', '', current.name);
+      span.style.cssText = `color:${safeColor(current.color)};font-weight:700`;
+      dom.bcTurn.appendChild(span);
+    }
+  }
+
+  /* ─── Emit helper s rate-limitingem ─────────────────────────────────────── */
+  // (oprava: tlačítka deaktivována okamžitě po kliknutí — prevence flood útoku)
+  function emitAction(eventName, data, btnId) {
+    const btn = btnId ? getEl(btnId) : null;
+    if (btn) btn.disabled = true;
+    socket.emit(eventName, data);
+  }
+
+  /* ─── Action Panel ───────────────────────────────────────────────────────── */
+  function updateActionPanel(state) {
+    const pa = state.pendingAction;
+
+    const cardOverlay = getEl('card-3d-overlay');
+    if (cardOverlay && (!pa || pa.type !== 'card_ack')) {
+      cardOverlay.classList.add('hidden');
+    }
+
+    if (!pa) {
+      if (dom.actionTitle) dom.actionTitle.textContent = 'Akce';
+      if (dom.actionContent) {
+        dom.actionContent.innerHTML = '';
+        const p = makeEl('p', 'dim');
+        p.style.cssText = 'text-align:center;padding:20px 0';
+        p.textContent = '⏳ Zpracovávám...';
+        dom.actionContent.appendChild(p);
+      }
+      return;
+    }
+
+    const isTargeted = pa.targetId === myId;
+    const targetPlayer = state.players.find(p => p.id === pa.targetId);
+    const me = state.players.find(p => p.id === myId);
+
+    // Starter overlay
+    if (pa.type === 'selecting_starter') {
+      if (!isStarterAnimating) {
+        isStarterAnimating = true;
+        runStarterAnimation(pa.data.starterId, state.players);
+      }
+    } else {
+      isStarterAnimating = false;
+      getEl('starter-overlay')?.classList.add('hidden');
+    }
+
+    if (!dom.actionTitle || !dom.actionContent) return;
+
+    // ── Helper: tlačítko s emit akcí ──────────────────────────────────────
+    const actionBtn = (label, cls, onClick) => {
+      const btn = makeEl('button', `btn ${cls}`, label);
+      btn.addEventListener('click', () => {
+        btn.disabled = true;
+        onClick();
+      });
+      return btn;
+    };
+
+    switch (pa.type) {
+
+      case 'wait_roll':
+        dom.actionTitle.textContent = isTargeted ? 'Váš tah' : 'Čeká se...';
+        dom.actionContent.innerHTML = '';
+        if (isTargeted) {
+          dom.actionContent.appendChild(makeEl('p', 'action-desc', `Jste na řadě, ${targetPlayer?.name ?? ''}!`));
+          dom.actionContent.appendChild(actionBtn('🎲 Hodit kostkou', 'btn-gold btn-lg', () => socket.emit('game:roll')));
+        } else {
+          dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'čeká na hod kostkou...'));
         }
+        break;
+
+      case 'service_roll':
+        dom.actionTitle.textContent = isTargeted ? 'Poplatek za služby' : 'Čeká se...';
+        dom.actionContent.innerHTML = '';
+        if (isTargeted) {
+          const info = makeEl('div', 'jail-display');
+          info.style.cssText = 'border-color:var(--blue);padding:10px;margin-bottom:10px;border:1px solid var(--blue)';
+          const spaceName = boardData?.[pa.data.spaceId]?.name ?? '?';
+          info.textContent = `🏠 Musíte hodit kostkou pro určení poplatku! Pole: ${spaceName}`;
+          dom.actionContent.appendChild(info);
+          dom.actionContent.appendChild(actionBtn('🎲 Hodit pro poplatek', 'btn-gold btn-lg', () => socket.emit('game:roll')));
+        } else {
+          dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'hází kostkou pro určení poplatku...'));
+        }
+        break;
+
+      case 'buy_offer': {
+        const space = boardData[pa.data.spaceId];
+        const rents = space.rents || [];
+        dom.actionTitle.textContent = 'Nabídka koupě';
+        dom.actionContent.innerHTML = '';
+
+        if (isTargeted) {
+          const balAfter = (me?.balance ?? 0) - space.price;
+          const card = makeEl('div', 'buy-card');
+
+          const strip = makeEl('div', 'buy-strip');
+          strip.style.background = safeColor(space.groupColor ?? '#5b8dee', '#5b8dee');
+          card.appendChild(strip);
+
+          const body = makeEl('div', 'buy-body');
+          body.appendChild(makeEl('div', 'buy-name', space.name));
+          body.appendChild(makeEl('div', 'buy-price', `Cena: ${fmt(space.price)} Kč`));
+
+          if (rents.length) {
+            const table = makeEl('div', 'rent-table');
+            [[0, 'Základní'], [1, '1 žeton'], [5, 'Velký dostih']].forEach(([i, lbl]) => {
+              const rr = makeEl('div', 'rent-row');
+              rr.appendChild(makeEl('span', '', lbl + ':'));
+              rr.appendChild(makeEl('span', 'rent-val', `${fmt(rents[i])} Kč`));
+              table.appendChild(rr);
+            });
+            body.appendChild(table);
+          }
+
+          const rest = makeEl('div', 'buy-rest');
+          rest.appendChild(document.createTextNode('Zůstatek po koupi: '));
+          const strong = makeEl('strong', '', `${fmt(balAfter)} Kč`);
+          strong.style.color = balAfter < 0 ? 'var(--red)' : 'var(--green)';
+          rest.appendChild(strong);
+          body.appendChild(rest);
+
+          const btns = makeEl('div', 'action-buttons row');
+          btns.style.marginTop = '6px';
+          if (balAfter >= 0) {
+            btns.appendChild(actionBtn('Koupit', 'btn-green', () =>
+              socket.emit('game:respond', { decision: 'buy', spaceId: pa.data.spaceId })
+            ));
+          }
+          btns.appendChild(actionBtn('Pas', 'btn-outline', () =>
+            socket.emit('game:respond', { decision: 'pass', spaceId: pa.data.spaceId })
+          ));
+          body.appendChild(btns);
+          card.appendChild(body);
+          dom.actionContent.appendChild(card);
+        } else {
+          dom.actionContent.appendChild(buildWaitEl(targetPlayer, `zvažuje koupi ${space.name}`));
+        }
+        break;
+      }
+
+      case 'debt_manage': {
+        dom.actionTitle.textContent = 'Dluh! Prodejte majetek';
+        dom.actionContent.innerHTML = '';
+
+        if (isTargeted) {
+          const p = state.players.find(pl => pl.id === myId);
+
+          const warn = makeEl('div', 'jail-display');
+          warn.style.cssText = 'border-color:var(--red);padding:10px;margin-bottom:10px;border:1px solid var(--red)';
+          warn.textContent = `⚠️ Jste v mínusu: ${fmt(p.balance)} Kč! Musíte prodat majetek nebo zkrachovat.`;
+          dom.actionContent.appendChild(warn);
+
+          const list = makeEl('div', 'token-list');
+          list.style.marginTop = '10px';
+
+          if (p.properties?.length) {
+            p.properties.forEach(sid => {
+              const sp = boardData[sid];
+              let val = Math.floor(sp.price / 2);
+              const tok = state.tokens[sid];
+              if (tok) {
+                if (tok.big) val += Math.floor(sp.bigTokenCost / 2) + Math.floor(sp.tokenCost / 2) * 4;
+                else if (tok.small) val += Math.floor(sp.tokenCost / 2) * tok.small;
+              }
+
+              const item = makeEl('div', 'token-item');
+              const nameDiv = makeEl('div', 'tok-name', `${sp.name} (+ ${fmt(val)} Kč)`);
+              nameDiv.style.cssText = `border-left:3px solid ${safeColor(sp.groupColor, '#5b8dee')};padding-left:6px`;
+
+              const btnsDiv = makeEl('div', 'tok-btns');
+              const sellBtn = actionBtn('Prodat', 'btn btn-xs btn-outline', () =>
+                socket.emit('game:respond', { decision: 'sell_property', spaceId: sid })
+              );
+              btnsDiv.appendChild(sellBtn);
+
+              item.appendChild(nameDiv);
+              item.appendChild(btnsDiv);
+              list.appendChild(item);
+            });
+          } else {
+            list.appendChild(makeEl('p', 'dim', 'Žádný majetek k prodeji.'));
+          }
+          dom.actionContent.appendChild(list);
+
+          const bankruptBtn = actionBtn('Vyhlásit bankrot 💀', 'btn-red', () =>
+            socket.emit('game:respond', { decision: 'declare_bankrupt' })
+          );
+          bankruptBtn.style.cssText = 'margin-top:10px;width:100%';
+          dom.actionContent.appendChild(bankruptBtn);
+        } else {
+          dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'řeší své dluhy...'));
+        }
+        break;
+      }
+
+      case 'buyout_offer': {
+        const space = boardData[pa.data.spaceId];
+        const cost = pa.data.buyoutCost;
+        dom.actionTitle.textContent = 'Nepřátelský odkup';
+        dom.actionContent.innerHTML = '';
+
+        if (isTargeted) {
+          const info = makeEl('div', 'jail-display');
+          info.style.cssText = 'border-color:var(--gold);padding:10px;margin-bottom:10px;border:1px solid var(--gold)';
+          info.appendChild(document.createTextNode(`Chcete nuceně odkoupit stáj ${space.name}? Stojí to `));
+          const priceSpan = makeEl('strong', '', `${fmt(cost)} Kč`);
+          priceSpan.style.color = 'var(--gold)';
+          info.appendChild(priceSpan);
+          info.appendChild(document.createTextNode('.'));
+          dom.actionContent.appendChild(info);
+
+          const btns = makeEl('div', 'action-buttons row');
+          btns.appendChild(actionBtn('Odkoupit', 'btn-gold', () => socket.emit('game:respond', { decision: 'buy' })));
+          btns.appendChild(actionBtn('Ne, díky', 'btn-outline', () => socket.emit('game:respond', { decision: 'pass' })));
+          dom.actionContent.appendChild(btns);
+        } else {
+          dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'zvažuje odkup cizí stáje...'));
+        }
+        break;
+      }
+
+      case 'card_ack': {
+        const { card, label } = pa.data;
+        const isMe = pa.targetId === myId;
+        const p = state.players.find(pl => pl.id === pa.targetId);
+
+        dom.actionTitle.textContent = 'Tažená karta';
+        dom.actionContent.innerHTML = '';
+
+        const cardDiv = makeEl('div', 'card-display');
+        cardDiv.appendChild(makeEl('div', 'card-header', label));
+
+        if (card.amount) {
+          const isPay = card.type === 'pay' || card.type === 'pay_to_all';
+          const impactEl = makeEl('div', `card-impact ${isPay ? 'neg' : 'pos'}`);
+          impactEl.textContent = (isPay ? '-' : '+') + fmt(card.amount) + ' Kč';
+          cardDiv.appendChild(impactEl);
+        }
+        cardDiv.appendChild(makeEl('div', 'card-text', card.text));
+        dom.actionContent.appendChild(cardDiv);
 
         if (isMe) {
-          $('card-3d-btn').onclick = () => {
-            cardEl.classList.remove('flipped');
-            setTimeout(() => {
-              cardOverlay.classList.add('hidden');
-              socket.emit('game:respond', { decision: 'ok' });
-            }, 400);
-          };
+          dom.actionContent.appendChild(
+            actionBtn('Rozumím', 'btn-gold btn-lg', () => socket.emit('game:respond', { decision: 'ok' }))
+          );
+        } else {
+          dom.actionContent.appendChild(buildWaitEl(p, 'čte kartu...'));
         }
+
+        // 3D karta
+        const cardEl = getEl('card-3d');
+        const card3dBtn = getEl('card-3d-btn');
+        const card3dTitle = getEl('card-3d-title');
+        const card3dText = getEl('card-3d-text');
+        if (cardOverlay && cardEl) {
+          cardOverlay.classList.remove('hidden');
+          if (card3dTitle) card3dTitle.textContent = label;
+          if (card3dText) card3dText.textContent = card.text;
+          if (card3dBtn) card3dBtn.classList.toggle('hidden', !isMe);
+          if (!cardEl.classList.contains('flipped')) {
+            setTimeout(() => cardEl.classList.add('flipped'), 100);
+          }
+          if (isMe && card3dBtn) {
+            card3dBtn.onclick = () => {
+              cardEl.classList.remove('flipped');
+              setTimeout(() => {
+                cardOverlay.classList.add('hidden');
+                socket.emit('game:respond', { decision: 'ok' });
+              }, 400);
+            };
+          }
+        }
+        break;
       }
-      break;
-    }
 
-    // ── Jail ──
-    case 'jail_choice': {
-      dom.actionTitle.textContent = 'Distanc 🔒';
-      if (isTargeted) {
-        const jt = targetPlayer?.jailTurns || 0;
-        const freeCardBtn = (targetPlayer?.jailFreeCards > 0)
-          ? `<button id="jail-card" class="btn btn-gold" style="width:100%; margin-top:8px;">🔓 Použít kartu "Zrušen distanc"</button>`
-          : '';
-          
-        dom.actionContent.innerHTML = `
-          <div class="jail-display">
-            <div class="jail-icon">🔒</div>
-            <p class="jail-text">Jste v Distancu!<br/>Zbývá: <strong>${jt}</strong> ${jt === 1 ? 'kolo' : 'kola'}</p>
-            <div class="action-buttons">
-              <button id="jail-pay"  class="btn btn-gold">Zaplatit ${fmt(500)} Kč a hrát</button>
-              <button id="jail-roll" class="btn btn-outline">🎲 Hodit (6 = volno)</button>
-            </div>
-            ${freeCardBtn}
-          </div>
-        `;
-        $('jail-pay').onclick = () => socket.emit('game:respond', { decision: 'pay_fine' });
-        $('jail-roll').onclick = () => socket.emit('game:respond', { decision: 'roll_jail' });
-        if ($('jail-card')) $('jail-card').onclick = () => socket.emit('game:respond', { decision: 'use_jail_card' });
-      } else {
-        dom.actionContent.innerHTML = waitHTML(targetPlayer, 'je v Distancu...');
+      case 'jail_choice': {
+        dom.actionTitle.textContent = 'Distanc 🔒';
+        dom.actionContent.innerHTML = '';
+
+        if (isTargeted) {
+          const jt = targetPlayer?.jailTurns ?? 0;
+          const jailDiv = makeEl('div', 'jail-display');
+
+          jailDiv.appendChild(makeEl('div', 'jail-icon', '🔒'));
+          const txt = makeEl('p', 'jail-text');
+          txt.appendChild(document.createTextNode('Jste v Distancu!'));
+          txt.appendChild(document.createElement('br'));
+          txt.appendChild(document.createTextNode(`Zbývá: `));
+          txt.appendChild(makeEl('strong', '', String(jt)));
+          txt.appendChild(document.createTextNode(` ${jt === 1 ? 'kolo' : 'kola'}`));
+          jailDiv.appendChild(txt);
+
+          const actBtns = makeEl('div', 'action-buttons');
+          actBtns.appendChild(actionBtn(`Zaplatit ${fmt(500)} Kč a hrát`, 'btn-gold', () => socket.emit('game:respond', { decision: 'pay_fine' })));
+          actBtns.appendChild(actionBtn('🎲 Hodit (6 = volno)', 'btn-outline', () => socket.emit('game:respond', { decision: 'roll_jail' })));
+          jailDiv.appendChild(actBtns);
+
+          if (targetPlayer?.jailFreeCards > 0) {
+            jailDiv.appendChild(
+              actionBtn('🔓 Použít kartu "Zrušen distanc"', 'btn-gold', () =>
+                socket.emit('game:respond', { decision: 'use_jail_card' })
+              )
+            );
+          }
+          dom.actionContent.appendChild(jailDiv);
+        } else {
+          dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'je v Distancu...'));
+        }
+        break;
       }
-      break;
-    }
 
-    // ── Token manage ──
-    case 'token_manage': {
-      dom.actionTitle.textContent = 'Přidat žetony';
-      if (isTargeted) {
-        const eligible = pa.data.eligible || [];
-        const tokRows = eligible.map(sid => {
-          const sp = boardData[sid];
-          const tok = state.tokens[sid] || { small: 0, big: false };
-          const canS = !tok.big && tok.small < 4 && (me?.balance || 0) >= sp.tokenCost;
-          const canB = !tok.big && tok.small >= 4 && (me?.balance || 0) >= sp.bigTokenCost;
-          return `
-            <div class="token-item">
-              <div class="tok-name" style="border-left:3px solid ${esc(sp.groupColor)};padding-left:6px">
-                ${esc(sp.name)}
-                <span style="color:var(--text-muted);font-weight:400"> — ${tok.small}× ${tok.big ? '🏆' : ''}</span>
-              </div>
-              <div class="tok-btns">
-                ${canS ? `<button class="btn btn-xs btn-outline add-tok" data-sid="${sid}" data-t="small">+Žeton (${fmt(sp.tokenCost)} Kč)</button>` : ''}
-                ${canB ? `<button class="btn btn-xs btn-gold add-tok" data-sid="${sid}" data-t="big">+Hlavní (${fmt(sp.bigTokenCost)} Kč)</button>` : ''}
-              </div>
-            </div>`;
-        }).join('');
-        dom.actionContent.innerHTML = `
-          <p class="token-intro">Přidat žetony dostihů ke svým stájím?</p>
-          <div class="token-list">${tokRows || '<p class="dim">Nelze přidat žetony (nedostatek peněz nebo žetonů).</p>'}</div>
-          <button id="end-turn" class="btn btn-gold" style="margin-top:4px">Ukončit tah →</button>
-        `;
-        document.querySelectorAll('.add-tok').forEach(b => {
-          b.onclick = () => socket.emit('game:respond', {
-            decision: 'add_token', spaceId: +b.dataset.sid, tokenType: b.dataset.t
-          });
-        });
-        $('end-turn').onclick = () => socket.emit('game:respond', { decision: 'end_turn' });
-      } else {
-        dom.actionContent.innerHTML = waitHTML(targetPlayer, 'spravuje své stáje...');
+      case 'token_manage': {
+        dom.actionTitle.textContent = 'Přidat žetony';
+        dom.actionContent.innerHTML = '';
+
+        if (isTargeted) {
+          const eligible = pa.data.eligible || [];
+          dom.actionContent.appendChild(makeEl('p', 'token-intro', 'Přidat žetony dostihů ke svým stájím?'));
+
+          const list = makeEl('div', 'token-list');
+          if (eligible.length === 0) {
+            list.appendChild(makeEl('p', 'dim', 'Nelze přidat žetony (nedostatek peněz nebo žetonů).'));
+          } else {
+            eligible.forEach(sid => {
+              const sp = boardData[sid];
+              const tok = state.tokens[sid] || { small: 0, big: false };
+              const canS = !tok.big && tok.small < 4 && (me?.balance ?? 0) >= sp.tokenCost;
+              const canB = !tok.big && tok.small >= 4 && (me?.balance ?? 0) >= sp.bigTokenCost;
+
+              const item = makeEl('div', 'token-item');
+              const nameDiv = makeEl('div', 'tok-name', `${sp.name} — ${tok.small}× ${tok.big ? '🏆' : ''}`);
+              nameDiv.style.cssText = `border-left:3px solid ${safeColor(sp.groupColor)};padding-left:6px`;
+              item.appendChild(nameDiv);
+
+              const btnsDiv = makeEl('div', 'tok-btns');
+              if (canS) btnsDiv.appendChild(actionBtn(`+Žeton (${fmt(sp.tokenCost)} Kč)`, 'btn btn-xs btn-outline', () =>
+                socket.emit('game:respond', { decision: 'add_token', spaceId: sid, tokenType: 'small' })
+              ));
+              if (canB) btnsDiv.appendChild(actionBtn(`+Hlavní (${fmt(sp.bigTokenCost)} Kč)`, 'btn btn-xs btn-gold', () =>
+                socket.emit('game:respond', { decision: 'add_token', spaceId: sid, tokenType: 'big' })
+              ));
+              item.appendChild(btnsDiv);
+              list.appendChild(item);
+            });
+          }
+          dom.actionContent.appendChild(list);
+
+          const endBtn = actionBtn('Ukončit tah →', 'btn-gold', () =>
+            socket.emit('game:respond', { decision: 'end_turn' })
+          );
+          endBtn.style.marginTop = '4px';
+          dom.actionContent.appendChild(endBtn);
+        } else {
+          dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'spravuje své stáje...'));
+        }
+        break;
       }
-      break;
-    }
 
-    // ── Game Over ──
-    case 'game_over': {
-      const w = pa.winner;
-      dom.actionTitle.textContent = '🏆 Konec hry';
-      dom.actionContent.innerHTML = `
-        <div class="gameover-display">
-          <div class="gameover-trophy">🏆</div>
-          <div class="gameover-title">${w ? esc(w.name) + ' vyhrál(a)!' : 'Konec hry!'}</div>
-          ${w ? `<div class="gameover-balance">Výsledný zůstatek: ${fmt(w.balance)} Kč</div>` : ''}
-          <button class="btn btn-gold btn-lg" onclick="location.reload()">Hrát znovu</button>
-        </div>
-      `;
-      break;
-    }
+      case 'game_over': {
+        const w = pa.winner;
+        dom.actionTitle.textContent = '🏆 Konec hry';
+        dom.actionContent.innerHTML = '';
 
-    default:
-      dom.actionContent.innerHTML = '<p class="dim">...</p>';
+        const goDiv = makeEl('div', 'gameover-display');
+        goDiv.appendChild(makeEl('div', 'gameover-trophy', '🏆'));
+        goDiv.appendChild(makeEl('div', 'gameover-title', w ? `${w.name} vyhrál(a)!` : 'Konec hry!'));
+        if (w) goDiv.appendChild(makeEl('div', 'gameover-balance', `Výsledný zůstatek: ${fmt(w.balance)} Kč`));
+
+        const replayBtn = makeEl('button', 'btn btn-gold btn-lg', 'Hrát znovu');
+        replayBtn.addEventListener('click', () => resetLocalState());
+        goDiv.appendChild(replayBtn);
+        dom.actionContent.appendChild(goDiv);
+        break;
+      }
+
+      default:
+        dom.actionContent.innerHTML = '';
+        dom.actionContent.appendChild(makeEl('p', 'dim', '...'));
+    }
   }
-}
 
-function waitHTML(player, msg) {
-  return `
-    <div class="action-waiting">
-      <div class="waiting-icon">⏳</div>
-      <p>Čeká se na <strong style="color:${esc(player?.color || '#fff')}">${esc(player?.name || '?')}</strong><br/><span class="dim">${msg}</span></p>
-    </div>
-  `;
-}
+  // Místo HTML stringu — čistý DOM element pro "čekání"
+  function buildWaitEl(player, msg) {
+    const wrap = makeEl('div', 'action-waiting');
+    wrap.appendChild(makeEl('div', 'waiting-icon', '⏳'));
 
-/* ─── Log ────────────────────────────────────────────────────────────────── */
-function updateLog(state) {
-  dom.logList.innerHTML = (state.log || []).map(
-    msg => `<div class="log-entry">${esc(msg)}</div>`
-  ).join('');
-}
+    const p = makeEl('p');
+    p.appendChild(document.createTextNode('Čeká se na '));
+    const nameSpan = makeEl('strong', '', player?.name ?? '?');
+    nameSpan.style.color = safeColor(player?.color ?? '#fff');
+    p.appendChild(nameSpan);
+    p.appendChild(document.createElement('br'));
+    p.appendChild(makeEl('span', 'dim', msg));
+    wrap.appendChild(p);
+    return wrap;
+  }
 
-/* ─── Tooltip ────────────────────────────────────────────────────────────── */
-function showTip(space, ev) {
-  if (!gameState) return;
-  const ownerId = gameState.ownerships?.[space.id];
-  const owner = ownerId ? gameState.players.find(p => p.id === ownerId) : null;
-  const tok = gameState.tokens?.[space.id] || { small: 0, big: false };
-
-  let html = `<div class="tip-header" style="background:${esc(space.groupColor || 'var(--bg-card2)')}">${esc(space.name)}</div>`;
-  html += `<div class="tip-body">`;
-
-  if (space.type === 'horse') {
-    html += `<div class="tip-group">● Stáj ${esc(space.group || '')}</div>`;
-
-    // Rent Table
-    html += `<table class="tip-table">`;
-    const rents = space.rents || [];
-    const labels = ['Základní nájem', 'S 1 dostihy', 'S 2 dostihy', 'S 3 dostihy', 'S 4 dostihy', 'HLAVNÍ DOSTIH'];
-
-    rents.forEach((r, i) => {
-      let active = false;
-      if (tok.big && i === 5) active = true;
-      else if (!tok.big && tok.small === i) active = true;
-
-      html += `<tr class="${active ? 'active-rent' : ''}">
-                 <td>${labels[i]}</td>
-                 <td>${fmt(r)} Kč</td>
-               </tr>`;
+  /* ─── Log ────────────────────────────────────────────────────────────────── */
+  function updateLog(state) {
+    if (!dom.logList) return;
+    dom.logList.innerHTML = '';
+    (state.log || []).forEach(msg => {
+      const entry = makeEl('div', 'log-entry', msg);
+      dom.logList.appendChild(entry);
     });
-    html += `</table>`;
+  }
 
-    // Maintenance Costs
-    html += `<div class="tip-prices">
+  /* ─── Tooltip ────────────────────────────────────────────────────────────── */
+  function showTip(space, ev) {
+    if (!gameState || !dom.tooltip) return;
+    const ownerId = gameState.ownerships?.[space.id];
+    const owner = ownerId ? gameState.players.find(p => p.id === ownerId) : null;
+    const tok = gameState.tokens?.[space.id] || { small: 0, big: false };
+
+    // Tooltip je interní UI — data procházejí přes esc() pro jistotu
+    let html = `<div class="tip-header" style="background:${safeColor(space.groupColor ?? '', 'var(--bg-card2)').replace('var(--bg-card2)', '')}">${esc(space.name)}</div>`;
+    html += `<div class="tip-body">`;
+
+    if (space.type === 'horse') {
+      html += `<div class="tip-group">● Stáj ${esc(space.group ?? '')}</div>`;
+      html += `<table class="tip-table">`;
+      const rents = space.rents ?? [];
+      const labels = ['Základní nájem', 'S 1 dostihy', 'S 2 dostihy', 'S 3 dostihy', 'S 4 dostihy', 'HLAVNÍ DOSTIH'];
+      rents.forEach((r, i) => {
+        const active = (tok.big && i === 5) || (!tok.big && tok.small === i);
+        html += `<tr class="${active ? 'active-rent' : ''}"><td>${labels[i]}</td><td>${fmt(r)} Kč</td></tr>`;
+      });
+      html += `</table>`;
+      html += `<div class="tip-prices">
       <div class="price-tag">Cena koně: <b>${fmt(space.price)} Kč</b></div>
       <div class="price-tag">Cena žetonu: <b>${fmt(space.tokenCost)} Kč</b></div>
     </div>`;
-
-  } else if (space.type === 'service') {
-    let formula = '';
-    if (space.serviceType === 'trener') {
-      formula = '1.000 Kč × počet trenérů';
-    } else {
-      formula = 'Jedna: 80× hod kostkou<br/>Obě: 200× hod kostkou';
-    }
-    html += `<div class="tip-group">Specifické služby</div>
-             <div style="font-size:12px; margin-top:10px; line-height:1.4">${formula}</div>
+    } else if (space.type === 'service') {
+      const formula = space.serviceType === 'trener'
+        ? '1.000 Kč × počet trenérů'
+        : 'Jedna: 80× hod kostkou<br/>Obě: 200× hod kostkou';
+      html += `<div class="tip-group">Specifické služby</div>
+             <div style="font-size:12px;margin-top:10px;line-height:1.4">${formula}</div>
              <div class="price-tag" style="margin-top:10px">Pořizovací cena: <b>${fmt(space.price)} Kč</b></div>`;
+    } else if (space.type === 'tax') {
+      html += `<div class="tip-group" style="color:var(--red)">Pravidelná platba</div>
+             <div class="tip-impact neg" style="font-size:24px;font-weight:800;text-align:center;padding:10px 0">-${fmt(space.amount)} Kč</div>`;
+    } else if (space.type === 'start') {
+      html += `<div class="tip-group" style="color:var(--green)">Průchod startem</div>
+             <div style="font-size:13px;margin:10px 0">Získáváte od banky finanční injekci za dokončené kolo.</div>
+             <div style="text-align:right;font-weight:800;color:var(--green)">+${fmt(4000)} Kč</div>`;
+    }
+    html += `</div>`;
 
-  } else if (space.type === 'tax') {
-    html += `<div class="tip-group" style="color:var(--red)">Pravidelná platba</div>
-             <div class="tip-impact neg" style="font-size:24px; font-weight:800; text-align:center; padding:10px 0">-${fmt(space.amount)} Kč</div>`;
-  } else if (space.type === 'start') {
-    html += `<div class="tip-group" style="color:var(--green)">Průchod startem</div>
-             <div style="font-size:13px; margin:10px 0">Získáváte od banky finanční injekci za dokončené kolo.</div>
-             <div style="text-align:right; font-weight:800; color:var(--green)">+${fmt(4000)} Kč</div>`;
-  }
-
-  html += `</div>`; // Close body
-
-  if (owner) {
-    html += `<div class="tip-owner-info">
-      <div class="owner-dot" style="background:${esc(owner.color)}"></div>
-      <div>Vlastní: ${esc(owner.name)}</div>
+    if (owner) {
+      html += `<div class="tip-owner-info">
+      <div class="owner-dot" style="background:${safeColor(owner.color)}"></div>
+      <div>${esc(owner.name)}</div>
     </div>`;
+    }
+
+    dom.tooltip.innerHTML = html;
+    dom.tooltip.classList.remove('hidden');
+    moveTip(ev);
   }
 
-  dom.tooltip.innerHTML = html;
-  dom.tooltip.classList.remove('hidden');
-  moveTip(ev);
-}
-
-function moveTip(ev) {
-  const tip = dom.tooltip;
-  const tw = tip.offsetWidth || 240;
-  const th = tip.offsetHeight || 200;
-
-  let x = ev.clientX + 14;
-  let y = ev.clientY + 14;
-
-  if (x + tw > window.innerWidth) x = ev.clientX - tw - 10;
-  if (y + th > window.innerHeight) y = ev.clientY - th - 10;
-
-  tip.style.left = x + 'px';
-  tip.style.top = y + 'px';
-}
-
-/* ─── Toast ──────────────────────────────────────────────────────────────── */
-let toastTimer;
-function showToast(msg, err = false) {
-  const t = dom.toast;
-  t.textContent = msg;
-  t.className = 'toast' + (err ? ' err' : '');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
-}
-
-/* ─── Particles ──────────────────────────────────────────────────────────── */
-function generateParticles() {
-  const container = $('particles-container');
-  if (!container) return;
-  setInterval(() => {
-    if (document.hidden) return;
-    const p = document.createElement('div');
-    p.className = 'particle';
-    const size = Math.random() * 4 + 2;
-    p.style.width = size + 'px';
-    p.style.height = size + 'px';
-    p.style.left = (Math.random() * 100) + '%';
-    p.style.top = (Math.random() * 100) + '%';
-    container.appendChild(p);
-    setTimeout(() => { if (p.parentNode) p.remove(); }, 3000);
-  }, 250);
-}
-
-/* ─── Inventory Tooltips ─────────────────────────────────────────────────── */
-dom.playersList.addEventListener('mouseover', ev => {
-  const bar = ev.target.closest('.inv-bar, .inv-service');
-  if (bar && boardData) {
-    const sid = parseInt(bar.dataset.sid);
-    const space = boardData.find(s => s.id === sid);
-    if (space) showTip(space, ev);
+  function moveTip(ev) {
+    const tip = dom.tooltip;
+    if (!tip) return;
+    const tw = tip.offsetWidth || 240;
+    const th = tip.offsetHeight || 200;
+    let x = ev.clientX + 14;
+    let y = ev.clientY + 14;
+    if (x + tw > window.innerWidth) x = ev.clientX - tw - 10;
+    if (y + th > window.innerHeight) y = ev.clientY - th - 10;
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
   }
-});
-dom.playersList.addEventListener('mousemove', ev => {
-  if (ev.target.closest('.inv-bar, .inv-service')) moveTip(ev);
-});
-dom.playersList.addEventListener('mouseout', ev => {
-  if (ev.target.closest('.inv-bar, .inv-service')) dom.tooltip.classList.add('hidden');
-});
 
-/* ─── Visual Effects ─────────────────────────────────────────────────────── */
-function spawnFloatingText(spaceId, text, color) {
-  const space = document.querySelector(`.space[data-id="${spaceId}"]`);
-  if (!space) return;
-  const rect = space.getBoundingClientRect();
-
-  const el = document.createElement('div');
-  el.className = 'floating-text';
-  el.style.left = (rect.left + rect.width / 2) + 'px';
-  el.style.top = (rect.top + rect.height / 2) + 'px';
-  el.style.color = color;
-  el.innerHTML = text;
-  document.body.appendChild(el);
-
-  setTimeout(() => { if (el.parentNode) el.remove(); }, 1200);
-}
-
-function playBuyAnimation(spaceId, owner) {
-  const color = owner.color || '#fff';
-  spawnFloatingText(spaceId, 'VLASTNÍK!', color);
-
-  const space = document.querySelector(`.space[data-id="${spaceId}"]`);
-  if (space) {
-    space.classList.add('flash-buy');
-    space.style.boxShadow = `inset 0 0 40px ${esc(color)}`;
-    setTimeout(() => {
-      space.classList.remove('flash-buy');
-      space.style.boxShadow = '';
-    }, 1000);
+  /* ─── Toast ──────────────────────────────────────────────────────────────── */
+  let toastTimer;
+  function showToast(msg, err = false) {
+    const t = dom.toast;
+    if (!t) return;
+    t.textContent = msg;
+    t.className = `toast${err ? ' err' : ''}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
   }
-}
 
-function playTokenAnimation(spaceId, isBig) {
-  const text = isBig ? '👑 HLAVNÍ DOSTIH' : '➕ ŽETON';
-  spawnFloatingText(spaceId, text, 'var(--gold)');
-}
+  /* ─── Particles ──────────────────────────────────────────────────────────── */
+  // (oprava: interval uložen do proměnné — lze zastavit při opuštění hry)
+  function generateParticles() {
+    const container = getEl('particles-container');
+    if (!container) return;
+    if (particleIntervalId) clearInterval(particleIntervalId);
+
+    particleIntervalId = setInterval(() => {
+      if (document.hidden) return;
+      const p = makeEl('div', 'particle');
+      const size = Math.random() * 4 + 2;
+      p.style.cssText = `width:${size}px;height:${size}px;left:${Math.random() * 100}%;top:${Math.random() * 100}%`;
+      container.appendChild(p);
+      setTimeout(() => { if (p.parentNode) p.remove(); }, 3000);
+    }, 250);
+  }
+
+  /* ─── Inventory Tooltips ─────────────────────────────────────────────────── */
+  if (dom.playersList) {
+    dom.playersList.addEventListener('mouseover', ev => {
+      const bar = ev.target.closest('.inv-bar, .inv-service');
+      if (bar && boardData) {
+        const sid = parseInt(bar.dataset.sid, 10);
+        const space = boardData.find(s => s.id === sid);
+        if (space) showTip(space, ev);
+      }
+    });
+    dom.playersList.addEventListener('mousemove', ev => {
+      if (ev.target.closest('.inv-bar, .inv-service')) moveTip(ev);
+    });
+    dom.playersList.addEventListener('mouseout', ev => {
+      if (ev.target.closest('.inv-bar, .inv-service')) dom.tooltip?.classList.add('hidden');
+    });
+  }
+
+  /* ─── Visual Effects ─────────────────────────────────────────────────────── */
+  function spawnFloatingText(spaceId, text, color) {
+    const space = dom.board?.querySelector(`.space[data-id="${spaceId}"]`);
+    if (!space) return;
+    const rect = space.getBoundingClientRect();
+    const el = makeEl('div', 'floating-text', text);
+    el.style.cssText = `left:${rect.left + rect.width / 2}px;top:${rect.top + rect.height / 2}px;color:${safeColor(color, '#fff')}`;
+    document.body.appendChild(el);
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 1200);
+  }
+
+  function playBuyAnimation(spaceId, owner) {
+    const color = safeColor(owner.color, '#fff');
+    spawnFloatingText(spaceId, 'VLASTNÍK!', color);
+    const space = dom.board?.querySelector(`.space[data-id="${spaceId}"]`);
+    if (space) {
+      space.classList.add('flash-buy');
+      space.style.boxShadow = `inset 0 0 40px ${color}`;
+      setTimeout(() => { space.classList.remove('flash-buy'); space.style.boxShadow = ''; }, 1000);
+    }
+  }
+
+  function playTokenAnimation(spaceId, isBig) {
+    spawnFloatingText(spaceId, isBig ? '👑 HLAVNÍ DOSTIH' : '➕ ŽETON', 'var(--gold)');
+  }
+
+})(); // konec IIFE

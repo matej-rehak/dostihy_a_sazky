@@ -13,7 +13,8 @@ const io     = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-const rooms = new Map(); // roomId -> { engine, password, name }
+const rooms     = new Map(); // roomId -> { engine, password, name }
+const MAX_ROOMS = 5;
 
 function getRoomList() {
   const list = [];
@@ -37,6 +38,13 @@ io.on('connection', socket => {
   });
 
   socket.on('room:create', ({ name, password }) => {
+    if (rooms.size >= MAX_ROOMS) {
+      return socket.emit('game:error', { message: `Dosažen maximální počet místností (${MAX_ROOMS}). Zkuste to prosím později.` });
+    }
+    const nameExists = Array.from(rooms.values()).some(r => r.name === name);
+    if (nameExists) {
+      return socket.emit('game:error', { message: 'Místnost s tímto názvem již existuje. Zvolte prosím jiný název.' });
+    }
     const roomId = Math.random().toString(36).substr(2, 9);
     const engine = new GameEngine(io, roomId);
     rooms.set(roomId, { engine, password, name });
@@ -70,6 +78,11 @@ io.on('connection', socket => {
   socket.on('game:update_config', d => {
     const room = rooms.get(socket.roomId);
     if (room) room.engine.updateConfig(socket, d);
+  });
+
+  socket.on('game:ready', () => {
+    const room = rooms.get(socket.roomId);
+    if (room) room.engine.toggleReady(socket.id);
   });
 
   socket.on('game:roll', () => {
