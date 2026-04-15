@@ -1,0 +1,25 @@
+import { getEl } from './utils.js';
+
+export const dom = {
+  introView:     getEl('intro-view'),
+  roomList:      getEl('room-list'),
+  lobbyView:     getEl('lobby-view'),
+  gameView:      getEl('game-view'),
+  joinForm:      getEl('join-form'),
+  joinedWait:    getEl('joined-wait'),
+  nameInput:     getEl('name-input'),
+  colorPicker:   getEl('color-picker'),
+  joinBtn:       getEl('join-btn'),
+  lobbyPlayers:  getEl('lobby-players'),
+  hostControls:  getEl('host-controls'),
+  startBtn:      getEl('start-btn'),
+  board:         getEl('board'),
+  playersList:   getEl('players-list'),
+  actionTitle:   getEl('action-title'),
+  actionContent: getEl('action-content'),
+  logList:       getEl('log-list'),
+  bcTurn:        getEl('bc-turn'),
+  bcRound:       getEl('bc-round'),
+  toast:         getEl('toast'),
+  tooltip:       getEl('space-tip'),
+};

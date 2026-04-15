@@ -40,8 +40,7 @@ function getRoomList() {
 }
 
 /**
- * Odstraní hráče z místnosti a smaže ji, pokud je prázdná.
- * Voláno jak při `game:leave`, tak při `disconnect`.
+ * Tvrdé opuštění — hráč záměrně odchází (game:leave) nebo lobby disconnect.
  */
 function handleLeave(socket) {
   const roomId = socket.roomId;
@@ -52,13 +51,9 @@ function handleLeave(socket) {
     room.engine.removePlayer(socket);
     socket.leave(roomId);
     socket.roomId = null;
-
-    if (room.engine.players.size === 0) {
-      rooms.delete(roomId);
-    }
+    if (room.engine.players.size === 0) rooms.delete(roomId);
   }
 
-  // Aktualizuj lobby u všech připojených klientů
   io.emit('room:list', getRoomList());
 }
 
