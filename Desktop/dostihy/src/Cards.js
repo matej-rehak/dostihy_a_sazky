@@ -49,8 +49,8 @@ const NAHODA_CARDS = [
   { type: 'move_backward_to', space: 39, bonus: 4000, text: 'Zpět na poslední pole ve hře (kůň Napoli), obdržíš 4.000 Kč.' },
   { type: 'move_backward_to', space: 10, passStart: true, text: 'Zpět na pole Distanc. Obdržíš 4.000 Kč, pokud jsi cestou zpět prošel Start.' },
   { type: 'move_nearest_backward', category: 'type', value: 'finance', text: 'Zpět na nejbližší pole Finance.' },
-  { type: 'move_to', space: 0, passStart: true, text: 'Zpět na start (hráč obdrží 4.000 Kč).' },
-  { type: 'move_to', space: 0, passStart: false, text: 'Zpět na start (bez 4.000 Kč).' },
+  { type: 'move_backward_to', space: 0, passStart: true, text: 'Zpět na start (hráč obdrží 4.000 Kč).' },
+  { type: 'move_backward_to', space: 0, passStart: false, text: 'Zpět na start (bez 4.000 Kč).' },
   { type: 'skip_turn', turns: 2, text: 'Zdržíš se na 2 kola.' },
   { type: 'skip_turn', turns: 1, text: 'Zdržíš se na 1 kolo.' },
   { type: 'move_backward_to', space: 20, passStart: true, text: 'Zpět na pole Parkoviště. Dostaneš 4.000 Kč, pokud jsi cestou zpět prošel start.' },
@@ -58,5 +58,5 @@ const NAHODA_CARDS = [
 
 module.exports = {
   FinanceDeck: () => new CardDeck(FINANCE_CARDS),
-  NahodaDeck:  () => new CardDeck(NAHODA_CARDS),
+  NahodaDeck: () => new CardDeck(NAHODA_CARDS),
 };

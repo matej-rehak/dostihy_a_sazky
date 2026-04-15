@@ -55,7 +55,7 @@ class GameEngine {
       id: socket.id, name, color: finalColor, isHost,
       position: 0, balance: this.config.startBalance,
       bankrupt: false, inJail: false, jailTurns: 0, skipTurns: 0,
-      properties: [], rollAccumulator: 0, lastMoveForwardOnly: false,
+      properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: false,
     };
     this.players.set(socket.id, player);
@@ -155,7 +155,7 @@ class GameEngine {
     const player = this.players.get(pid);
     if (!player || player.bankrupt) { this._advanceTurn(); return; }
 
-    // Skip turns (card effect)
+    // Pokud hráč má přeskočit tah
     if (player.skipTurns > 0) {
       player.skipTurns--;
       this._addLog(`🚫 ${player.name} vynechává tah (${player.skipTurns} kol zbývá)`);
@@ -163,6 +163,7 @@ class GameEngine {
       return;
     }
 
+    // Pokud je hráč ve vězení
     if (player.inJail) {
       if (player.jailTurns <= 0) {
         // Forced release
@@ -199,7 +200,7 @@ class GameEngine {
         const totalSteps = player.rollAccumulator;
         player.rollAccumulator = 0;
         this._addLog(`🎲 ${player.name} hodil(a) ${dice}. Celkem se posouvá o ${totalSteps} polí.`);
-        player.lastMoveForwardOnly = true;
+        player.moveDirection = 1;
         this.pendingAction = null;
         this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, totalSteps));
       }
@@ -214,7 +215,9 @@ class GameEngine {
       this._addLog(`🎲 ${player.name} hází pro poplatek: ${dice}`);
 
       const rent = this._calcRent(spaceId, dice);
-      this._addLog(`💸 ${player.name} platí poplatek ${fmt(rent)} Kč → ${ownerPlayer.name} (${space.name})`);
+      this._scheduleAction(ACTION_DELAY_MS, () => {
+        this._addLog(`💸 ${player.name} platí poplatek ${fmt(rent)} Kč → ${ownerPlayer.name} (${space.name})`);
+      });
 
       this.pendingAction = null;
       this._transfer(pid, owner, rent);
@@ -293,8 +296,7 @@ class GameEngine {
         const p = this.players.get(pid);
         if (p.inJail || p.bankrupt) { this._advanceTurn(); return; }
 
-        if (['move_to', 'move_forward', 'move_backward'].includes(card.type)) {
-          p.lastMoveForwardOnly = (card.type === 'move_forward');
+        if (['move_to', 'move_forward', 'move_backward', 'move_nearest', 'move_nearest_backward', 'move_backward_to'].includes(card.type)) {
           this._evaluateSpace(pid);
         } else {
           this._offerTokensOrEnd(pid);
@@ -392,11 +394,6 @@ class GameEngine {
         break;
 
       case 'jail':
-        // Just visiting
-        this._addLog(`${player.name} navštívil(a) Distanc (jen návštěva)`);
-        this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
-        break;
-
       case 'go_to_jail':
         this._sendToJail(pid);
         this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
@@ -538,6 +535,7 @@ class GameEngine {
       case 'move_to': {
         const oldPos = player.position;
         player.position = card.space;
+        player.moveDirection = 1;
         if (card.passStart && card.space !== 0 && player.position <= oldPos && oldPos !== 0) {
           player.balance += this.config.startBonus;
           this._addLog(`${player.name} prošel(a) START — +${fmt(this.config.startBonus)} Kč`);
@@ -552,10 +550,12 @@ class GameEngine {
         const np = (player.position + card.steps) % 40;
         if (np < player.position) { player.balance += this.config.startBonus; }
         player.position = np;
+        player.moveDirection = 1;
         break;
       }
       case 'move_backward':
         player.position = (player.position - card.steps + 40) % 40;
+        player.moveDirection = -1;
         break;
       case 'skip_turn':
         player.skipTurns += card.turns;
@@ -587,6 +587,7 @@ class GameEngine {
         }
         if (found !== -1) {
           player.position = found;
+          player.moveDirection = 1;
           if (card.passStart && player.position < oldPos) {
             player.balance += this.config.startBonus;
             this._addLog(`${player.name} prošel(a) START — +${fmt(this.config.startBonus)} Kč`);
@@ -605,6 +606,7 @@ class GameEngine {
         if (found !== -1) {
           const oldPos = player.position;
           player.position = found;
+          player.moveDirection = -1;
           // Card 8 specifically says pass start backward gets money
           if (card.passStart && player.position > oldPos) {
             player.balance += this.config.startBonus;
@@ -616,6 +618,7 @@ class GameEngine {
       case 'move_backward_to': {
         const oldPos = player.position;
         player.position = card.space;
+        player.moveDirection = -1;
         if (card.bonus) player.balance += card.bonus;
         if (card.passStart && player.position > oldPos) {
           player.balance += this.config.startBonus;
@@ -655,7 +658,7 @@ class GameEngine {
     if (!p) return 0;
     return p.properties.reduce((sum, spId) => {
       const space = BOARD[spId];
-      let val = Math.floor(space.price / 2);
+      let val = space.price;
       const tok = this.tokens[spId];
       if (tok) {
         if (tok.big) val += Math.floor(space.bigTokenCost / 2) + Math.floor(space.tokenCost / 2) * 4;

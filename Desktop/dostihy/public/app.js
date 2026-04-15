@@ -540,7 +540,7 @@
         el.appendChild(stripe);
       } else if (space.type === 'service') {
         const stripe = makeEl('div', 'stripe');
-        stripe.style.background = '#5b8dee';
+        stripe.style.background = '#ffffffff';
         el.appendChild(stripe);
       }
 
@@ -551,7 +551,7 @@
         el.appendChild(icon);
         el.appendChild(name);
         if (space.id === 10) {
-          el.appendChild(makeEl('div', 'corner-sub', 'Jen návštěva / Distanc'));
+          el.appendChild(makeEl('div', 'corner-sub', ''));
         }
       } else {
         const inner = makeEl('div', 'space-inner');
@@ -702,11 +702,10 @@
         state.players.forEach(p => {
           if (p.bankrupt) return;
           if (clientVisualPos[p.id] !== p.position) {
-            const diff = (p.position - clientVisualPos[p.id] + 40) % 40;
-            if (p.lastMoveForwardOnly || diff <= 20) {
-              clientVisualPos[p.id] = (clientVisualPos[p.id] + 1) % 40;
-            } else {
+            if (p.moveDirection === -1) {
               clientVisualPos[p.id] = (clientVisualPos[p.id] - 1 + 40) % 40;
+            } else {
+              clientVisualPos[p.id] = (clientVisualPos[p.id] + 1) % 40;
             }
             const space = dom.board?.querySelector(`.space[data-id="${clientVisualPos[p.id]}"]`);
             if (space) {
@@ -978,7 +977,7 @@
               socket.emit('game:respond', { decision: 'buy', spaceId: pa.data.spaceId })
             ));
           }
-          btns.appendChild(actionBtn('Pas', 'btn-outline', () =>
+          btns.appendChild(actionBtn('Nechci koupit', 'btn-outline', () =>
             socket.emit('game:respond', { decision: 'pass', spaceId: pa.data.spaceId })
           ));
           body.appendChild(btns);
@@ -1269,7 +1268,6 @@
     html += `<div class="tip-body">`;
 
     if (space.type === 'horse') {
-      html += `<div class="tip-group">● Stáj ${esc(space.group ?? '')}</div>`;
       html += `<table class="tip-table">`;
       const rents = space.rents ?? [];
       const labels = ['Základní nájem', 'S 1 dostihy', 'S 2 dostihy', 'S 3 dostihy', 'S 4 dostihy', 'HLAVNÍ DOSTIH'];

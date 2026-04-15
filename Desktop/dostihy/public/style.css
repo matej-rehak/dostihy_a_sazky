@@ -1029,7 +1029,7 @@ body {
 }
 
 .corner-name {
-  font-size: clamp(8px, 1vw, 11px);
+  font-size: clamp(7px, 1vw, 10px);
   font-weight: 900;
   text-align: center;
   line-height: 1.1;
