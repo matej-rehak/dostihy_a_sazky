@@ -11,6 +11,7 @@ const CardsMixin    = require('./mixins/cards');
 const EconomyMixin  = require('./mixins/economy');
 const TokensMixin   = require('./mixins/tokens');
 const StateMixin    = require('./mixins/state');
+const TradeMixin    = require('./mixins/trade');
 
 class GameEngine {
   constructor(io, roomId) {
@@ -43,6 +44,7 @@ Object.assign(GameEngine.prototype,
   CardsMixin,    // _applyCard
   EconomyMixin,  // _buyProperty, _sellProperty, _calcRent, _transfer, _calcAssetsValue, bankrot
   TokensMixin,   // _addToken, _eligibleTokenSpaces, _offerTokensOrEnd
+  TradeMixin,    // initiateTrade
 );
 
 module.exports = GameEngine;

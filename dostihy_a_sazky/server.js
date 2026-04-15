@@ -114,6 +114,7 @@ io.on('connection', socket => {
   socket.on('game:ready', () => rooms.get(socket.roomId)?.engine.toggleReady(socket.id));
   socket.on('game:roll', () => rooms.get(socket.roomId)?.engine.handleRoll(socket));
   socket.on('game:respond', d => rooms.get(socket.roomId)?.engine.handleRespond(socket, d));
+  socket.on('game:trade_init', d => rooms.get(socket.roomId)?.engine.initiateTrade(socket, d));
 
   // ─── Odpojení ────────────────────────────────────────────────────────────
 

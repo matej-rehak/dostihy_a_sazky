@@ -1,10 +1,14 @@
 import { makeEl, fmt, safeColor } from '../utils.js';
 import { dom } from '../dom.js';
 import { state } from '../state.js';
+import { startTradeWith } from './actions.js';
 
 export function updatePlayers(gameState) {
   if (!dom.playersList) return;
   dom.playersList.innerHTML = '';
+
+  const canTrade = gameState.pendingAction?.type === 'wait_roll'
+    && gameState.pendingAction?.targetId === state.myId;
 
   gameState.players.forEach(p => {
     const isMe   = p.id === state.myId;
@@ -43,6 +47,14 @@ export function updatePlayers(gameState) {
     const balEl = makeEl('div', `p-balance${p.balance < 2000 ? ' low' : ''}`, `${fmt(p.balance)} Kč`);
     balEl.id = `pb-${p.id}`;
     row.appendChild(balEl);
+
+    if (canTrade && !isMe && !p.bankrupt) {
+      const me = gameState.players.find(pl => pl.id === state.myId);
+      const tradeBtn = makeEl('button', 'btn btn-xs btn-trade-icon', '🤝');
+      tradeBtn.title = `Navrhnout obchod s ${p.name}`;
+      tradeBtn.addEventListener('click', () => startTradeWith(p.id, gameState, me));
+      row.appendChild(tradeBtn);
+    }
 
     dom.playersList.appendChild(row);
   });

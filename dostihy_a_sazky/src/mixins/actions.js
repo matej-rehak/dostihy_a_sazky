@@ -25,6 +25,7 @@ module.exports = {
       case 'card_ack':     return this._handleCardAck(pid, actionData);
       case 'jail_choice':  return this._handleJailChoice(pid, decision);
       case 'token_manage': return this._handleTokenManage(pid, decision, spaceId, tokenType);
+      case 'trade_offer':  return this._handleTradeOffer(pid, decision, actionData);
     }
   },
 
@@ -137,5 +138,46 @@ module.exports = {
     } else {
       this._advanceTurn();
     }
+  },
+
+  _handleTradeOffer(pid, decision, actionData) {
+    const { fromId, offer, request } = actionData;
+    const initiator = this.players.get(fromId);
+    const target    = this.players.get(pid);
+
+    if (decision === 'accept' && initiator && target) {
+      // Koně: initiator → target
+      offer.horses.forEach(sid => {
+        this.ownerships[sid] = pid;
+        initiator.properties = initiator.properties.filter(id => id !== sid);
+        if (!target.properties.includes(sid)) target.properties.push(sid);
+      });
+      // Koně: target → initiator
+      request.horses.forEach(sid => {
+        this.ownerships[sid] = fromId;
+        target.properties = target.properties.filter(id => id !== sid);
+        if (!initiator.properties.includes(sid)) initiator.properties.push(sid);
+      });
+      // Peníze
+      initiator.balance -= offer.money;
+      initiator.balance += request.money;
+      target.balance    -= request.money;
+      target.balance    += offer.money;
+      this._checkBankrupt(fromId);
+      this._checkBankrupt(pid);
+      this._addLog(`🤝 ${initiator.name} a ${target.name} uzavřeli obchod!`);
+    } else {
+      this._addLog(`❌ ${target?.name ?? '?'} odmítl(a) nabídku od ${initiator?.name ?? '?'}`);
+    }
+
+    // Vrátit wait_roll původnímu hráči (obchod netrhá tah)
+    this._scheduleAction(ACTION_DELAY_MS, () => {
+      if (this.players.get(fromId) && !this.players.get(fromId).bankrupt) {
+        this.pendingAction = { type: 'wait_roll', targetId: fromId };
+        this._broadcast();
+      } else {
+        this._advanceTurn();
+      }
+    });
   },
 };
