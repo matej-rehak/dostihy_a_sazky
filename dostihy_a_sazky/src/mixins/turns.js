@@ -33,7 +33,7 @@ module.exports = {
   },
 
   handleRoll(socket) {
-    const pid = socket.id;
+    const pid = socket.playerId;
     const player = this.players.get(pid);
     if (!player) return;
     if (this._currentPlayerId() !== pid) { socket.emit('game:error', { message: 'Nejsi na řadě.' }); return; }

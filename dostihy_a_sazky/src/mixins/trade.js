@@ -3,11 +3,15 @@
 module.exports = {
 
   initiateTrade(socket, { targetId, offer, request } = {}) {
-    const fromId = socket.id;
+    const fromId = socket.playerId;
 
     if (this.phase !== 'playing') return;
-    if (this.pendingAction?.type !== 'wait_roll' || this.pendingAction.targetId !== fromId) {
-      return socket.emit('game:error', { message: 'Obchod lze navrhnout pouze na vašem tahu před házením.' });
+
+    const isWaitRoll  = this.pendingAction?.type === 'wait_roll'  && this.pendingAction.targetId === fromId;
+    const isDebtManage = this.pendingAction?.type === 'debt_manage' && this.pendingAction.targetId === fromId;
+
+    if (!isWaitRoll && !isDebtManage) {
+      return socket.emit('game:error', { message: 'Obchod lze navrhnout pouze na vašem tahu nebo při řešení dluhu.' });
     }
 
     const initiator = this.players.get(fromId);
@@ -41,6 +45,7 @@ module.exports = {
       targetId,
       data: {
         fromId,
+        fromContext: isDebtManage ? 'debt_manage' : 'wait_roll',
         offer:   { horses: offerHorses,   money: offerMoney   },
         request: { horses: requestHorses,  money: requestMoney },
       },

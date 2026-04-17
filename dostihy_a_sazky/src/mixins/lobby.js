@@ -5,6 +5,15 @@ const { PLAYER_COLORS } = require('../constants');
 module.exports = {
 
   addPlayer(socket, name, color) {
+    // Pokud hráč již existuje (reconnect přes lobby), jen aktualizuj socketId
+    if (this.players.has(socket.playerId)) {
+      const p = this.players.get(socket.playerId);
+      p.socketId = socket.id;
+      p.disconnected = false;
+      this._broadcast();
+      return;
+    }
+
     if (this.phase !== 'lobby') {
       socket.emit('game:error', { message: 'Hra již probíhá.' });
       return;
@@ -20,42 +29,43 @@ module.exports = {
       : PLAYER_COLORS.find(c => !usedColors.includes(c)) || '#ffffff';
 
     const player = {
-      id: socket.id, name, color: finalColor, isHost,
+      id: socket.playerId, socketId: socket.id,
+      name, color: finalColor, isHost,
       position: 0, balance: this.config.startBalance,
       bankrupt: false, inJail: false, jailTurns: 0, skipTurns: 0,
       properties: [], rollAccumulator: 0, moveDirection: 1,
-      jailFreeCards: 0, ready: false,
+      jailFreeCards: 0, ready: false, disconnected: false,
     };
-    this.players.set(socket.id, player);
+    this.players.set(socket.playerId, player);
     this._addLog(`🐎 ${name} se připojil(a) k hře`);
     this._broadcast();
   },
 
   updateConfig(socket, config) {
     if (this.phase !== 'lobby') return;
-    const player = this.players.get(socket.id);
+    const player = this.players.get(socket.playerId);
     if (!player || !player.isHost) return;
     this.config = { ...this.config, ...config };
     this._broadcast();
   },
 
-  toggleReady(socketId) {
+  toggleReady(playerId) {
     if (this.phase !== 'lobby') return;
-    const player = this.players.get(socketId);
+    const player = this.players.get(playerId);
     if (!player) return;
     player.ready = !player.ready;
     this._broadcast();
   },
 
   removePlayer(socket) {
-    const player = this.players.get(socket.id);
+    const player = this.players.get(socket.playerId);
     if (!player) return;
 
     if (this.phase === 'playing') {
       this._addLog(`⚠️ ${player.name} se odpojil(a) — bankrot`);
-      this._declareBankrupt(socket.id);
+      this._declareBankrupt(socket.playerId);
     } else {
-      this.players.delete(socket.id);
+      this.players.delete(socket.playerId);
       this._addLog(`${player.name} opustil(a) lobby`);
 
       if (player.isHost && this.players.size > 0) {
@@ -70,9 +80,26 @@ module.exports = {
     this._broadcast();
   },
 
+  markDisconnected(playerId) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    player.disconnected = true;
+    this._addLog(`📡 ${player.name} se odpojil(a) — čekáme 30s na znovupřipojení...`);
+    this._broadcast();
+  },
+
+  reconnectPlayer(socket) {
+    const player = this.players.get(socket.playerId);
+    if (!player) return;
+    player.socketId = socket.id;
+    player.disconnected = false;
+    this._addLog(`✅ ${player.name} se znovu připojil(a)`);
+    this._broadcast();
+  },
+
   startGame(socket) {
     if (this.phase !== 'lobby') return;
-    const host = this.players.get(socket.id);
+    const host = this.players.get(socket.playerId);
     if (!host?.isHost) { socket.emit('game:error', { message: 'Hru může spustit pouze host.' }); return; }
     if (this.players.size < 2) { socket.emit('game:error', { message: 'Potřeba alespoň 2 hráče.' }); return; }
 
@@ -86,7 +113,6 @@ module.exports = {
     this.phase = 'playing';
     this.players.forEach(p => p.balance = this.config.startBalance);
 
-    // Fisher-Yates shuffle pořadí hráčů
     const keys = [...this.players.keys()];
     for (let i = keys.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));

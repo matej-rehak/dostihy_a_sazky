@@ -39,13 +39,17 @@ module.exports = {
   // ─── Broadcast ────────────────────────────────────────────────────────────
 
   _broadcast() {
-    this.io.to(this.roomId).emit('game:state', this._buildState());
+    if (this._broadcastTimer) clearTimeout(this._broadcastTimer);
+    this._broadcastTimer = setTimeout(() => {
+      this._broadcastTimer = null;
+      this.io.to(this.roomId).emit('game:state', this._buildState());
+    }, 50);
   },
 
   _buildState() {
     return {
       phase: this.phase,
-      players: [...this.players.values()],
+      players: [...this.players.values()].map(({ socketId, ...rest }) => rest),
       turnOrder: this.turnOrder,
       currentTurnId: this._currentPlayerId(),
       ownerships: this.ownerships,

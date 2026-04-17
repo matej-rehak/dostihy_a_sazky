@@ -11,7 +11,7 @@ const MOVE_CARD_TYPES = new Set([
 module.exports = {
 
   handleRespond(socket, data) {
-    const pid = socket.id;
+    const pid = socket.playerId;
     if (!this.pendingAction || this.pendingAction.targetId !== pid) return;
     const { decision, spaceId, tokenType } = data || {};
     const actionData = this.pendingAction.data || {};
@@ -141,7 +141,7 @@ module.exports = {
   },
 
   _handleTradeOffer(pid, decision, actionData) {
-    const { fromId, offer, request } = actionData;
+    const { fromId, offer, request, fromContext } = actionData;
     const initiator = this.players.get(fromId);
     const target    = this.players.get(pid);
 
@@ -170,14 +170,22 @@ module.exports = {
       this._addLog(`❌ ${target?.name ?? '?'} odmítl(a) nabídku od ${initiator?.name ?? '?'}`);
     }
 
-    // Vrátit wait_roll původnímu hráči (obchod netrhá tah)
-    this._scheduleAction(ACTION_DELAY_MS, () => {
-      if (this.players.get(fromId) && !this.players.get(fromId).bankrupt) {
-        this.pendingAction = { type: 'wait_roll', targetId: fromId };
-        this._broadcast();
-      } else {
-        this._advanceTurn();
-      }
-    });
+    if (fromContext === 'debt_manage') {
+      // Obchod byl zahájen z dluhové situace — _scheduleAction automaticky
+      // vrátí do debt_manage pokud dluh trvá, nebo obnoví hru pokud je krytý
+      const fn = this._resumeFn;
+      this._resumeFn = null;
+      this._scheduleAction(ACTION_DELAY_MS, fn);
+    } else {
+      // Vrátit wait_roll původnímu hráči (obchod netrhá tah)
+      this._scheduleAction(ACTION_DELAY_MS, () => {
+        if (this.players.get(fromId) && !this.players.get(fromId).bankrupt) {
+          this.pendingAction = { type: 'wait_roll', targetId: fromId };
+          this._broadcast();
+        } else {
+          this._advanceTurn();
+        }
+      });
+    }
   },
 };

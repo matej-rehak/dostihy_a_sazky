@@ -1,18 +1,23 @@
 import { makeEl } from '../utils.js';
 import { state } from '../state.js';
 
+const MAX_PARTICLES = 30;
+
 export function generateParticles() {
   const container = document.getElementById('particles-container');
   if (!container) return;
   if (state.particleIntervalId) clearInterval(state.particleIntervalId);
 
+  let activeParticles = 0;
+
   state.particleIntervalId = setInterval(() => {
-    if (document.hidden) return;
+    if (document.hidden || activeParticles >= MAX_PARTICLES) return;
+    activeParticles++;
     const p = makeEl('div', 'particle');
     const size = Math.random() * 4 + 2;
     p.style.cssText = `width:${size}px;height:${size}px;left:${Math.random() * 100}%;top:${Math.random() * 100}%`;
     container.appendChild(p);
-    setTimeout(() => { if (p.parentNode) p.remove(); }, 3000);
+    setTimeout(() => { if (p.parentNode) p.remove(); activeParticles--; }, 3000);
   }, 250);
 }
 

@@ -14,7 +14,7 @@ export function updatePlayers(gameState) {
     const isMe   = p.id === state.myId;
     const isTurn = p.id === gameState.currentTurnId;
 
-    const row = makeEl('div', `player-row${isTurn ? ' is-turn' : ''}${p.bankrupt ? ' bankrupt' : ''}`);
+    const row = makeEl('div', `player-row${isTurn ? ' is-turn' : ''}${p.bankrupt ? ' bankrupt' : ''}${p.disconnected ? ' disconnected' : ''}`);
 
     const avatar = makeEl('div', 'p-avatar');
     avatar.style.background = safeColor(p.color);
@@ -33,9 +33,10 @@ export function updatePlayers(gameState) {
 
     const pos    = state.boardData ? (state.boardData[p.position]?.name ?? '?') : '?';
     const posEl  = makeEl('div', 'p-pos', pos + ' ');
-    if (p.inJail)   posEl.appendChild(makeEl('span', 'p-badge jail',           '🔒 Distanc'));
-    if (p.bankrupt) posEl.appendChild(makeEl('span', 'p-badge bankrupt-badge', '💀 Bankrot'));
-    if (isTurn)     posEl.appendChild(makeEl('span', 'p-badge',                '▶ Na tahu'));
+    if (p.inJail)      posEl.appendChild(makeEl('span', 'p-badge jail',           '🔒 Distanc'));
+    if (p.bankrupt)    posEl.appendChild(makeEl('span', 'p-badge bankrupt-badge', '💀 Bankrot'));
+    if (p.disconnected)posEl.appendChild(makeEl('span', 'p-badge disconnected-badge', '📡 Odpojeno'));
+    if (isTurn)        posEl.appendChild(makeEl('span', 'p-badge',                '▶ Na tahu'));
     info.appendChild(posEl);
 
     if (state.boardData && p.properties?.length > 0) {

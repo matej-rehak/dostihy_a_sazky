@@ -11,7 +11,7 @@ let tradeDraft = null;
 
 /** Spustí trade builder pro daného hráče — lze volat z jiných modulů (players.js) */
 export function startTradeWith(targetId, gameState, me) {
-  tradeDraft = { targetId, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 } };
+  tradeDraft = { targetId, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'wait_roll' };
   updateActionPanel(gameState);
 }
 
@@ -104,6 +104,10 @@ function renderWaitRoll(isTargeted, targetPlayer, gameState, me) {
     dom.actionContent.appendChild(actionBtn('🎲 Hodit kostkou', 'btn-gold btn-lg', () => socket.emit('game:roll')));
     const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
     if (others.length > 0) {
+      const tradeBtn = actionBtn('🤝 Navrhnout obchod', 'btn-outline', () => {
+        tradeDraft = { targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'wait_roll' };
+        renderWaitRoll(isTargeted, targetPlayer, gameState, me);
+      });
       tradeBtn.style.marginTop = '6px';
       dom.actionContent.appendChild(tradeBtn);
     }
@@ -216,6 +220,12 @@ function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
     return;
   }
 
+  // Pokud je aktivní trade builder v dluhové situaci, zobraz ho
+  if (tradeDraft?.context === 'debt_manage') {
+    renderTradeBuild(gameState, me);
+    return;
+  }
+
   const warn = makeEl('div', 'jail-display');
   warn.style.cssText = 'border-color:var(--red);padding:10px;margin-bottom:10px;border:1px solid var(--red)';
   warn.textContent = `⚠️ Jste v mínusu: ${fmt(me.balance)} Kč! Musíte prodat majetek nebo zkrachovat.`;
@@ -250,10 +260,20 @@ function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
   }
   dom.actionContent.appendChild(list);
 
+  const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
+  if (others.length > 0) {
+    const negotiateBtn = actionBtn('🤝 Vyjednat obchod', 'btn-outline', () => {
+      tradeDraft = { targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'debt_manage' };
+      renderDebtManage(isTargeted, targetPlayer, gameState, me);
+    });
+    negotiateBtn.style.cssText = 'margin-top:10px;width:100%';
+    dom.actionContent.appendChild(negotiateBtn);
+  }
+
   const bankruptBtn = actionBtn('Vyhlásit bankrot 💀', 'btn-red', () =>
     socket.emit('game:respond', { decision: 'declare_bankrupt' })
   );
-  bankruptBtn.style.cssText = 'margin-top:10px;width:100%';
+  bankruptBtn.style.cssText = 'margin-top:6px;width:100%';
   dom.actionContent.appendChild(bankruptBtn);
 }
 
@@ -476,9 +496,14 @@ function renderTradeBuild(gameState, me) {
     tradeDraft = null;
   }));
   btns.appendChild(actionBtn('Zrušit', 'btn-outline', () => {
+    const ctx = tradeDraft?.context;
     tradeDraft = null;
-    dom.actionContent.innerHTML = '';
-    renderWaitRoll(true, gameState.players.find(p => p.id === state.myId), gameState, me);
+    const self = gameState.players.find(p => p.id === state.myId);
+    if (ctx === 'debt_manage') {
+      renderDebtManage(true, self, gameState, me);
+    } else {
+      renderWaitRoll(true, self, gameState, me);
+    }
   }));
   dom.actionContent.appendChild(btns);
 }

@@ -14,12 +14,31 @@ import { generateParticles }                    from './animations/particles.js'
 
 // ─── Identita hráče ───────────────────────────────────────────────────────────
 
+socket.on('game:token', ({ token, playerId }) => {
+  localStorage.setItem('ds_jwt', token);
+  localStorage.setItem('ds_player_id', playerId);
+  state.myId = playerId;
+});
+
 function identifyMe(players) {
   if (state.myId) return;
-  if (socket.id && players.find(p => p.id === socket.id)) {
-    state.myId = socket.id;
+  const storedId = localStorage.getItem('ds_player_id');
+  if (storedId && players.find(p => p.id === storedId)) {
+    state.myId = storedId;
   }
 }
+
+// ─── Reconnect overlay ───────────────────────────────────────────────────────
+
+const reconnectOverlay = document.getElementById('reconnect-overlay');
+
+socket.on('disconnect', () => {
+  if (reconnectOverlay) reconnectOverlay.classList.remove('hidden');
+});
+
+socket.on('connect', () => {
+  if (reconnectOverlay) reconnectOverlay.classList.add('hidden');
+});
 
 // ─── Reset lokálního stavu ────────────────────────────────────────────────────
 
@@ -79,6 +98,16 @@ function processState(gameState) {
     generateParticles();
     initTooltipListeners(dom.playersList);
     state.boardBuilt = true;
+
+    const diceEl = document.getElementById('dice-3d');
+    if (diceEl) {
+      diceEl.addEventListener('click', () => {
+        const pa = state.gameState?.pendingAction;
+        if (pa && (pa.type === 'wait_roll' || pa.type === 'service_roll') && pa.targetId === state.myId) {
+          socket.emit('game:roll');
+        }
+      });
+    }
   }
 
   // Detect změny vlastnictví a žetonů → spustit animace
@@ -136,6 +165,10 @@ function processState(gameState) {
   updateActionPanel(gameState);
   updateLog(gameState);
   updateCenter(gameState);
+
+  const pa = gameState.pendingAction;
+  const canRoll = pa && (pa.type === 'wait_roll' || pa.type === 'service_roll') && pa.targetId === state.myId;
+  document.getElementById('dice-3d')?.classList.toggle('dice-rollable', !!canRoll);
 }
 
 // ─── Socket events ────────────────────────────────────────────────────────────
@@ -154,7 +187,8 @@ socket.on('game:init', ({ roomId, board, colors, state: gameState }) => {
   buildColorPicker(colors, gameState.players.map(p => p.color));
   dom.introView.classList.add('hidden');
   processState(gameState);
-  if (!gameState.players.find(p => p.id === socket.id)) {
+  const myPlayerId = localStorage.getItem('ds_player_id');
+  if (!gameState.players.find(p => p.id === myPlayerId)) {
     setTimeout(() => { dom.nameInput?.focus(); }, 100);
   }
 });
@@ -167,6 +201,3 @@ socket.on('game:error', ({ message }) => showToast(message, true));
 initLobbyListeners(resetLocalState);
 
 socket.emit('room:list');
-state.roomListIntervalId = setInterval(() => {
-  if (!dom.introView?.classList.contains('hidden')) socket.emit('room:list');
-}, 5000);
