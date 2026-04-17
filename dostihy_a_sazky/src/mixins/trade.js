@@ -25,7 +25,7 @@ module.exports = {
     const offerMoney    = Math.max(0, Number(offer?.money)   || 0);
     const requestMoney  = Math.max(0, Number(request?.money) || 0);
 
-    if (initiator.balance < offerMoney) {
+    if (!isDebtManage && initiator.balance < offerMoney) {
       return socket.emit('game:error', { message: 'Nemáte dostatek peněz pro tuto nabídku.' });
     }
     for (const sid of offerHorses) {
