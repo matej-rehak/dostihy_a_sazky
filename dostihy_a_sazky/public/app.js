@@ -89,7 +89,7 @@
   }
 
   /* ─── Socket ─────────────────────────────────────────────────────────────── */
-  const socket = io();
+  const socket = io({ auth: { token: localStorage.getItem('ds_token') ?? '' } });
   let myColor = null;
   let selectedColor = null;
 
@@ -107,7 +107,7 @@
     buildColorPicker(allColors, state.players.map(p => p.color));
     dom.introView.classList.add('hidden');
     processState(state);
-    if (!state.players.find(p => p.id === socket.id)) {
+    if (!myId || !state.players.find(p => p.id === myId)) {
       setTimeout(() => { if (dom.nameInput) dom.nameInput.focus(); }, 100);
     }
   });
@@ -115,15 +115,17 @@
   socket.on('game:state', state => processState(state));
   socket.on('game:error', ({ message }) => showToast(message, true));
 
+  // Uloží token a nastaví identitu hráče — server posílá po game:join i po reconnetcu
+  socket.on('game:token', ({ token, playerId }) => {
+    localStorage.setItem('ds_token', token);
+    myId = playerId;
+  });
+
   /* ─── Identita hráče ─────────────────────────────────────────────────────── */
   // (oprava: odstraněn fallback na jméno — hráči se stejným jménem si vyměnili identitu)
-  function identifyMe(players) {
-    if (myId) return;
-    if (socket.id && players.find(p => p.id === socket.id)) {
-      myId = socket.id;
-    }
-    // Fallback na jméno záměrně odstraněn — server by měl vrátit
-    // playerId spolehlivě přes socket.id nebo dedikovanou událost.
+  function identifyMe(_players) {
+    // myId je nastaveno přes game:token handler — tato funkce je fallback no-op
+    // socket.id ≠ player.id (player.id je UUID z JWT, socket.id je connection ID)
   }
 
   /* ─── State processing ──────────────────────────────────────────────────── */

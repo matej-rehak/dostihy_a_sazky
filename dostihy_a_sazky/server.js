@@ -159,8 +159,8 @@ io.on('connection', socket => {
     const roomId = socket.roomId;
     const room = rooms.get(roomId);
 
-    if (room && room.engine.phase === 'playing') {
-      // Grace period — čekáme na reconnect
+    if (room) {
+      // Grace period ve všech fázích (lobby i playing) — čekáme na reconnect
       room.engine.markDisconnected(socket.playerId);
       const timer = setTimeout(() => {
         reconnectTimers.delete(socket.playerId);
@@ -183,6 +183,10 @@ io.on('connection', socket => {
     if (room) {
       socket.join(pending.roomId);
       socket.roomId = pending.roomId;
+      // Pošli token a plný stav hry — klient po refreshi potřebuje boardData i myId
+      const token = generateToken(socket.playerId);
+      socket.emit('game:token', { token, playerId: socket.playerId });
+      room.engine.sendInit(socket);
       room.engine.reconnectPlayer(socket);
       io.emit('room:list', getRoomList());
     }
