@@ -56,6 +56,8 @@ module.exports = {
     if (tok.big || tok.small > 0) {
       if (ownerPlayer.inJail) {
         this._addLog(`ℹ️ Majitel ${ownerPlayer.name} je v Distancu — žetony nefungují!`);
+      } else if (ownerPlayer.skipTurns > 0) {
+        this._addLog(`ℹ️ Majitel ${ownerPlayer.name} je pod podezřením z dopingu — žetony nefungují!`);
       } else if (!hasMonopoly) {
         this._addLog(`ℹ️ Majitel ${ownerPlayer.name} nemá celou stáj — žetony nefungují!`);
       } else {
