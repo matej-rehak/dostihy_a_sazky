@@ -11,7 +11,7 @@ export function updatePlayers(gameState) {
     && gameState.pendingAction?.targetId === state.myId;
 
   gameState.players.forEach(p => {
-    const isMe   = p.id === state.myId;
+    const isMe = p.id === state.myId;
     const isTurn = p.id === gameState.currentTurnId;
 
     const row = makeEl('div', `player-row${isTurn ? ' is-turn' : ''}${p.bankrupt ? ' bankrupt' : ''}${p.disconnected ? ' disconnected' : ''}`);
@@ -31,12 +31,12 @@ export function updatePlayers(gameState) {
     }
     info.appendChild(nameEl);
 
-    const pos    = state.boardData ? (state.boardData[p.position]?.name ?? '?') : '?';
-    const posEl  = makeEl('div', 'p-pos', pos + ' ');
-    if (p.inJail)         posEl.appendChild(makeEl('span', 'p-badge jail',           '🔒 Distanc'));
-    if (p.bankrupt)       posEl.appendChild(makeEl('span', 'p-badge bankrupt-badge', '💀 Bankrot'));
-    if (p.disconnected)   posEl.appendChild(makeEl('span', 'p-badge disconnected-badge', '📡 Odpojeno'));
-    if (isTurn)           posEl.appendChild(makeEl('span', 'p-badge',                '▶ Na tahu'));
+    const pos = state.boardData ? (state.boardData[p.position]?.name ?? '?') : '?';
+    const posEl = makeEl('div', 'p-pos', pos + ' ');
+    if (p.inJail) posEl.appendChild(makeEl('span', 'p-badge jail', '🔒 Distanc'));
+    if (p.bankrupt) posEl.appendChild(makeEl('span', 'p-badge bankrupt-badge', '💀 Bankrot'));
+    if (p.disconnected) posEl.appendChild(makeEl('span', 'p-badge disconnected-badge', '📡 Odpojeno'));
+    if (isTurn) posEl.appendChild(makeEl('span', 'p-badge', '▶ Na tahu'));
     if (p.jailFreeCards > 0) {
       const label = p.jailFreeCards > 1 ? `🔓 Zrušen distanc (${p.jailFreeCards}×)` : '🔓 Zrušen distanc';
       posEl.appendChild(makeEl('span', 'p-badge jail-free-badge', label));
@@ -80,12 +80,13 @@ function buildInventory(p, gameState) {
   const invDiv = makeEl('div', 'p-inventory');
   Object.entries(groups).forEach(([gColor, spcList]) => {
     const totalInGroup = state.boardData.filter(s => s.type === 'horse' && s.groupColor === gColor).length;
-    const isMonopoly   = spcList.length === totalInGroup && totalInGroup > 0 && spcList[0].type !== 'service';
+    const isMonopoly = spcList.length === totalInGroup && totalInGroup > 0 && spcList[0].type !== 'service';
 
     const grpDiv = makeEl('div', `inv-group${isMonopoly ? ' monopoly-glow' : ''}`);
     spcList.forEach(sp => {
       if (sp.type === 'service') {
-        const svc = makeEl('div', 'inv-service', sp.name.toLowerCase().includes('trenér') ? '👤' : '🚐');
+        const icon = sp.serviceType === 'trener' ? '👤' : sp.serviceType === 'staje' ? '🏠' : '🚐';
+        const svc = makeEl('div', 'inv-service', icon);
         svc.dataset.sid = sp.id;
         grpDiv.appendChild(svc);
       } else {

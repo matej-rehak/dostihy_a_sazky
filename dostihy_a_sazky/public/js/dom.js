@@ -1,25 +1,38 @@
-import { getEl } from './utils.js';
+// Lazy gettery — každý přístup na dom.X volá getElementById v tu chvíli,
+// takže funguje i po dynamickém vložení HTML partials přes fetch().
 
-export const dom = {
-  introView:     getEl('intro-view'),
-  roomList:      getEl('room-list'),
-  lobbyView:     getEl('lobby-view'),
-  gameView:      getEl('game-view'),
-  joinForm:      getEl('join-form'),
-  joinedWait:    getEl('joined-wait'),
-  nameInput:     getEl('name-input'),
-  colorPicker:   getEl('color-picker'),
-  joinBtn:       getEl('join-btn'),
-  lobbyPlayers:  getEl('lobby-players'),
-  hostControls:  getEl('host-controls'),
-  startBtn:      getEl('start-btn'),
-  board:         getEl('board'),
-  playersList:   getEl('players-list'),
-  actionTitle:   getEl('action-title'),
-  actionContent: getEl('action-content'),
-  logList:       getEl('log-list'),
-  bcTurn:        getEl('bc-turn'),
-  bcRound:       getEl('bc-round'),
-  toast:         getEl('toast'),
-  tooltip:       getEl('space-tip'),
+const IDS = {
+  introView:     'intro-view',
+  roomList:      'room-list',
+  lobbyView:     'lobby-view',
+  gameView:      'game-view',
+  joinForm:      'join-form',
+  joinedWait:    'joined-wait',
+  nameInput:     'name-input',
+  colorPicker:   'color-picker',
+  joinBtn:       'join-btn',
+  lobbyPlayers:  'lobby-players',
+  hostControls:  'host-controls',
+  startBtn:      'start-btn',
+  board:         'board',
+  playersList:   'players-list',
+  actionTitle:   'action-title',
+  actionContent: 'action-content',
+  logList:       'log-list',
+  bcTurn:        'bc-turn',
+  bcRound:       'bc-round',
+  toast:         'toast',
+  tooltip:       'space-tip',
+  debugBtn:      'debug-btn',
+  debugPanel:    'debug-panel',
+  debugBody:     'debug-body',
 };
+
+export const dom = {};
+
+for (const [key, id] of Object.entries(IDS)) {
+  Object.defineProperty(dom, key, {
+    get: () => document.getElementById(id),
+    enumerable: true,
+  });
+}

@@ -3,6 +3,7 @@
 const { FinanceDeck, NahodaDeck } = require('./Cards');
 const { PLAYER_COLORS } = require('./constants');
 
+const DebugMixin    = require('./mixins/debug');
 const LobbyMixin    = require('./mixins/lobby');
 const TurnsMixin    = require('./mixins/turns');
 const MovementMixin = require('./mixins/movement');
@@ -45,6 +46,7 @@ Object.assign(GameEngine.prototype,
   EconomyMixin,  // _buyProperty, _sellProperty, _calcRent, _transfer, _calcAssetsValue, bankrot
   TokensMixin,   // _addToken, _eligibleTokenSpaces, _offerTokensOrEnd
   TradeMixin,    // initiateTrade
+  DebugMixin,    // handleDebugSetState
 );
 
 module.exports = GameEngine;

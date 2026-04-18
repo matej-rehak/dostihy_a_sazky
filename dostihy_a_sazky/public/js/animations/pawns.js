@@ -1,6 +1,7 @@
 import { makeEl, safeColor } from '../utils.js';
 import { state } from '../state.js';
 import { dom } from '../dom.js';
+import { audioManager } from '../audio.js';
 
 export function renderPawns(gameState) {
   document.querySelectorAll('.space-pawns').forEach(el => { el.innerHTML = ''; });
@@ -59,6 +60,7 @@ export function animatePawnsIfNeeded(gameState) {
           }
           const spaceEl = dom.board?.querySelector(`.space[data-id="${state.clientVisualPos[p.id]}"]`);
           if (spaceEl) {
+            audioManager.play('step');
             spaceEl.style.transform = 'translateY(-4px)';
             setTimeout(() => { if (spaceEl) spaceEl.style.transform = ''; }, 150);
           }

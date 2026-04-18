@@ -6,46 +6,143 @@
 
 ## Projekt
 
-**Co to je:** Digitální multiplayer verze české deskové hry **Dostihy a sázky** (1984, autor Ladislav Mareš) — obdoba Monopoly s koňmi a dostihy.
-**Stack:** Node.js · Express · Socket.io (backend) | Vanilla HTML + CSS + JS (frontend)
-**Repozitář:** lokální, c:\Users\Matej\Desktop\dostihy
+**Co to je:** Digitální multiplayer verze české deskové hry **Dostihy a sázky** (1984, autor Ladislav Mareš) — obdoba Monopoly s koňmi.  
+**Stack:** Node.js · Express · Socket.IO · JWT (backend) | Vanilla HTML + CSS + JS (frontend, žádný build step)  
+**Repozitář:** `c:\Users\Matej\Desktop\dostihy_a_sazky\dostihy_a_sazky`  
+**Stav:** ✅ Plně funkční desková hra — lobby, hra, žetony, karty, obchod, reconnect
 
 ---
 
-## ⚠️ DŮLEŽITÉ — Co NENÍ hotovo (původní implementace byla špatná)
+## Příkazy
 
-Původní implementace byla generická dostihová hra (real-time závod). To NENÍ správně.
-Správný cíl: **digitální verze deskové hry Dostihy a sázky** — viz pravidla níže.
+```bash
+npm install      # instalace závislostí
+npm run dev      # vývoj (nodemon server.js)
+npm start        # produkce (node server.js)
+```
+
+Server běží na: **http://localhost:3001**  
+Frontend se servíruje jako statické soubory z `public/` — žádný build krok není potřeba.
 
 ---
 
-## Pravidla hry Dostihy a sázky
+## Adresářová struktura
+
+```
+server.js                   ← HTTP + Socket.IO server, správa místností, reconnect
+├── src/
+│   ├── GameEngine.js       ← Hlavní třída hry (složena z mixinů přes Object.assign)
+│   ├── Cards.js            ← Balíčky karet Finance a Náhoda
+│   ├── auth.js             ← JWT generování / ověřování (playerId persistence)
+│   ├── constants.js        ← BOARD_SIZE, JAIL_*, ACTION_DELAY_MS, PLAYER_COLORS, roll(), fmt()
+│   ├── data/
+│   │   └── boardData.js    ← Definice všech 40 políček herního plánu
+│   └── mixins/             ← Logika hry rozdělena do mixinů
+│       ├── state.js        ← _buildState, sendInit, _broadcast, _addLog, _scheduleAction
+│       ├── lobby.js        ← addPlayer, removePlayer, toggleReady, startGame, updateConfig
+│       ├── turns.js        ← _startTurn, handleRoll, _advanceTurn
+│       ├── movement.js     ← _movePlayer, _evaluateSpace
+│       ├── actions.js      ← handleRespond, _handleBuy, _handleSell, _handleRent, _handleJail…
+│       ├── cards.js        ← _applyCard (Finance / Náhoda karty)
+│       ├── economy.js      ← _buyProperty, _sellProperty, _calcRent, _transfer, _calcAssetsValue, bankrot
+│       ├── tokens.js       ← _addToken, _eligibleTokenSpaces, _offerTokensOrEnd
+│       ├── trade.js        ← initiateTrade (nabídka obchodu mezi hráči)
+│       └── debug.js        ← handleDebugSetState (rychlé nastavení stavu v dev módu)
+├── public/
+│   ├── index.html          ← Shell stránka (jen head + #app-root + scripty — žádné views)
+│   ├── style.css           ← Veškeré CSS (design systém, animace, responzivita)
+│   ├── partials/           ← HTML fragmenty; main.js je načítá přes fetch() a injectuje do #app-root
+│   │   ├── overlays.html   ← Globální overlays (reconnect, starter animace, karta, tooltip, toast)
+│   │   ├── intro.html      ← intro-view (výběr / vytváření místností)
+│   │   ├── lobby.html      ← lobby-view (formulář, hráči, nastavení hostitele)
+│   │   └── game.html       ← game-view (herní plán, right panel, debug panel)
+│   └── js/
+│       ├── main.js         ← Bootstrap: loadPartials() → async IIFE → socket listenery + init
+│       ├── socket.js       ← Socket.IO klientská instance
+│       ├── state.js        ← Klientský stav (gameState, myId, boardBuilt, …)
+│       ├── dom.js          ← Lazy gettery přes Object.defineProperty (getElementById při každém přístupu)
+│       ├── utils.js        ← Pomocné funkce (fmt, esc, getEl, makeEl, showToast)
+│       ├── ui/             ← UI moduly (každý zodpovídá za svou část DOM)
+│       │   ├── actions.js  ← Herní tlačítka, odpovědní dialogy (koupit/prodat/…)
+│       │   ├── board.js    ← Vykreslování herního plánu a figurek
+│       │   ├── debug.js    ← Debug panel (jen při URL ?debug, nastavení stavu)
+│       │   ├── lobby.js    ← Lobby obrazovka (seznam místností, join, create)
+│       │   ├── log.js      ← Herní log zpráv
+│       │   ├── players.js  ← Panel hráčů (barva, peníze, majetek)
+│       │   └── tooltip.js  ← Tooltips nad políčky herního plánu
+│       └── animations/     ← Canvas / CSS animace
+│           ├── cards.js    ← Animace tažení karty
+│           ├── dice.js     ← Animace hodu kostkou
+│           ├── particles.js← Particle efekty
+│           ├── pawns.js    ← Pohyb figurek po plánu
+│           └── starter.js  ← Úvodní animace při spuštění
+├── agents/                 ← AI agentní systém (orchestrátor pattern)
+│   ├── AGENTS.md           ← Role a pravidla každého agenta
+│   ├── TASKS.md            ← Fronta úkolů
+│   ├── MEMORY.md           ← Technická rozhodnutí a poznatky
+│   └── CONTEXT.md          ← Kontext projektu pro agenty
+└── prompts/                ← Systémové prompty pro jednotlivé agenty
+```
+
+### Partials systém (jak funguje)
+
+HTML views jsou rozděleny do `public/partials/*.html`. Soubory jsou čisté HTML fragmenty (bez `<html>/<body>` wrapperů), servírované jako statika přes Express.
+
+**Tok inicializace v `main.js`:**
+1. `socket.on('game:token', …)` se registruje hned — DOM nepotřebuje
+2. `await loadPartials()` — fetch všech 4 partials paralelně, inject do `#app-root`
+3. Teprve potom se registrují socket listenery závislé na DOM (`disconnect`, `room:list`, `game:init`, …)
+
+**`dom.js` — lazy gettery:**  
+`dom.introView` apod. nejsou uložené reference, ale `Object.defineProperty` gettery, které volají `document.getElementById()` při každém přístupu. To zajišťuje správnost i po dynamickém vložení HTML.  
+⚠️ Nevolej `dom.X` před dokončením `loadPartials()` — element ještě neexistuje.
+
+---
+
+## Architektura backendu
+
+### GameEngine (mixin pattern)
+`GameEngine` je třída sestavená přes `Object.assign(GameEngine.prototype, ...mixins)`. **Nezasahuj do třídy samotné** — veškerá logika patří do příslušného mixinu.
+
+### Socket.IO události (server → klient)
+| Událost | Kdy se posílá |
+|---------|--------------|
+| `room:list` | Změna seznamu místností |
+| `game:init` | Připojení / reconnect hráče — plný stav |
+| `game:state` | Každá změna stavu hry |
+| `game:token` | JWT po přihlášení nebo reconnectu |
+| `game:prompt` | Interaktivní volba pro aktuálního hráče |
+| `game:log` | Nový záznam do herního logu |
+| `game:error` | Chybová zpráva |
+
+### Socket.IO události (klient → server)
+| Událost | Popis |
+|---------|-------|
+| `room:list` | Vyžádání seznamu místností |
+| `room:create` | Vytvoření místnosti (`{ name, password }`) |
+| `room:join` | Připojení do místnosti (`{ roomId, password }`) |
+| `game:join` | Přihlášení jako hráč (`{ name, color }`) |
+| `game:ready` | Přepnutí ready stavu |
+| `game:update_config` | Změna konfigurace (`startBalance`, `startBonus`, atd.) |
+| `game:start` | Spuštění hry |
+| `game:roll` | Hod kostkou |
+| `game:respond` | Odpověď na prompt (`{ action, payload }`) |
+| `game:trade_init` | Zahájení obchodu |
+| `game:debug_set_state` | Debug override stavu |
+
+### Reconnect
+Hráč má **30 s** grace period po odpojení (`RECONNECT_GRACE_MS = 30_000`). JWT v `localStorage` zajišťuje persistence `playerId` mezi refreshi.
+
+---
+
+## Pravidla hry (implementovaná)
 
 ### Základní info
 - Typ: Strategická desková hra (obdoba Monopoly)
-- Hráči: 2–6
-- Délka: 120–240 minut
-- Věk: od 10 let
-- Autor: Ladislav Mareš, 1984 (ČSSR)
+- Hráči: 2–6, plán: 40 políček
+- Výchozí startovní kapitál: **30 000 Kč**, průchod STARTem: **+4 000 Kč**
 
-### Startovní kapitál
-- Každý hráč dostane **30 000 Kč** (dostihových korun)
-- Za každé projití polem START: **+4 000 Kč**
-
-### Herní pomůcky
-- Herní plán s políčky (koně, služby, speciální pole)
-- **22 karet koní** (= nemovitosti) rozdělených do barevných stájí
-- **14 karet Finance** (obdoba "Šance" v Monopoly)
-- **14 karet Náhoda** (obdoba "Pokladna" v Monopoly)
-- 4x karta Trenér, 1x Přeprava, 1x Stáje (služby = obdoba železnic/utilit)
-- Bankovky: 10, 50, 100, 500, 1 000, 5 000, 10 000 Kč
-- **58 žetonů dostihů** (malé = běžné dostihy, velké = hlavní dostih)
-  - Na jednoho koně: max 4 malé + 1 velký žeton
-- 6 barevných figurek, 1 kostka
-
-### Koně (= nemovitosti) — 8 stájí, 22 koní celkem
-Koně jsou pojmenováni po účastnících Velké pardubické:
-
+### Koně — 8 stájí, 22 koní
 | Stáj (barva) | Koně |
 |---|---|
 | Oranžová | Fantome, Gavora |
@@ -58,184 +155,33 @@ Koně jsou pojmenováni po účastnících Velké pardubické:
 | Fialová | Narcius, Napoli |
 
 ### Průběh tahu
-1. Hoď kostkou, posuň figurku
+1. Hod kostkou → pohyb figurky
 2. Šestka = právo na další hod
-3. Pokud stojíš na volném koni → můžeš si ho koupit
-4. Pokud stojíš na koni soupeře → platíš za "prohlídku stáje"
-5. Máš-li celou stáj a stojíš na jednom z těchto koní → můžeš na něj investovat (přidávat žetony dostihů). Pozor: Žeton lze dát **pouze na koně, na kterém právě figurkou stojíš**.
+3. Volný kůň → nabídka koupě
+4. Kůň soupeře → platba nájmu (násobí se žetony dostihů)
+5. Vlastní celá stáj + stojíš na svém koni → možnost přidat žeton dostihů (jen na políčko, kde stojíš)
+6. Finance / Náhoda → tažení karty
+7. Distanc (pole 10) = Vězení; trest: 3 000 Kč nebo 3 kola čekání
 
-### Speciální pole
-- **Finance / Náhoda** — táhni kartu, proveď pokyn
-- **Distanc** — čekáš několik kol (= vězení v Monopoly)
-- **START** — při průchodu +4 000 Kč
-
-### Služby (Trenér, Přeprava, Stáje)
-- Ke koupi, platí se fixní nebo násobené částky
-- Analogické k železnicím/elektřině v Monopoly
+### Tokeny dostihů
+- Max 4 malé + 1 velký žeton na koně
+- Nájem roste s počtem žetonů (řeší `EconomyMixin._calcRent`)
 
 ### Konec hry
-- Hráč bez peněz na zaplacení dluhu → bankrot → vypadá ze hry
-- **Vítěz:** Poslední hráč ve hře, nebo největší majetek po časovém limitu
-
-### Varianty
-- D&S Junior (zjednodušeno, 14 koní)
-- Betting on Horses (anglická verze)
-- D&S Rychlá hra / Cestovní
-
----
-
-## Příkazy
-
-```bash
-npm install      # instalace
-npm run dev      # spuštění (nodemon server.js)
-npm start        # produkce
-```
-
-Server běží na: http://localhost:3000
-
----
-
-## Adresářová struktura (aktuální — ŠPATNÁ implementace)
-
-```
-src/
-├── GameEngine.js       ← herní smyčka (přepsat pro deskovou hru)
-├── RaceSimulator.js    ← simulace závodu (nevhodné — smazat/přepsat)
-├── BettingSystem.js    ← sázkový systém (přepsat)
-└── HorseGenerator.js   ← generátor koní (přepsat/zachovat data)
-public/
-├── index.html          ← frontend (přepsat)
-├── style.css           ← CSS (zachovat design systém, přepsat layout)
-└── app.js              ← klient (přepsat)
-```
-
----
-
-## Aktuální focus
-
-**Aktuální úkol:** Přepsat celou aplikaci jako digitální verzi deskové hry Dostihy a sázky
-**Kontext:** Původní implementace byla generická závodní hra — špatně pochopeno zadání
-**Hotovo bude:** Hráči mohou hrát plnohodnotnou deskovou hru Dostihy a sázky přes prohlížeč v reálném čase
-
----
-
-## Projekt
-
-**Co to je:** [Jedna věta — co projekt dělá a pro koho]
-**Stack:** [Backend: X | Frontend: Y | DB: Z]
-**Repozitář:** [URL]
-
----
-
-## Příkazy (používej přesně tyto)
-
-```bash
-# Instalace
-npm install
-
-# Vývoj
-npm run dev
-
-# Testy
-npm test
-npm test -- --testPathPattern=src/auth   # jeden modul
-
-# Build
-npm run build
-
-# Lint
-npm run lint
-npm run lint:fix
-
-# Databáze
-npm run db:migrate
-npm run db:seed
-```
-
-> DŮLEŽITÉ: Nikdy nespouštěj `npm run deploy` bez potvrzení od uživatele.
-
----
-
-## Adresářová struktura
-
-```
-src/
-├── agents/          ← agentní logika (orchestrátor, sub-agenti)
-│   ├── orchestrator.ts
-│   └── {agent-name}/
-├── api/             ← HTTP endpointy
-├── services/        ← business logika
-├── models/          ← datové modely a DB schémata
-├── utils/           ← sdílené utility
-└── types/           ← TypeScript typy a interfacy
-
-docs/                ← dokumentace (čti když potřebuješ detail)
-outputs/             ← výstupy agentů (nezasahuj bez zadání)
-tests/               ← testy (unit v __tests__, e2e v tests/e2e)
-```
+- Hráč bez peněz → bankrot → vypadá ze hry
+- Vítěz: poslední zbývající hráč
 
 ---
 
 ## Kódovací konvence
 
-- **Jazyk:** TypeScript, strict mode (`"strict": true`)
-- **Formát:** Prettier (spustí se přes `npm run lint:fix`)
-- **Naming:** camelCase pro proměnné/funkce, PascalCase pro třídy/typy, SCREAMING_SNAKE pro konstanty
-- **Imports:** absolutní cesty přes `@/` alias (ne relativní `../../`)
-- **Async:** vždy `async/await`, nikoli `.then()` chains
-- **Chyby:** vždy zachytávat explicitně, nikdy `catch(e) {}` bez zpracování
-- **Funkce:** max. ~40 řádků — pokud delší, extrahuj helper
-
----
-
-## Git workflow
-
-- **Větve:** `feature/`, `fix/`, `chore/` prefix (např. `feature/auth-agent`)
-- **Commit zprávy:** Conventional Commits — `feat:`, `fix:`, `docs:`, `refactor:`
-- **PR:** squash merge, popis vysvětluje PROČ ne CO
-- **Nikdy** commitovat přímo na `main`
-
----
-
-## Testovací požadavky
-
-- Každá nová funkce musí mít unit test
-- Pokrytí: min. 80 % na `src/services/` a `src/agents/`
-- Mock external API volání — nevolat skutečné endpointy v testech
-- Před committem spustit: `npm test` a `npm run lint`
-
----
-
-## Agentní systém — důležitý kontext
-
-Tento projekt používá orchestrátor pattern. Přečti před prací na `src/agents/`:
-
-- `AGENTS.md` — role a pravidla každého agenta
-- `TASKS.md` — aktuální fronta úkolů
-- `MEMORY.md` — technická rozhodnutí a poznatky
-
-Orchestrátor **nikdy sám nevykonává specializovanou práci** — deleguje.
-Sub-agenti **vždy zapisují výstupy** do `outputs/{typ}/`.
-
----
-
-## Zakázané soubory (nečti ani nepiš)
-
-- `.env`, `.env.local`, `.env.production` — credentials
-- `outputs/production/` — produkční data
-- `*.key`, `*.pem`, `*.p12` — certifikáty
-
----
-
-## Terminologie projektu
-
-| Pojem | Význam v tomto projektu |
-|-------|------------------------|
-| Orchestrátor | Agent koordinující ostatní agenty |
-| Handoff | Předání výstupu mezi agenty přes MD soubory |
-| Checkpoint | Bod kde systém čeká na lidský souhlas |
-| [Přidej vlastní] | [definice] |
+- **Jazyk:** JavaScript (ES2020+), `'use strict'` v každém souboru
+- **Moduly:** CommonJS (`require` / `module.exports`) na backendu, ESM (`import` / `export`) **není** — frontend používá klasické `<script>` tagy
+- **Naming:** camelCase pro proměnné/funkce, PascalCase pro třídy, SCREAMING_SNAKE pro konstanty
+- **Formát:** bez builderu — edituj přímo soubory v `public/`
+- **Async:** Socket.IO callbacky, žádné Promise chains v herní logice
+- **Chyby:** zachytávej explicitně; na klientovi používej `socket.on('game:error', ...)`, na serveru `socket.emit('game:error', { message })`
+- **Debug panel:** viditelný jen pokud URL obsahuje `?debug`
 
 ---
 
@@ -243,10 +189,20 @@ Sub-agenti **vždy zapisují výstupy** do `outputs/{typ}/`.
 
 Před těmito akcemi vždy požádej o potvrzení:
 - Smazání souborů nebo dat
-- Změna schématu databáze (`db:migrate`)
-- Volání externích API s vedlejšími efekty
-- Commit nebo push do repozitáře
-- Změna architektury (přidání závislosti, refactor struktury)
+- Změna herních pravidel (konstanty, výpočty nájmu, ceny karet)
+- Přidání nové závislosti do `package.json`
+- Změna Socket.IO API (přidání/odebrání události)
+- Jakákoli změna `agents/` souborů
+
+---
+
+## Agentní systém
+
+Složka `agents/` implementuje orchestrátor pattern pro AI-asistovaný vývoj:
+- `AGENTS.md` — role a pravidla každého agenta (nečti ani nepiš v souborech agentů bez zadání)
+- `TASKS.md` — fronta úkolů (stav: `todo → in_progress → review → done`)
+- `MEMORY.md` — technická rozhodnutí a poznatky (nikdy nesmazávat)
+- `CONTEXT.md` — kontext projektu
 
 ---
 
@@ -254,6 +210,6 @@ Před těmito akcemi vždy požádej o potvrzení:
 
 > Aktualizuj tuto sekci při zahájení každé nové fáze práce.
 
-**Aktuální úkol:** [co právě děláš]
-**Kontext:** [proč to děláš]
-**Hotovo bude:** [jak poznáš že je úkol splněn]
+**Aktuální úkol:** —  
+**Kontext:** —  
+**Hotovo bude:** —

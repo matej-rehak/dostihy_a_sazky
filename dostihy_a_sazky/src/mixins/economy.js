@@ -66,7 +66,7 @@ module.exports = {
       }
     }
 
-    return hasMonopoly ? baseRent * 2 : baseRent;
+    return baseRent;
   },
 
   _transfer(fromId, toId, amount) {
@@ -88,7 +88,7 @@ module.exports = {
 
   _offerBuyoutOrEnd(pid, spaceId, buyoutCost) {
     const player = this.players.get(pid);
-    if (!player || player.bankrupt) return;
+    if (!player || player.bankrupt) { this._advanceTurn(); return; }
 
     const space = BOARD[spaceId];
     const ownerId = this.ownerships[spaceId];
@@ -133,7 +133,13 @@ module.exports = {
     const idx = this.turnOrder.indexOf(pid);
     if (idx !== -1) {
       this.turnOrder.splice(idx, 1);
+      if (idx <= this.currentTurnIdx) {
+        this.currentTurnIdx--;
+      }
       if (this.currentTurnIdx >= this.turnOrder.length) this.currentTurnIdx = 0;
+      if (this.currentTurnIdx < 0 && this.turnOrder.length > 0) {
+        this.currentTurnIdx = this.turnOrder.length - 1;
+      }
     }
   },
 

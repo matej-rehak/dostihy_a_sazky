@@ -41,7 +41,8 @@ module.exports = {
 
     if (this.pendingAction.type === 'wait_roll') {
       const prevAccumulator = player.rollAccumulator || 0;
-      const dice = roll();
+      const dice = (this._forceDice >= 1 && this._forceDice <= 6) ? this._forceDice : roll();
+      if (this._forceDice) this._forceDice = null;
       this.lastDice = { value: dice, id: Math.random() };
 
       if (dice === 6 && prevAccumulator > 0) {
@@ -67,7 +68,8 @@ module.exports = {
         }
       }
     } else if (this.pendingAction.type === 'service_roll') {
-      const dice = roll();
+      const dice = (this._forceDice >= 1 && this._forceDice <= 6) ? this._forceDice : roll();
+      if (this._forceDice) this._forceDice = null;
       this.lastDice = { value: dice, id: Math.random() };
       const { spaceId } = this.pendingAction.data;
       const space = BOARD[spaceId];

@@ -28,6 +28,7 @@ module.exports = {
 
   _evaluateSpace(pid) {
     const player = this.players.get(pid);
+    if (!player || player.bankrupt) { this._advanceTurn(); return; }
     const space = BOARD[player.position];
 
     switch (space.type) {

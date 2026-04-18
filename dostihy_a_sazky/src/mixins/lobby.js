@@ -62,8 +62,17 @@ module.exports = {
     if (!player) return;
 
     if (this.phase === 'playing') {
+      // Zapamatuj si PŘED bankrotem, jestli hra čekala právě na tohoto hráče.
+      const wasPending = this.pendingAction?.targetId === socket.playerId;
       this._addLog(`⚠️ ${player.name} se odpojil(a) — bankrot`);
       this._declareBankrupt(socket.playerId);
+
+      // Pokud hra stále pokračuje (>=2 hráčů) a akce čekala na odpojeného
+      // hráče → posunout tah, jinak by hra zamrzla navěky.
+      if (this.phase === 'playing' && wasPending) {
+        clearTimeout(this._timer);
+        this._scheduleAction(1200, () => this._startTurn());
+      }
     } else {
       this.players.delete(socket.playerId);
       this._addLog(`${player.name} opustil(a) lobby`);

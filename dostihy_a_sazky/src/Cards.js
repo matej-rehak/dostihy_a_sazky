@@ -18,6 +18,10 @@ class CardDeck {
     if (this.pile.length === 0) this.pile = shuffle([...this.original]);
     return this.pile.pop();
   }
+  forceDraw(idx) {
+    const card = this.original[idx];
+    if (card !== undefined) this.pile.push(card); // push → pop() vrátí tuto kartu příště
+  }
 }
 
 // ─── Finance karty (14) ─────────────────────────────────────────────────────

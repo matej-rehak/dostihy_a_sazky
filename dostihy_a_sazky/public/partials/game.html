@@ -1,0 +1,88 @@
+  <!-- ═══════════════════════════════════════════════════════════ GAME -->
+  <div id="game-view" class="hidden">
+
+    <!-- Board -->
+    <div id="board-wrap">
+      <div id="board">
+        <!-- Board center (spaces added dynamically around it) -->
+        <div id="board-center">
+          <div class="bc-artwork"></div>
+          <div class="bc-deck-area">
+            <div class="bc-deck nahoda">NÁHODA</div>
+            <div class="bc-deck finance">FINANCE</div>
+          </div>
+          <div class="bc-logo-overlay">
+            <div id="particles-container"></div>
+            <h2 class="bc-title">DOSTIHY<br />A SÁZKY</h2>
+            <div id="bc-turn" class="bc-turn"></div>
+            <div class="dice-scene" id="dice-scene">
+              <div id="dice-3d" class="dice-3d">
+                <div class="dice-face face-front face-1"><span class="dot"></span></div>
+                <div class="dice-face face-back face-6">
+                  <div class="col"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+                  <div class="col"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+                </div>
+                <div class="dice-face face-right face-3"><span class="dot"></span><span class="dot"></span><span
+                    class="dot"></span></div>
+                <div class="dice-face face-left face-4">
+                  <div class="col"><span class="dot"></span><span class="dot"></span></div>
+                  <div class="col"><span class="dot"></span><span class="dot"></span></div>
+                </div>
+                <div class="dice-face face-top face-5">
+                  <div class="col"><span class="dot"></span><span class="dot"></span></div>
+                  <div class="col center-col"><span class="dot"></span></div>
+                  <div class="col"><span class="dot"></span><span class="dot"></span></div>
+                </div>
+                <div class="dice-face face-bottom face-2"><span class="dot"></span><span class="dot"></span></div>
+              </div>
+            </div>
+            <div id="bc-round" class="bc-round"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right panel -->
+    <div id="right-panel">
+
+      <section id="players-section">
+        <h2 class="section-title">Hráči</h2>
+        <div id="players-list"></div>
+      </section>
+
+      <section id="action-section">
+        <h2 class="section-title" id="action-title">Akce</h2>
+        <div id="action-content">
+          <p class="dim">Čekám na hru...</p>
+        </div>
+      </section>
+
+      <section id="log-section">
+        <h2 class="section-title">Průběh</h2>
+        <div id="log-list"></div>
+      </section>
+
+      <div style="padding: 10px; border-top: 1px solid var(--border); display: flex; gap: 8px;">
+        <button id="game-leave-btn" class="btn btn-outline btn-xs" style="flex:1">Odpojit se</button>
+      </div>
+
+    </div>
+
+    <!-- Debug tlačítko -->
+    <button id="debug-btn" class="debug-btn hidden" title="Testovací prostředí">🔧</button>
+
+    <!-- Debug panel overlay -->
+    <div id="debug-panel" class="debug-overlay hidden">
+      <div class="debug-modal">
+        <div class="debug-header">
+          <h3>🔧 Testovací prostředí</h3>
+          <button id="debug-close" class="debug-close">✕</button>
+        </div>
+        <div class="debug-body" id="debug-body"></div>
+        <div class="debug-footer">
+          <button id="debug-cancel" class="btn btn-sm">Zrušit</button>
+          <button id="debug-apply" class="btn btn-sm btn-green">Použít</button>
+        </div>
+      </div>
+    </div>
+  </div>

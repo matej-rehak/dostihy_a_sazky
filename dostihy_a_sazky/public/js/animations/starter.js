@@ -1,5 +1,6 @@
 import { makeEl, safeColor } from '../utils.js';
 import { state } from '../state.js';
+import { audioManager } from '../audio.js';
 
 export function runStarterAnimation(winnerId, players) {
   const overlay  = document.getElementById('starter-overlay');
@@ -21,9 +22,14 @@ export function runStarterAnimation(winnerId, players) {
     item.textContent = p.name;
     flicker.appendChild(item);
 
+    // Kolo štěstí tik
+    audioManager.play('click', 0.5);
+
     count++;
     if (count >= max) {
       clearInterval(interval);
+      audioManager.play('bell', 1.0); // Zvonek pro výherce!
+      
       const winner = players.find(pl => pl.id === winnerId);
       flicker.classList.add('hidden');
       winnerEl.classList.remove('hidden');

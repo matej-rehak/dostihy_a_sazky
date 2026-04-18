@@ -4,6 +4,7 @@ import { state } from '../state.js';
 import { socket } from '../socket.js';
 import { showCardOverlay, hideCardOverlay } from '../animations/cards.js';
 import { runStarterAnimation } from '../animations/starter.js';
+import { audioManager } from '../audio.js';
 
 // ─── Trade draft stav (lokální, bez pendingAction) ────────────────────────────
 let tradeDraft = null;
@@ -19,7 +20,11 @@ export function startTradeWith(targetId, gameState, me) {
 
 function actionBtn(label, cls, onClick) {
   const btn = makeEl('button', `btn ${cls}`, label);
-  btn.addEventListener('click', () => { btn.disabled = true; onClick(); });
+  btn.addEventListener('click', () => { 
+    audioManager.play('click');
+    btn.disabled = true; 
+    onClick(); 
+  });
   return btn;
 }
 
@@ -332,9 +337,10 @@ function renderJailChoice(isTargeted, targetPlayer) {
 
   if (targetPlayer?.jailFreeCards > 0) {
     jailDiv.appendChild(
-      actionBtn('🔓 Použít kartu "Zrušen distanc"', 'btn-gold', () =>
-        socket.emit('game:respond', { decision: 'use_jail_card' })
-      )
+      actionBtn('🔓 Použít kartu "Zrušen distanc"', 'btn-gold', () => {
+        audioManager.play('card');
+        socket.emit('game:respond', { decision: 'use_jail_card' });
+      })
     );
   }
   dom.actionContent.appendChild(jailDiv);
@@ -569,12 +575,14 @@ function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
 
   const btns = makeEl('div', 'action-buttons row');
   btns.style.marginTop = '8px';
-  btns.appendChild(actionBtn('✅ Přijmout', 'btn-green', () =>
-    socket.emit('game:respond', { decision: 'accept' })
-  ));
-  btns.appendChild(actionBtn('❌ Odmítnout', 'btn-outline', () =>
-    socket.emit('game:respond', { decision: 'reject' })
-  ));
+  btns.appendChild(actionBtn('✅ Přijmout', 'btn-green', () => {
+    audioManager.play('trade_accept');
+    socket.emit('game:respond', { decision: 'accept' });
+  }));
+  btns.appendChild(actionBtn('❌ Odmítnout', 'btn-outline', () => {
+    audioManager.play('trade_reject');
+    socket.emit('game:respond', { decision: 'reject' });
+  }));
   dom.actionContent.appendChild(btns);
 }
 
