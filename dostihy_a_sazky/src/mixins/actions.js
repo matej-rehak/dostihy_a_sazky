@@ -52,7 +52,8 @@ module.exports = {
   _handleBuyOffer(pid, decision, spaceId) {
     if (decision === 'buy') {
       this._buyProperty(pid, spaceId);
-      this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
+      // Žetony nelze koupit okamžitě po koupi — až po příštím zastavení
+      this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
     } else {
       this._addLog(`${this.players.get(pid).name} odmítl(a) koupit ${BOARD[spaceId].name}`);
       this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
@@ -79,7 +80,8 @@ module.exports = {
     this.ownerships[spaceId] = pid;
     p.properties.push(spaceId);
     delete this.tokens[spaceId];
-    this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
+    // Žetony nelze koupit okamžitě po odkupu — až po příštím zastavení
+    this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
   },
 
   _handleCardAck(pid, actionData) {
@@ -134,7 +136,13 @@ module.exports = {
   _handleTokenManage(pid, decision, spaceId, tokenType) {
     if (decision === 'add_token') {
       this._addToken(pid, spaceId, tokenType);
-      this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
+      const tok = this.tokens[spaceId];
+      // Po přidání 4. malého žetonu konec tahu — velký dostih je na příštím zastavení
+      if (tokenType === 'small' && tok && tok.small >= 4) {
+        this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
+      } else {
+        this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
+      }
     } else {
       this._advanceTurn();
     }
@@ -144,6 +152,16 @@ module.exports = {
     const { fromId, offer, request, fromContext } = actionData;
     const initiator = this.players.get(fromId);
     const target    = this.players.get(pid);
+
+    if (decision === 'accept' && initiator && target) {
+      if (target.balance < request.money) {
+        this._addLog(`❌ Obchod zrušen — ${target.name} nemá dostatek peněz (potřeba ${fmt(request.money)} Kč, má ${fmt(target.balance)} Kč)`);
+        decision = 'decline';
+      } else if (initiator.balance < offer.money) {
+        this._addLog(`❌ Obchod zrušen — ${initiator.name} nemá dostatek peněz (potřeba ${fmt(offer.money)} Kč, má ${fmt(initiator.balance)} Kč)`);
+        decision = 'decline';
+      }
+    }
 
     if (decision === 'accept' && initiator && target) {
       // Koně: initiator → target

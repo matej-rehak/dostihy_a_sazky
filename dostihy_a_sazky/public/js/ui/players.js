@@ -33,10 +33,14 @@ export function updatePlayers(gameState) {
 
     const pos    = state.boardData ? (state.boardData[p.position]?.name ?? '?') : '?';
     const posEl  = makeEl('div', 'p-pos', pos + ' ');
-    if (p.inJail)      posEl.appendChild(makeEl('span', 'p-badge jail',           '🔒 Distanc'));
-    if (p.bankrupt)    posEl.appendChild(makeEl('span', 'p-badge bankrupt-badge', '💀 Bankrot'));
-    if (p.disconnected)posEl.appendChild(makeEl('span', 'p-badge disconnected-badge', '📡 Odpojeno'));
-    if (isTurn)        posEl.appendChild(makeEl('span', 'p-badge',                '▶ Na tahu'));
+    if (p.inJail)         posEl.appendChild(makeEl('span', 'p-badge jail',           '🔒 Distanc'));
+    if (p.bankrupt)       posEl.appendChild(makeEl('span', 'p-badge bankrupt-badge', '💀 Bankrot'));
+    if (p.disconnected)   posEl.appendChild(makeEl('span', 'p-badge disconnected-badge', '📡 Odpojeno'));
+    if (isTurn)           posEl.appendChild(makeEl('span', 'p-badge',                '▶ Na tahu'));
+    if (p.jailFreeCards > 0) {
+      const label = p.jailFreeCards > 1 ? `🔓 Zrušen distanc (${p.jailFreeCards}×)` : '🔓 Zrušen distanc';
+      posEl.appendChild(makeEl('span', 'p-badge jail-free-badge', label));
+    }
     info.appendChild(posEl);
 
     if (state.boardData && p.properties?.length > 0) {

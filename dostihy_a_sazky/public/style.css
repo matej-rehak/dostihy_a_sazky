@@ -1512,6 +1512,10 @@ body {
   background: rgba(255, 165, 0, .15);
   color: orange;
 }
+.p-badge.jail-free-badge {
+  background: rgba(16, 185, 129, .15);
+  color: #10b981;
+}
 .player-row.disconnected {
   opacity: 0.55;
 }

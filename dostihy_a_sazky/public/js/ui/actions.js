@@ -443,9 +443,13 @@ function renderTradeBuild(gameState, me) {
   const mr1 = makeEl('div', 'trade-money-row');
   mr1.appendChild(makeEl('span', '', 'Peníze: '));
   const mi1 = document.createElement('input');
-  mi1.type = 'number'; mi1.min = '0'; mi1.step = '500';
+  const myBalance = Math.max(0, me?.balance ?? 0);
+  mi1.type = 'number'; mi1.min = '0'; mi1.max = String(myBalance); mi1.step = '500';
   mi1.value = tradeDraft.offer.money; mi1.className = 'text-input trade-money-input';
-  mi1.addEventListener('input', () => { tradeDraft.offer.money = Math.max(0, Number(mi1.value) || 0); });
+  mi1.addEventListener('input', () => {
+    tradeDraft.offer.money = Math.min(myBalance, Math.max(0, Number(mi1.value) || 0));
+    mi1.value = tradeDraft.offer.money;
+  });
   mr1.appendChild(mi1); mr1.appendChild(makeEl('span', 'dim', ' Kč'));
   offerSec.appendChild(mr1);
   dom.actionContent.appendChild(offerSec);
@@ -488,6 +492,17 @@ function renderTradeBuild(gameState, me) {
   const btns = makeEl('div', 'action-buttons row');
   btns.style.marginTop = '8px';
   btns.appendChild(actionBtn('Potvrdit obchod ✓', 'btn-green', () => {
+    if (tradeDraft.offer.money > myBalance) {
+      let errEl = dom.actionContent.querySelector('.trade-money-error');
+      if (!errEl) {
+        errEl = makeEl('p', 'trade-money-error');
+        errEl.style.cssText = 'color:var(--red,#e55);margin:4px 0;font-size:0.9em';
+        btns.parentNode.insertBefore(errEl, btns);
+      }
+      errEl.textContent = `Částka může být maximálně ${fmt(myBalance)} Kč`;
+      mi1.focus();
+      return;
+    }
     socket.emit('game:trade_init', {
       targetId: tradeDraft.targetId,
       offer:   { horses: [...tradeDraft.offer.horses],   money: tradeDraft.offer.money   },
