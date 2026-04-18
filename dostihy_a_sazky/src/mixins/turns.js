@@ -40,21 +40,31 @@ module.exports = {
     if (!this.pendingAction) { socket.emit('game:error', { message: 'Teď nelze hodit.' }); return; }
 
     if (this.pendingAction.type === 'wait_roll') {
+      const prevAccumulator = player.rollAccumulator || 0;
       const dice = roll();
       this.lastDice = { value: dice, id: Math.random() };
-      player.rollAccumulator = (player.rollAccumulator || 0) + dice;
 
-      if (dice === 6) {
-        this._addLog(`🎲 ${player.name} hodil(a) 6! Celkem nasčítáno: ${player.rollAccumulator}. Hází znovu...`);
-        this.pendingAction = { type: 'wait_roll', targetId: pid };
-        this._broadcast();
-      } else {
-        const totalSteps = player.rollAccumulator;
+      if (dice === 6 && prevAccumulator > 0) {
+        // Dvojitá šestka → jde do Distancu z libovolného místa
         player.rollAccumulator = 0;
-        this._addLog(`🎲 ${player.name} hodil(a) ${dice}. Celkem se posouvá o ${totalSteps} polí.`);
-        player.moveDirection = 1;
+        this._addLog(`🎲 ${player.name} hodil(a) 6 dvakrát za sebou → jde do Distancu! 🔒`);
         this.pendingAction = null;
-        this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, totalSteps));
+        this._sendToJail(pid);
+        this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
+      } else {
+        player.rollAccumulator = prevAccumulator + dice;
+        if (dice === 6) {
+          this._addLog(`🎲 ${player.name} hodil(a) 6! Celkem nasčítáno: ${player.rollAccumulator}. Hází znovu...`);
+          this.pendingAction = { type: 'wait_roll', targetId: pid };
+          this._broadcast();
+        } else {
+          const totalSteps = player.rollAccumulator;
+          player.rollAccumulator = 0;
+          this._addLog(`🎲 ${player.name} hodil(a) ${dice}. Celkem se posouvá o ${totalSteps} polí.`);
+          player.moveDirection = 1;
+          this.pendingAction = null;
+          this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, totalSteps));
+        }
       }
     } else if (this.pendingAction.type === 'service_roll') {
       const dice = roll();
