@@ -112,8 +112,8 @@ module.exports = {
       if (dice === 6) {
         player.inJail = false;
         player.jailTurns = 0;
-        player.rollAccumulator = 6;
-        this._addLog(`🔓 ${player.name} hodil(a) šestku — je volný a sčítá tah!`);
+        player.rollAccumulator = 0;
+        this._addLog(`🔓 ${player.name} hodil(a) šestku — opouští Distanc a hází ještě jednou!`);
         this.pendingAction = { type: 'wait_roll', targetId: pid };
         this._broadcast();
       } else {
