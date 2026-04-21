@@ -51,18 +51,21 @@ function getRoomList() {
   }));
 }
 
-function handleLeave(socket) {
-  const roomId = socket.roomId;
-  if (!roomId) return;
-
+function removePlayerFromRoom(roomId, playerId, socket = null) {
+  if (!roomId || !playerId) return;
   const room = rooms.get(roomId);
   if (room) {
-    room.engine.removePlayer(socket);
-    socket.leave(roomId);
-    socket.roomId = null;
+    room.engine.removePlayer({ playerId });
+    if (socket) {
+      socket.leave(roomId);
+      socket.roomId = null;
+    }
     if (room.engine.players.size === 0) rooms.delete(roomId);
   }
+}
 
+function handleLeave(socket) {
+  removePlayerFromRoom(socket.roomId, socket.playerId, socket);
   io.emit('room:list', getRoomList());
 }
 
@@ -93,13 +96,21 @@ io.on('connection', socket => {
     socket.emit('room:list', getRoomList());
   });
 
-  socket.on('room:create', ({ name, password }) => {
+  socket.on('room:create', ({ name, password, playerName, color }) => {
+    const finalRoomName = typeof name === 'string' ? name.trim() : '';
+    const finalPlayerName = typeof playerName === 'string' ? playerName.trim() : '';
+    if (!finalPlayerName) {
+      return socket.emit('game:error', { message: 'Pro vytvoření místnosti je potřeba jméno hráče.' });
+    }
+    if (!finalRoomName) {
+      return socket.emit('game:error', { message: 'Název místnosti je povinný.' });
+    }
     if (rooms.size >= MAX_ROOMS) {
       return socket.emit('game:error', {
         message: `Dosažen maximální počet místností (${MAX_ROOMS}). Zkuste to prosím později.`,
       });
     }
-    const nameExists = Array.from(rooms.values()).some(r => r.name === name);
+    const nameExists = Array.from(rooms.values()).some(r => r.name === finalRoomName);
     if (nameExists) {
       return socket.emit('game:error', {
         message: 'Místnost s tímto názvem již existuje. Zvolte prosím jiný název.',
@@ -107,7 +118,14 @@ io.on('connection', socket => {
     }
     const roomId = Math.random().toString(36).substr(2, 9);
     const engine = new GameEngine(io, roomId);
-    rooms.set(roomId, { engine, password, name });
+    rooms.set(roomId, { engine, password, name: finalRoomName });
+    socket.join(roomId);
+    socket.roomId = roomId;
+    const token = generateToken(socket.playerId);
+    socket.emit('game:token', { token, playerId: socket.playerId });
+    engine.addPlayer(socket, finalPlayerName, color);
+    engine.sendInit(socket);
+
     socket.emit('room:created', { roomId, password });
     io.emit('room:list', getRoomList());
   });
@@ -130,6 +148,7 @@ io.on('connection', socket => {
     const token = generateToken(socket.playerId);
     socket.emit('game:token', { token, playerId: socket.playerId });
     engine.addPlayer(socket, d?.name, d?.color);
+    io.emit('room:list', getRoomList());
   });
 
   socket.on('game:start', () => {
@@ -158,16 +177,18 @@ io.on('connection', socket => {
     console.log(`[-] ${socket.id} (pid: ${socket.playerId})`);
     ['roll', 'respond', 'room:list'].forEach(e => rateLimits.delete(`${socket.playerId}:${e}`));
     const roomId = socket.roomId;
+    const playerId = socket.playerId;
     const room = rooms.get(roomId);
 
     if (room) {
       // Grace period ve všech fázích (lobby i playing) — čekáme na reconnect
-      room.engine.markDisconnected(socket.playerId);
+      room.engine.markDisconnected(playerId);
       const timer = setTimeout(() => {
-        reconnectTimers.delete(socket.playerId);
-        handleLeave(socket);
+        reconnectTimers.delete(playerId);
+        removePlayerFromRoom(roomId, playerId);
+        io.emit('room:list', getRoomList());
       }, RECONNECT_GRACE_MS);
-      reconnectTimers.set(socket.playerId, { timer, roomId });
+      reconnectTimers.set(playerId, { timer, roomId });
     } else {
       handleLeave(socket);
     }

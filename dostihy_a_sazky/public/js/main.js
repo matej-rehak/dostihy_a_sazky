@@ -268,8 +268,7 @@ function processState(gameState) {
   // Socket events
   socket.on('room:list', list => renderRoomList(list));
 
-  socket.on('room:created', ({ roomId, password }) => {
-    socket.emit('room:join', { roomId, password });
+  socket.on('room:created', () => {
     document.getElementById('room-create-form')?.classList.add('hidden');
   });
 

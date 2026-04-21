@@ -175,10 +175,12 @@ export function initLobbyListeners(onLeave) {
     roomSelection?.classList.remove('hidden');
   });
   document.getElementById('room-create-btn')?.addEventListener('click', () => {
+    const playerName = document.getElementById('new-room-player-name')?.value.trim();
     const name     = document.getElementById('new-room-name')?.value.trim();
     const password = document.getElementById('new-room-pass')?.value ?? '';
+    if (!playerName) { showToast('Zadejte svoje jméno!', true); return; }
     if (!name) { showToast('Zadejte název místnosti!', true); return; }
-    socket.emit('room:create', { name, password });
+    socket.emit('room:create', { name, password, playerName, color: state.selectedColor });
   });
 
   // Join
@@ -200,11 +202,11 @@ export function initLobbyListeners(onLeave) {
 
   // Leave buttons
   document.getElementById('lobby-leave-btn')?.addEventListener('click', () => {
-    if (confirm('Opravdu chcete opustit místnost?')) { socket.emit('game:leave'); onLeave(); }
+    if (confirm('Opravdu chcete opustit místnost?')) onLeave();
   });
   document.getElementById('game-leave-btn')?.addEventListener('click', () => {
     if (confirm('Opravdu chcete opustit hru? Pokud odejdete během zápasu, zbankrotujete.')) {
-      socket.emit('game:leave'); onLeave();
+      onLeave();
     }
   });
 }
