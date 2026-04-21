@@ -331,7 +331,6 @@ function renderJailChoice(isTargeted, targetPlayer) {
   jailDiv.appendChild(txt);
 
   const actBtns = makeEl('div', 'action-buttons');
-  actBtns.appendChild(actionBtn(`Zaplatit ${fmt(3000)} Kč a hrát`, 'btn-gold', () => socket.emit('game:respond', { decision: 'pay_fine' })));
   actBtns.appendChild(actionBtn('🎲 Hodit (6 = volno)', 'btn-outline', () => socket.emit('game:respond', { decision: 'roll_jail' })));
   jailDiv.appendChild(actBtns);
 

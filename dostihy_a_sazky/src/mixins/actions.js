@@ -100,14 +100,7 @@ module.exports = {
 
   _handleJailChoice(pid, decision) {
     const player = this.players.get(pid);
-    if (decision === 'pay_fine') {
-      player.balance -= JAIL_FINE;
-      player.inJail = false;
-      player.jailTurns = 0;
-      this._addLog(`${player.name} zaplatil(a) kauci ${fmt(JAIL_FINE)} Kč a opouští Distanc`);
-      this.pendingAction = { type: 'wait_roll', targetId: pid };
-      this._broadcast();
-    } else if (decision === 'roll_jail') {
+    if (decision === 'roll_jail') {
       const dice = roll();
       this.lastDice = { value: dice, id: Math.random() };
       this._addLog(`🎲 ${player.name} (v Distancu) hodil(a) ${dice}`);
