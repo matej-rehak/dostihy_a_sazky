@@ -1,6 +1,7 @@
 'use strict';
 
 const { PLAYER_COLORS } = require('../constants');
+const MAX_TIME_LIMIT_MINUTES = 240;
 
 module.exports = {
 
@@ -45,7 +46,20 @@ module.exports = {
     if (this.phase !== 'lobby') return;
     const player = this.players.get(socket.playerId);
     if (!player || !player.isHost) return;
-    this.config = { ...this.config, ...config };
+    const nextConfig = { ...this.config, ...config };
+
+    const startBalance = Number(nextConfig.startBalance);
+    const startBonus = Number(nextConfig.startBonus);
+    const buyoutMultiplier = Number(nextConfig.buyoutMultiplier);
+    const timeLimitMinutes = Number(nextConfig.timeLimitMinutes);
+
+    this.config.startBalance = Number.isFinite(startBalance) ? Math.max(1000, Math.round(startBalance)) : 30000;
+    this.config.startBonus = Number.isFinite(startBonus) ? Math.max(0, Math.round(startBonus)) : 4000;
+    this.config.buyoutMultiplier = Number.isFinite(buyoutMultiplier) ? Math.max(0, buyoutMultiplier) : 0;
+    this.config.timeLimitMinutes = Number.isFinite(timeLimitMinutes)
+      ? Math.max(0, Math.min(MAX_TIME_LIMIT_MINUTES, Math.round(timeLimitMinutes)))
+      : 0;
+
     this._broadcast();
   },
 
@@ -120,6 +134,12 @@ module.exports = {
     }
 
     this.phase = 'playing';
+    this.timeLimitEndsAt = null;
+    this.timeLimitExpired = false;
+    if (this._gameTimeLimitTimer) {
+      clearTimeout(this._gameTimeLimitTimer);
+      this._gameTimeLimitTimer = null;
+    }
     this.players.forEach(p => p.balance = this.config.startBalance);
 
     const keys = [...this.players.keys()];
@@ -137,6 +157,21 @@ module.exports = {
     };
 
     this._addLog('🏁 Hra začala! Losuje se začínající hráč...');
+
+    if (this.config.timeLimitMinutes > 0) {
+      const durationMs = this.config.timeLimitMinutes * 60 * 1000;
+      this.timeLimitEndsAt = Date.now() + durationMs;
+      this._addLog(`⏱️ Časový limit hry: ${this.config.timeLimitMinutes} min.`);
+      this._gameTimeLimitTimer = setTimeout(() => {
+        if (this.phase !== 'playing') return;
+        this._gameTimeLimitTimer = null;
+        this.timeLimitExpired = true;
+        this.timeLimitEndsAt = Date.now();
+        this._addLog('⏰ Vypršel časový limit hry. Aktuální tah se dohraje a poté hra skončí.');
+        this._broadcast();
+      }, durationMs);
+    }
+
     this._broadcast();
 
     setTimeout(() => {

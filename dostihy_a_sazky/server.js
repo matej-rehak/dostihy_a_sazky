@@ -166,7 +166,9 @@ io.on('connection', socket => {
     rooms.get(socket.roomId)?.engine.handleRespond(socket, d);
   });
   socket.on('game:trade_init', d => rooms.get(socket.roomId)?.engine.initiateTrade(socket, d));
-  socket.on('game:debug_set_state', d => rooms.get(socket.roomId)?.engine.handleDebugSetState(socket, d));
+  socket.on('game:debug_set_state', () => {
+    socket.emit('game:error', { message: 'Debug funkce je vypnuta.' });
+  });
 
   socket.on('game:leave', () => {
     reconnectTimers.delete(socket.playerId);

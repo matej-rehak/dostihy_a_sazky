@@ -11,6 +11,7 @@ const MOVE_CARD_TYPES = new Set([
 module.exports = {
 
   handleRespond(socket, data) {
+    if (this.phase !== 'playing') return;
     const pid = socket.playerId;
     if (!this.pendingAction || this.pendingAction.targetId !== pid) return;
     const { decision, spaceId, tokenType } = data || {};

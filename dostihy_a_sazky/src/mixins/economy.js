@@ -4,6 +4,25 @@ const BOARD = require('../data/boardData');
 const { ACTION_DELAY_MS, fmt } = require('../constants');
 
 module.exports = {
+  _endByTimeLimit() {
+    const alivePlayers = [...this.players.values()].filter(p => !p.bankrupt);
+    if (!alivePlayers.length) {
+      this._endGame(null, 'time_limit');
+      return;
+    }
+    const ranking = alivePlayers
+      .map(p => ({
+        id: p.id,
+        score: p.balance + this._calcAssetsValue(p.id),
+        balance: p.balance,
+      }))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.balance - a.balance;
+      });
+    const isTie = ranking.length > 1 && ranking[0].score === ranking[1].score && ranking[0].balance === ranking[1].balance;
+    this._endGame(isTie ? null : ranking[0].id, 'time_limit');
+  },
 
   _buyProperty(pid, spaceId) {
     const player = this.players.get(pid);
@@ -143,8 +162,23 @@ module.exports = {
     }
   },
 
-  _endGame(winnerId) {
+  _endGame(winnerId, reason = null) {
     this.phase = 'ended';
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = null;
+    }
+    if (this._broadcastTimer) {
+      clearTimeout(this._broadcastTimer);
+      this._broadcastTimer = null;
+    }
+    this._resumeFn = null;
+    this.timeLimitExpired = false;
+    if (this._gameTimeLimitTimer) {
+      clearTimeout(this._gameTimeLimitTimer);
+      this._gameTimeLimitTimer = null;
+    }
+    this.timeLimitEndsAt = null;
     const winner = winnerId ? this.players.get(winnerId) : null;
     this._addLog(winner
       ? `🏆 ${winner.name} vyhrál(a) hru s ${fmt(winner.balance)} Kč!`
@@ -153,6 +187,7 @@ module.exports = {
     this.pendingAction = {
       type: 'game_over',
       winner: winner ? { name: winner.name, balance: winner.balance } : null,
+      reason,
     };
     this._broadcast();
   },

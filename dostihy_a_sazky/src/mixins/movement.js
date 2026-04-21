@@ -6,6 +6,7 @@ const { BOARD_SIZE, ACTION_DELAY_MS, fmt } = require('../constants');
 module.exports = {
 
   _movePlayer(pid, steps) {
+    if (this.phase !== 'playing') return;
     const player = this.players.get(pid);
     const oldPos = player.position;
     const newPos = (oldPos + steps) % BOARD_SIZE;
@@ -27,6 +28,7 @@ module.exports = {
   },
 
   _evaluateSpace(pid) {
+    if (this.phase !== 'playing') return;
     const player = this.players.get(pid);
     if (!player || player.bankrupt) { this._advanceTurn(); return; }
     const space = BOARD[player.position];

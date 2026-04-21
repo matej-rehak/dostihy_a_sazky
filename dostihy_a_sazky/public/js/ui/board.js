@@ -26,6 +26,11 @@ function getSide(id) {
 
 const CORNER_ICONS = { 0: '🚩', 10: '✋', 20: '🅿️', 30: '🚫' };
 const TYPE_ICONS   = { finance: '💱', nahoda: '❓', tax: '📉', go_to_jail: '🚔', free_parking: '🅿️', service: '👤', start: '🚩' };
+const SERVICE_ICONS = {
+  trener: '👤',
+  preprava: '🚚',
+  staje: '🐴',
+};
 
 // ─── Build ────────────────────────────────────────────────────────────────────
 
@@ -56,7 +61,9 @@ export function buildBoard(board) {
       if (space.id === 10) el.appendChild(makeEl('div', 'corner-sub', ''));
     } else {
       const inner = makeEl('div', 'space-inner');
-      const icon  = TYPE_ICONS[space.type] ?? '';
+      const icon  = space.type === 'service'
+        ? (SERVICE_ICONS[space.serviceType] ?? TYPE_ICONS.service)
+        : (TYPE_ICONS[space.type] ?? '');
       if (icon) inner.appendChild(makeEl('div', 'space-icon', icon));
       inner.appendChild(makeEl('div', 'space-name', space.name));
       if (space.price) inner.appendChild(makeEl('div', 'space-price', `${fmt(space.price)} Kč`));

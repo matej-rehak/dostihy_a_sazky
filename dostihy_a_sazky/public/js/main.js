@@ -11,7 +11,6 @@ import { initTooltipListeners }                 from './ui/tooltip.js';
 import { animatePawnsIfNeeded }                 from './animations/pawns.js';
 import { playBuyAnimation, playTokenAnimation } from './animations/cards.js';
 import { generateParticles }                    from './animations/particles.js';
-import { initDebugPanel, showDebugBtnIfNeeded } from './ui/debug.js';
 import { audioManager }                         from './audio.js';
 
 // ─── Load HTML partials ───────────────────────────────────────────────────────
@@ -88,7 +87,6 @@ function processState(gameState) {
     return;
   }
   state.gameState = gameState;
-  showDebugBtnIfNeeded(gameState);
   window.__gameState = gameState;
   identifyMe(gameState.players);
 
@@ -279,7 +277,6 @@ function processState(gameState) {
     buildColorPicker(colors, gameState.players.map(p => p.color));
     dom.introView.classList.add('hidden');
     processState(gameState);
-    initDebugPanel();
     const myPlayerId = localStorage.getItem('ds_player_id');
     if (!gameState.players.find(p => p.id === myPlayerId)) {
       setTimeout(() => { dom.nameInput?.focus(); }, 100);

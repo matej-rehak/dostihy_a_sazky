@@ -50,12 +50,12 @@ function renderHostControls(gameState, me) {
     const balDisp = document.getElementById('cfg-bal-disp');
     if (balDisp) {
       balDisp.classList.remove('hidden');
-      const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
+      const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0 };
       balDisp.textContent = '';
       balDisp.appendChild(document.createTextNode('Pravidla hostitele: '));
       balDisp.appendChild(makeEl('strong', '', `Kapitál ${fmt(c.startBalance)} Kč`));
       balDisp.appendChild(document.createTextNode(
-        `, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${c.buyoutMultiplier > 0 ? c.buyoutMultiplier + 'x' : 'Vypnuto'}`
+        `, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${c.buyoutMultiplier > 0 ? c.buyoutMultiplier + 'x' : 'Vypnuto'}, Čas: ${c.timeLimitMinutes > 0 ? c.timeLimitMinutes + ' min' : 'Bez limitu'}`
       ));
     }
     return;
@@ -64,13 +64,15 @@ function renderHostControls(gameState, me) {
   dom.hostControls?.classList.remove('hidden');
   document.getElementById('cfg-bal-disp')?.classList.add('hidden');
 
-  const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
+  const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0 };
   const cfgBal = document.getElementById('cfg-startBal');
   const cfgBon = document.getElementById('cfg-startBon');
   const cfgBuy = document.getElementById('cfg-buyout');
+  const cfgTime = document.getElementById('cfg-timeLimit');
   if (cfgBal && document.activeElement !== cfgBal) cfgBal.value = c.startBalance;
   if (cfgBon && document.activeElement !== cfgBon) cfgBon.value = c.startBonus;
   if (cfgBuy && document.activeElement !== cfgBuy) cfgBuy.value = c.buyoutMultiplier;
+  if (cfgTime && document.activeElement !== cfgTime) cfgTime.value = c.timeLimitMinutes ?? 0;
 
   const allReady = gameState.players.every(p => p.ready);
   if (dom.startBtn) {
@@ -153,12 +155,13 @@ export function buildColorPicker(colors, usedColors = []) {
 
 export function initLobbyListeners(onLeave) {
   // Config inputs (host)
-  ['cfg-startBal', 'cfg-startBon', 'cfg-buyout'].forEach(id => {
+  ['cfg-startBal', 'cfg-startBon', 'cfg-buyout', 'cfg-timeLimit'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
       socket.emit('game:update_config', {
         startBalance:      Number(document.getElementById('cfg-startBal')?.value ?? 30000),
         startBonus:        Number(document.getElementById('cfg-startBon')?.value ?? 4000),
         buyoutMultiplier:  Number(document.getElementById('cfg-buyout')?.value   ?? 0),
+        timeLimitMinutes:  Number(document.getElementById('cfg-timeLimit')?.value ?? 0),
       });
     });
   });

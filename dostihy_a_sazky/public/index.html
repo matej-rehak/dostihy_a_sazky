@@ -1,27 +1,37 @@
 <!DOCTYPE html>
 <html lang="cs">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🏇 Dostihy a sázky</title>
-  <meta name="description" content="Digitální multiplayer verze klasické české deskové hry Dostihy a sázky" />
+  <title>Dostihy a sazky</title>
+  <meta name="description" content="Digitalni multiplayer verze klasicke ceske deskove hry Dostihy a sazky" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
+<body>
+  <div id="audio-controls" class="audio-controls">
+    <button id="global-audio-toggle" class="btn-icon audio-floating-btn" onclick="window.toggleGameAudio()" aria-label="Zapnout nebo vypnout zvuk">
+      <span class="audio-toggle-icon">🔊</span>
+    </button>
+    <button id="audio-settings-toggle" class="btn-icon audio-floating-btn" onclick="window.toggleAudioSettings()" aria-label="Nastaveni hlasitosti">
+      <span>⚙</span>
+    </button>
+    <div id="audio-settings-panel" class="audio-settings-panel hidden">
+      <div class="audio-settings-title">Hlasitost</div>
+      <div class="audio-volume-row">
+        <button class="audio-vol-step" onclick="window.stepGameVolume(-10)" aria-label="Snizit hlasitost">-</button>
+        <input id="audio-volume-range" class="audio-volume-range" type="range" min="0" max="100" step="1" value="100" oninput="window.setGameVolumeFromUi(this.value)" />
+        <button class="audio-vol-step" onclick="window.stepGameVolume(10)" aria-label="Zvysit hlasitost">+</button>
+      </div>
+      <div id="audio-volume-value" class="audio-volume-value">100%</div>
+    </div>
+  </div>
 
-  <button id="global-audio-toggle" class="btn btn-icon" onclick="window.toggleGameAudio()" 
-          style="position: fixed; top: 15px; right: 15px; z-index: 9999; font-size: 1.2rem; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); cursor: pointer; color: white;">
-    <span class="audio-toggle-icon">🔊</span>
-  </button>
   <div id="app-root"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="js/main.js"></script>
 </body>
-
 </html>

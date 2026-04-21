@@ -30,7 +30,10 @@ class GameEngine {
     this.round = 1;
     this.financeCards = FinanceDeck();
     this.nahodaCards = NahodaDeck();
-    this.config = { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0 };
+    this.config = { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0 };
+    this.timeLimitEndsAt = null;
+    this.timeLimitExpired = false;
+    this._gameTimeLimitTimer = null;
     this._timer = null;
     this._resumeFn = null;
   }

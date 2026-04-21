@@ -49,7 +49,11 @@
             <label>Násobič odkupu koní:</label>
             <input type="number" id="cfg-buyout" class="text-input" value="0" step="0.5" min="0" />
           </div>
-          <p class="dim" style="margin-bottom:8px">Násobič 0 znamená vypnuto. Ostatní hráči vidí aktuální pravidla níže.
+          <div class="config-row">
+            <label>Časový limit hry (min):</label>
+            <input type="number" id="cfg-timeLimit" class="text-input" value="0" step="5" min="0" max="240" />
+          </div>
+          <p class="dim" style="margin-bottom:8px">Násobič odkupu 0 = vypnuto. Časový limit 0 = bez limitu. Ostatní hráči vidí aktuální pravidla níže.
           </p>
         </div>
         <button id="start-btn" class="btn btn-green btn-lg" disabled>

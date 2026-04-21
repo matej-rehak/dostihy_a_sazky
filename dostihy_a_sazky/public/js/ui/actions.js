@@ -91,7 +91,7 @@ export function updateActionPanel(gameState) {
     case 'jail_choice':  renderJailChoice(isTargeted, targetPlayer); break;
     case 'token_manage': renderTokenManage(isTargeted, targetPlayer, pa, gameState, me); break;
     case 'trade_offer':  renderTradeOffer(isTargeted, targetPlayer, pa, gameState); break;
-    case 'game_over':    renderGameOver(pa.winner); break;
+    case 'game_over':    renderGameOver(pa.winner, pa.reason); break;
     default:
       dom.actionContent.innerHTML = '';
       dom.actionContent.appendChild(makeEl('p', 'dim', '...'));
@@ -585,12 +585,15 @@ function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
   dom.actionContent.appendChild(btns);
 }
 
-function renderGameOver(winner) {
+function renderGameOver(winner, reason) {
   dom.actionTitle.textContent = '🏆 Konec hry';
   dom.actionContent.innerHTML = '';
 
   const goDiv = makeEl('div', 'gameover-display');
   goDiv.appendChild(makeEl('div', 'gameover-trophy', '🏆'));
+  if (reason === 'time_limit') {
+    goDiv.appendChild(makeEl('p', 'dim', 'Hra skončila po vypršení časového limitu.'));
+  }
   goDiv.appendChild(makeEl('div', 'gameover-title', winner ? `${winner.name} vyhrál(a)!` : 'Konec hry!'));
   if (winner) goDiv.appendChild(makeEl('div', 'gameover-balance', `Výsledný zůstatek: ${fmt(winner.balance)} Kč`));
 

@@ -1,9 +1,14 @@
 export const audioManager = {
   muted: false,
+  masterVolume: 1,
   sounds: {},
 
   init() {
     this.muted = localStorage.getItem('ds_muted') === 'true';
+    this.masterVolume = this._clamp01(Number(localStorage.getItem('ds_volume')));
+    if (Number.isNaN(this.masterVolume) || this.masterVolume === 0 && localStorage.getItem('ds_volume') === null) {
+      this.masterVolume = 1;
+    }
     this.audioContext = null;
     
     // Zapnout Web Audio API na první kliknutí
@@ -14,6 +19,7 @@ export const audioManager = {
     document.addEventListener('click', initSynth);
 
     this.updateIcon();
+    this.updateVolumeUi();
 
     // Registrace zvuků. Očekáváme fyzické MP3 soubory ve složce public/sounds/
     this.load('click', '/sounds/click.mp3');
@@ -62,7 +68,7 @@ export const audioManager = {
     osc.frequency.exponentialRampToValueAtTime(50, time + 0.05);
     
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.3 * vol, time + 0.01);
+    gain.gain.linearRampToValueAtTime(0.3 * vol * this.masterVolume, time + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
 
     osc.start(time);
@@ -82,7 +88,8 @@ export const audioManager = {
 
     // Klonování Node umožňuje přehrávat stejný zvuk vícekrát přes sebe (bez čekání na dokončení)
     const clone = a.cloneNode();
-    clone.volume = volume;
+    clone.volume = this._clamp01(volume * this.masterVolume);
+    if (clone.volume <= 0) return;
 
     // Potlačení chybových hlášek, pokud .mp3 chybí na disku
     clone.play().catch(err => { });
@@ -102,7 +109,42 @@ export const audioManager = {
     els.forEach(el => {
       el.textContent = this.muted ? '🔇' : '🔊';
     });
+  },
+
+  _clamp01(v) {
+    if (!Number.isFinite(v)) return 1;
+    if (v < 0) return 0;
+    if (v > 1) return 1;
+    return v;
+  },
+
+  setVolume(normalized) {
+    this.masterVolume = this._clamp01(normalized);
+    localStorage.setItem('ds_volume', String(this.masterVolume));
+    this.updateVolumeUi();
+    if (!this.muted) this.play('click', 0.5);
+  },
+
+  stepVolume(deltaPercent) {
+    const current = Math.round(this.masterVolume * 100);
+    const next = Math.max(0, Math.min(100, current + deltaPercent));
+    this.setVolume(next / 100);
+  },
+
+  updateVolumeUi() {
+    const percent = Math.round(this.masterVolume * 100);
+    const range = document.getElementById('audio-volume-range');
+    const label = document.getElementById('audio-volume-value');
+    if (range) range.value = String(percent);
+    if (label) label.textContent = `${percent}%`;
   }
 };
 
 window.toggleGameAudio = () => audioManager.toggleMute();
+window.setGameVolumeFromUi = value => audioManager.setVolume(Number(value) / 100);
+window.stepGameVolume = delta => audioManager.stepVolume(Number(delta) || 0);
+window.toggleAudioSettings = () => {
+  const panel = document.getElementById('audio-settings-panel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+};

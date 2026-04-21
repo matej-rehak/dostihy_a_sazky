@@ -33,6 +33,7 @@ module.exports = {
   },
 
   handleRoll(socket) {
+    if (this.phase !== 'playing') return;
     const pid = socket.playerId;
     const player = this.players.get(pid);
     if (!player) return;
@@ -91,6 +92,11 @@ module.exports = {
   },
 
   _advanceTurn() {
+    if (this.phase !== 'playing') return;
+    if (this.timeLimitExpired) {
+      this._endByTimeLimit();
+      return;
+    }
     const active = this.turnOrder.filter(id => {
       const p = this.players.get(id);
       return p && !p.bankrupt;

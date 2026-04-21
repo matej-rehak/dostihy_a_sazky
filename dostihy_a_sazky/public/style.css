@@ -297,6 +297,95 @@ body {
   border-color: rgba(255, 215, 0, .35);
 }
 
+.audio-controls {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-icon {
+  width: 45px;
+  height: 45px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  background: rgba(12, 20, 34, 0.82);
+  border: 1px solid var(--border-hi);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.btn-icon:hover:not(:disabled) {
+  background: rgba(18, 30, 48, 0.92);
+  border-color: rgba(255, 215, 0, 0.35);
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.12);
+}
+
+.audio-floating-btn {
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.audio-settings-panel {
+  min-width: 210px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(12, 20, 34, 0.95);
+  border: 1px solid var(--border-hi);
+  box-shadow: 0 24px 40px rgba(0, 0, 0, 0.45);
+}
+
+.audio-settings-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.8px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.audio-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audio-vol-step {
+  min-width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border-hi);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.audio-vol-step:hover {
+  border-color: rgba(255, 215, 0, 0.45);
+  color: var(--gold);
+}
+
+.audio-volume-range {
+  flex: 1;
+  accent-color: #ffd700;
+}
+
+.audio-volume-value {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: right;
+}
+
 /* ─── Text input ────────────────────────────────────────────────────── */
 .text-input {
   width: 100%;
