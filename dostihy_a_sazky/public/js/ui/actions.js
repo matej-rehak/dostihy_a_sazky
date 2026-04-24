@@ -487,10 +487,15 @@ function renderTradeBuild(gameState, me) {
   const mr2 = makeEl('div', 'trade-money-row');
   mr2.appendChild(makeEl('span', '', 'Peníze: '));
   const mi2 = document.createElement('input');
-  mi2.type = 'number'; mi2.min = '0'; mi2.step = '500';
-  mi2.value = tradeDraft.request.money; mi2.className = 'text-input trade-money-input';
-  mi2.addEventListener('input', () => { tradeDraft.request.money = Math.max(0, Number(mi2.value) || 0); });
-  mr2.appendChild(mi2); mr2.appendChild(makeEl('span', 'dim', ' Kč'));
+  const targetBalance = Math.max(0, target?.balance ?? 0);
+  mi2.type = 'number'; mi2.min = '0'; mi2.max = String(targetBalance); mi2.step = '500';
+  mi2.value = Math.min(tradeDraft.request.money, targetBalance); mi2.className = 'text-input trade-money-input';
+  tradeDraft.request.money = Number(mi2.value);
+  mi2.addEventListener('input', () => {
+    tradeDraft.request.money = Math.min(targetBalance, Math.max(0, Number(mi2.value) || 0));
+    mi2.value = tradeDraft.request.money;
+  });
+  mr2.appendChild(mi2); mr2.appendChild(makeEl('span', 'dim', ` Kč (max ${fmt(targetBalance)} Kč)`));
   reqSec.appendChild(mr2);
   dom.actionContent.appendChild(reqSec);
 
@@ -504,8 +509,19 @@ function renderTradeBuild(gameState, me) {
         errEl.style.cssText = 'color:var(--red,#e55);margin:4px 0;font-size:0.9em';
         btns.parentNode.insertBefore(errEl, btns);
       }
-      errEl.textContent = `Částka může být maximálně ${fmt(myBalance)} Kč`;
+      errEl.textContent = `Nabídka: částka může být maximálně ${fmt(myBalance)} Kč`;
       mi1.focus();
+      return;
+    }
+    if (tradeDraft.request.money > targetBalance) {
+      let errEl = dom.actionContent.querySelector('.trade-money-error');
+      if (!errEl) {
+        errEl = makeEl('p', 'trade-money-error');
+        errEl.style.cssText = 'color:var(--red,#e55);margin:4px 0;font-size:0.9em';
+        btns.parentNode.insertBefore(errEl, btns);
+      }
+      errEl.textContent = `Požadavek: ${target?.name ?? 'Hráč'} má maximálně ${fmt(targetBalance)} Kč`;
+      mi2.focus();
       return;
     }
     socket.emit('game:trade_init', {

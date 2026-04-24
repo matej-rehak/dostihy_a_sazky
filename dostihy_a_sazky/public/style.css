@@ -2421,3 +2421,26 @@ body {
   font-size: 12px;
 }
 .debug-token-row label { display: flex; align-items: center; gap: 4px; color: var(--text-dim, #aaa); }
+
+/* ─── Player balance wrap + assets ──────────────────────────────────────────── */
+.p-balance-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.p-assets {
+  font-size: 9px;
+  color: var(--text-muted, #888);
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+.players-total {
+  font-size: 10px;
+  color: var(--text-muted, #888);
+  text-align: right;
+  padding: 5px 2px 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}

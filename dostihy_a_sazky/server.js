@@ -14,7 +14,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const DEV_MODE = process.env.npm_lifecycle_event === 'dev' || process.env.NODE_ENV === 'development';
+
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/api/config', (_req, res) => res.json({ devMode: DEV_MODE }));
 app.get('*', (_req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
@@ -166,8 +169,9 @@ io.on('connection', socket => {
     rooms.get(socket.roomId)?.engine.handleRespond(socket, d);
   });
   socket.on('game:trade_init', d => rooms.get(socket.roomId)?.engine.initiateTrade(socket, d));
-  socket.on('game:debug_set_state', () => {
-    socket.emit('game:error', { message: 'Debug funkce je vypnuta.' });
+  socket.on('game:debug_set_state', d => {
+    if (!DEV_MODE) { socket.emit('game:error', { message: 'Debug funkce je dostupná jen v dev módu.' }); return; }
+    rooms.get(socket.roomId)?.engine.handleDebugSetState(socket, d);
   });
 
   socket.on('game:leave', () => {
