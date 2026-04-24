@@ -148,10 +148,10 @@ module.exports = {
     const target = this.players.get(pid);
 
     if (decision === 'accept' && initiator && target) {
-      if (target.balance < request.money) {
+      if (request.money > 0 && target.balance < request.money) {
         this._addLog(`❌ Obchod zrušen — ${target.name} nemá dostatek peněz (potřeba ${fmt(request.money)} Kč, má ${fmt(target.balance)} Kč)`);
         decision = 'decline';
-      } else if (initiator.balance < offer.money) {
+      } else if (fromContext !== 'debt_manage' && offer.money > 0 && initiator.balance < offer.money) {
         this._addLog(`❌ Obchod zrušen — ${initiator.name} nemá dostatek peněz (potřeba ${fmt(offer.money)} Kč, má ${fmt(initiator.balance)} Kč)`);
         decision = 'decline';
       }

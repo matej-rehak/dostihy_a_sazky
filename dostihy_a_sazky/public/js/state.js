@@ -14,4 +14,5 @@ export const state = {
   selectedColor:     null,
   particleIntervalId: null,
   roomListIntervalId: null,
+  devMode:           false,
 };

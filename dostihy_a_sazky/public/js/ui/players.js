@@ -3,6 +3,14 @@ import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { startTradeWith } from './actions.js';
 
+function calcAssetsValue(p) {
+  if (!state.boardData || !p.properties?.length) return 0;
+  return p.properties.reduce((sum, spId) => {
+    const sp = state.boardData.find(s => s.id === spId);
+    return sum + (sp?.price ?? 0);
+  }, 0);
+}
+
 export function updatePlayers(gameState) {
   if (!dom.playersList) return;
   dom.playersList.innerHTML = '';
@@ -49,9 +57,17 @@ export function updatePlayers(gameState) {
 
     row.appendChild(info);
 
+    // Balances: hotovost + celkový majetek
+    const balWrap = makeEl('div', 'p-balance-wrap');
     const balEl = makeEl('div', `p-balance${p.balance < 2000 ? ' low' : ''}`, `${fmt(p.balance)} Kč`);
     balEl.id = `pb-${p.id}`;
-    row.appendChild(balEl);
+    balWrap.appendChild(balEl);
+    if (!p.bankrupt && state.boardData) {
+      const total = p.balance + calcAssetsValue(p);
+      const assetsEl = makeEl('div', 'p-assets', `Celkem ${fmt(total)} Kč`);
+      balWrap.appendChild(assetsEl);
+    }
+    row.appendChild(balWrap);
 
     if (canTrade && !isMe && !p.bankrupt) {
       const me = gameState.players.find(pl => pl.id === state.myId);

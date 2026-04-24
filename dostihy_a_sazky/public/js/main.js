@@ -123,8 +123,11 @@ function processState(gameState) {
     if (diceEl) {
       diceEl.addEventListener('click', () => {
         const pa = state.gameState?.pendingAction;
-        if (pa && (pa.type === 'wait_roll' || pa.type === 'service_roll') && pa.targetId === state.myId) {
+        if (!pa || pa.targetId !== state.myId) return;
+        if (pa.type === 'wait_roll' || pa.type === 'service_roll') {
           socket.emit('game:roll');
+        } else if (pa.type === 'jail_choice') {
+          socket.emit('game:respond', { decision: 'roll_jail' });
         }
       });
     }
@@ -245,8 +248,9 @@ function processState(gameState) {
   updateActionPanel(gameState);
   updateLog(gameState);
   updateCenter(gameState);
+  if (state.devMode) showDebugBtnIfNeeded(gameState);
 
-  const canRoll = pa && (pa.type === 'wait_roll' || pa.type === 'service_roll') && pa.targetId === state.myId;
+  const canRoll = pa && (pa.type === 'wait_roll' || pa.type === 'service_roll' || pa.type === 'jail_choice') && pa.targetId === state.myId;
   document.getElementById('dice-3d')?.classList.toggle('dice-rollable', !!canRoll);
 
   showDebugBtnIfNeeded(gameState);
@@ -258,6 +262,14 @@ function processState(gameState) {
   audioManager.init();
   await loadPartials();
   initDebugPanel();
+
+  // Načtení konfigurace (devMode)
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    state.devMode = !!cfg.devMode;
+  } catch { /* produkce bez config endpointu */ }
+
+  if (state.devMode) initDebugPanel();
 
   // Reconnect overlay (DOM teď existuje)
   socket.on('disconnect', () => {
