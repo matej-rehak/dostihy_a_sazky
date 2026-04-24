@@ -3,7 +3,7 @@
 const jwt = require('jsonwebtoken');
 
 const isProd = process.env.NODE_ENV === 'production';
-const JWT_SECRET = process.env.JWT_SECRET || (isProd ? '' : 'ds-default-secret-change-in-prod');
+const JWT_SECRET = process.env.JWT_SECRET || (isProd ? 'ds-default-secret-change-in-prod' : 'ds-default-secret-change-in-prod');
 const JWT_EXPIRY = '7d';
 
 if (!JWT_SECRET) {

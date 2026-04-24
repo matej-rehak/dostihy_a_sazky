@@ -47,7 +47,7 @@ module.exports = {
       const idx = this.turnOrder.indexOf(currentTurnId);
       if (idx !== -1) {
         this.currentTurnIdx = idx;
-        this.pendingAction = { type: 'wait_roll', targetId: currentTurnId };
+        this._setPendingAction({ type: 'wait_roll', targetId: currentTurnId });
       }
     }
 

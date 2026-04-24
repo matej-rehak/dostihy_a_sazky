@@ -23,7 +23,7 @@ module.exports = {
     if (debtor) {
       const assets = this._calcAssetsValue(debtor.id);
       if (assets + debtor.balance >= 0) {
-        this.pendingAction = { type: 'debt_manage', targetId: debtor.id };
+        this._setPendingAction({ type: 'debt_manage', targetId: debtor.id });
         this._resumeFn = fn;
         this._broadcast();
         return;
@@ -60,6 +60,8 @@ module.exports = {
       round: this.round,
       config: this.config,
       timeLimitEndsAt: this.timeLimitEndsAt,
+      gameStartTime: this.gameStartTime,
+      turnTimerEndsAt: this.turnTimerEndsAt,
     };
   },
 

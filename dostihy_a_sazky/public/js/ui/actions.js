@@ -5,41 +5,13 @@ import { socket } from '../socket.js';
 import { showCardOverlay, hideCardOverlay } from '../animations/cards.js';
 import { runStarterAnimation } from '../animations/starter.js';
 import { audioManager } from '../audio.js';
-
-// ─── Trade draft stav (lokální, bez pendingAction) ────────────────────────────
-let tradeDraft = null;
-// { targetId, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 } }
+import { actionBtn, buildWaitEl } from './actionsHelpers.js';
+import { tradeDraft, setTradeDraft, renderTradeBuild, renderTradeOffer } from './actionsTrade.js';
 
 /** Spustí trade builder pro daného hráče — lze volat z jiných modulů (players.js) */
 export function startTradeWith(targetId, gameState, me) {
-  tradeDraft = { targetId, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'wait_roll' };
+  setTradeDraft({ targetId, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'wait_roll' });
   updateActionPanel(gameState);
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function actionBtn(label, cls, onClick) {
-  const btn = makeEl('button', `btn ${cls}`, label);
-  btn.addEventListener('click', () => { 
-    audioManager.play('click');
-    btn.disabled = true; 
-    onClick(); 
-  });
-  return btn;
-}
-
-function buildWaitEl(player, msg) {
-  const wrap = makeEl('div', 'action-waiting');
-  wrap.appendChild(makeEl('div', 'waiting-icon', '⏳'));
-  const p = makeEl('p');
-  p.appendChild(document.createTextNode('Čeká se na '));
-  const nameSpan = makeEl('strong', '', player?.name ?? '?');
-  nameSpan.style.color = safeColor(player?.color ?? '#fff');
-  p.appendChild(nameSpan);
-  p.appendChild(document.createElement('br'));
-  p.appendChild(makeEl('span', 'dim', msg));
-  wrap.appendChild(p);
-  return wrap;
 }
 
 // ─── Hlavní funkce ────────────────────────────────────────────────────────────
@@ -49,8 +21,7 @@ export function updateActionPanel(gameState) {
 
   if (!pa || pa.type !== 'card_ack') hideCardOverlay();
 
-  // Reset trade draftu pokud přestali být na řadě nebo se změnil typ akce
-  if (!pa || pa.type !== 'wait_roll' || pa.targetId !== state.myId) tradeDraft = null;
+  if (!pa || pa.type !== 'wait_roll' || pa.targetId !== state.myId) setTradeDraft(null);
 
   if (!pa) {
     if (dom.actionTitle) dom.actionTitle.textContent = 'Akce';
@@ -68,7 +39,6 @@ export function updateActionPanel(gameState) {
   const targetPlayer = gameState.players.find(p => p.id === pa.targetId);
   const me           = gameState.players.find(p => p.id === state.myId);
 
-  // Starter overlay
   if (pa.type === 'selecting_starter') {
     if (!state.isStarterAnimating) {
       state.isStarterAnimating = true;
@@ -104,13 +74,19 @@ function renderWaitRoll(isTargeted, targetPlayer, gameState, me) {
   dom.actionTitle.textContent = isTargeted ? 'Váš tah' : 'Čeká se...';
   dom.actionContent.innerHTML = '';
   if (isTargeted) {
-    if (tradeDraft !== null) { renderTradeBuild(gameState, me); return; }
+    if (tradeDraft !== null) {
+      renderTradeBuild(gameState, me, () => {
+        const self = gameState.players.find(p => p.id === state.myId);
+        renderWaitRoll(true, self, gameState, me);
+      });
+      return;
+    }
     dom.actionContent.appendChild(makeEl('p', 'action-desc', `Jste na řadě, ${targetPlayer?.name ?? ''}!`));
     dom.actionContent.appendChild(actionBtn('🎲 Hodit kostkou', 'btn-gold btn-lg', () => socket.emit('game:roll')));
     const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
     if (others.length > 0) {
       const tradeBtn = actionBtn('🤝 Navrhnout obchod', 'btn-outline', () => {
-        tradeDraft = { targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'wait_roll' };
+        setTradeDraft({ targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'wait_roll' });
         renderWaitRoll(isTargeted, targetPlayer, gameState, me);
       });
       tradeBtn.style.marginTop = '6px';
@@ -225,9 +201,11 @@ function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
     return;
   }
 
-  // Pokud je aktivní trade builder v dluhové situaci, zobraz ho
   if (tradeDraft?.context === 'debt_manage') {
-    renderTradeBuild(gameState, me);
+    renderTradeBuild(gameState, me, () => {
+      const self = gameState.players.find(p => p.id === state.myId);
+      renderDebtManage(true, self, gameState, me);
+    });
     return;
   }
 
@@ -245,7 +223,7 @@ function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
       const tok = gameState.tokens[sid];
       let val   = Math.floor(sp.price / 2);
       if (tok) {
-        if (tok.big)       val += Math.floor(sp.bigTokenCost / 2) + Math.floor(sp.tokenCost / 2) * 4;
+        if (tok.big)        val += Math.floor(sp.bigTokenCost / 2) + Math.floor(sp.tokenCost / 2) * 4;
         else if (tok.small) val += Math.floor(sp.tokenCost / 2) * tok.small;
       }
 
@@ -268,7 +246,7 @@ function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
   const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
   if (others.length > 0) {
     const negotiateBtn = actionBtn('🤝 Vyjednat obchod', 'btn-outline', () => {
-      tradeDraft = { targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'debt_manage' };
+      setTradeDraft({ targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'debt_manage' });
       renderDebtManage(isTargeted, targetPlayer, gameState, me);
     });
     negotiateBtn.style.cssText = 'margin-top:10px;width:100%';
@@ -290,8 +268,8 @@ function renderCardAck(isTargeted, targetPlayer, pa) {
   const cardDiv = makeEl('div', 'card-display');
   cardDiv.appendChild(makeEl('div', 'card-header', label));
   if (card.amount) {
-    const isPay   = card.type === 'pay' || card.type === 'pay_to_all';
-    const impact  = makeEl('div', `card-impact ${isPay ? 'neg' : 'pos'}`);
+    const isPay  = card.type === 'pay' || card.type === 'pay_to_all';
+    const impact = makeEl('div', `card-impact ${isPay ? 'neg' : 'pos'}`);
     impact.textContent = (isPay ? '-' : '+') + fmt(card.amount) + ' Kč';
     cardDiv.appendChild(impact);
   }
@@ -364,8 +342,8 @@ function renderTokenManage(isTargeted, targetPlayer, pa, gameState, me) {
     eligible.forEach(sid => {
       const sp   = state.boardData[sid];
       const tok  = gameState.tokens[sid] || { small: 0, big: false };
-      const canS = !tok.big && tok.small < 4    && (me?.balance ?? 0) >= sp.tokenCost;
-      const canB = !tok.big && tok.small >= 4   && (me?.balance ?? 0) >= sp.bigTokenCost;
+      const canS = !tok.big && tok.small < 4  && (me?.balance ?? 0) >= sp.tokenCost;
+      const canB = !tok.big && tok.small >= 4 && (me?.balance ?? 0) >= sp.bigTokenCost;
 
       const item    = makeEl('div', 'token-item');
       const nameDiv = makeEl('div', 'tok-name', `${sp.name} — ${tok.small}× ${tok.big ? '🏆' : ''}`);
@@ -388,201 +366,6 @@ function renderTokenManage(isTargeted, targetPlayer, pa, gameState, me) {
   const endBtn = actionBtn('Ukončit tah →', 'btn-gold', () => socket.emit('game:respond', { decision: 'end_turn' }));
   endBtn.style.marginTop = '4px';
   dom.actionContent.appendChild(endBtn);
-}
-
-// ─── Trade: builder (sestavení nabídky) ───────────────────────────────────────
-
-function renderTradeBuild(gameState, me) {
-  dom.actionTitle.textContent = '🤝 Navrhnout obchod';
-  dom.actionContent.innerHTML = '';
-
-  const others = gameState.players.filter(p => !p.bankrupt && p.id !== state.myId);
-  if (!others.length) { tradeDraft = null; return; }
-
-  // Ujisti se, že targetId je platný
-  if (!others.find(p => p.id === tradeDraft.targetId)) tradeDraft.targetId = others[0].id;
-  const target = others.find(p => p.id === tradeDraft.targetId);
-
-  // Výběr cílového hráče
-  if (others.length > 1) {
-    const sel = makeEl('div', 'trade-target-sel');
-    others.forEach(p => {
-      const active = p.id === tradeDraft.targetId;
-      const btn = makeEl('button', `btn btn-xs ${active ? '' : 'btn-outline'}`, p.name);
-      btn.style.cssText = `border-color:${safeColor(p.color)};${active ? `background:${safeColor(p.color)};color:#fff` : ''}`;
-      btn.addEventListener('click', () => {
-        tradeDraft.targetId = p.id;
-        tradeDraft.request.horses = [];
-        renderTradeBuild(gameState, me);
-      });
-      sel.appendChild(btn);
-    });
-    dom.actionContent.appendChild(sel);
-  }
-
-  // ── Nabízím ──────────────────────────────────────────────────────────────
-  const offerSec = makeEl('div', 'trade-section');
-  offerSec.appendChild(makeEl('div', 'trade-section-title', '📤 Nabízím'));
-  if (me?.properties?.length) {
-    me.properties.forEach(sid => {
-      const sp      = state.boardData[sid];
-      const checked = tradeDraft.offer.horses.includes(sid);
-      const item    = makeEl('div', 'trade-horse-item');
-      const cb      = document.createElement('input');
-      cb.type = 'checkbox'; cb.checked = checked;
-      cb.addEventListener('change', () => {
-        tradeDraft.offer.horses = cb.checked
-          ? [...tradeDraft.offer.horses, sid]
-          : tradeDraft.offer.horses.filter(id => id !== sid);
-      });
-      const lbl = makeEl('label', 'trade-horse-label');
-      const dot = makeEl('span', 'trade-dot'); dot.style.background = safeColor(sp.groupColor);
-      lbl.appendChild(dot);
-      lbl.appendChild(document.createTextNode(sp.name));
-      item.appendChild(cb); item.appendChild(lbl);
-      offerSec.appendChild(item);
-    });
-  } else {
-    offerSec.appendChild(makeEl('p', 'dim', 'Nevlastníte žádné koně.'));
-  }
-  const mr1 = makeEl('div', 'trade-money-row');
-  mr1.appendChild(makeEl('span', '', 'Peníze: '));
-  const mi1 = document.createElement('input');
-  const myBalance = Math.max(0, me?.balance ?? 0);
-  mi1.type = 'number'; mi1.min = '0'; mi1.max = String(myBalance); mi1.step = '500';
-  mi1.value = tradeDraft.offer.money; mi1.className = 'text-input trade-money-input';
-  mi1.addEventListener('input', () => {
-    tradeDraft.offer.money = Math.min(myBalance, Math.max(0, Number(mi1.value) || 0));
-    mi1.value = tradeDraft.offer.money;
-  });
-  mr1.appendChild(mi1); mr1.appendChild(makeEl('span', 'dim', ' Kč'));
-  offerSec.appendChild(mr1);
-  dom.actionContent.appendChild(offerSec);
-
-  // ── Žádám ─────────────────────────────────────────────────────────────────
-  const reqSec = makeEl('div', 'trade-section');
-  reqSec.appendChild(makeEl('div', 'trade-section-title', `📥 Žádám od ${target?.name ?? '?'}`));
-  if (target?.properties?.length) {
-    target.properties.forEach(sid => {
-      const sp      = state.boardData[sid];
-      const checked = tradeDraft.request.horses.includes(sid);
-      const item    = makeEl('div', 'trade-horse-item');
-      const cb      = document.createElement('input');
-      cb.type = 'checkbox'; cb.checked = checked;
-      cb.addEventListener('change', () => {
-        tradeDraft.request.horses = cb.checked
-          ? [...tradeDraft.request.horses, sid]
-          : tradeDraft.request.horses.filter(id => id !== sid);
-      });
-      const lbl = makeEl('label', 'trade-horse-label');
-      const dot = makeEl('span', 'trade-dot'); dot.style.background = safeColor(sp.groupColor);
-      lbl.appendChild(dot);
-      lbl.appendChild(document.createTextNode(sp.name));
-      item.appendChild(cb); item.appendChild(lbl);
-      reqSec.appendChild(item);
-    });
-  } else {
-    reqSec.appendChild(makeEl('p', 'dim', 'Hráč nevlastní žádné koně.'));
-  }
-  const mr2 = makeEl('div', 'trade-money-row');
-  mr2.appendChild(makeEl('span', '', 'Peníze: '));
-  const mi2 = document.createElement('input');
-  mi2.type = 'number'; mi2.min = '0'; mi2.step = '500';
-  mi2.value = tradeDraft.request.money; mi2.className = 'text-input trade-money-input';
-  mi2.addEventListener('input', () => { tradeDraft.request.money = Math.max(0, Number(mi2.value) || 0); });
-  mr2.appendChild(mi2); mr2.appendChild(makeEl('span', 'dim', ' Kč'));
-  reqSec.appendChild(mr2);
-  dom.actionContent.appendChild(reqSec);
-
-  const btns = makeEl('div', 'action-buttons row');
-  btns.style.marginTop = '8px';
-  btns.appendChild(actionBtn('Potvrdit obchod ✓', 'btn-green', () => {
-    if (tradeDraft.offer.money > myBalance) {
-      let errEl = dom.actionContent.querySelector('.trade-money-error');
-      if (!errEl) {
-        errEl = makeEl('p', 'trade-money-error');
-        errEl.style.cssText = 'color:var(--red,#e55);margin:4px 0;font-size:0.9em';
-        btns.parentNode.insertBefore(errEl, btns);
-      }
-      errEl.textContent = `Částka může být maximálně ${fmt(myBalance)} Kč`;
-      mi1.focus();
-      return;
-    }
-    socket.emit('game:trade_init', {
-      targetId: tradeDraft.targetId,
-      offer:   { horses: [...tradeDraft.offer.horses],   money: tradeDraft.offer.money   },
-      request: { horses: [...tradeDraft.request.horses], money: tradeDraft.request.money },
-    });
-    tradeDraft = null;
-  }));
-  btns.appendChild(actionBtn('Zrušit', 'btn-outline', () => {
-    const ctx = tradeDraft?.context;
-    tradeDraft = null;
-    const self = gameState.players.find(p => p.id === state.myId);
-    if (ctx === 'debt_manage') {
-      renderDebtManage(true, self, gameState, me);
-    } else {
-      renderWaitRoll(true, self, gameState, me);
-    }
-  }));
-  dom.actionContent.appendChild(btns);
-}
-
-// ─── Trade: zobrazení nabídky (pro cílového hráče) ────────────────────────────
-
-function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
-  dom.actionTitle.textContent = '🤝 Nabídka obchodu';
-  dom.actionContent.innerHTML = '';
-
-  if (!isTargeted) {
-    dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'zvažuje obchod...'));
-    return;
-  }
-
-  const { fromId, offer, request } = pa.data;
-  const initiator = gameState.players.find(p => p.id === fromId);
-
-  // Co dostanu
-  const recSec = makeEl('div', 'trade-section');
-  recSec.appendChild(makeEl('div', 'trade-section-title', `📤 ${initiator?.name ?? '?'} nabízí:`));
-  (offer.horses || []).forEach(sid => {
-    const sp   = state.boardData[sid];
-    const item = makeEl('div', 'trade-horse-item');
-    const dot  = makeEl('span', 'trade-dot'); dot.style.background = safeColor(sp?.groupColor);
-    item.appendChild(dot);
-    item.appendChild(makeEl('span', '', sp?.name ?? sid));
-    recSec.appendChild(item);
-  });
-  if (offer.money > 0) recSec.appendChild(makeEl('div', 'trade-money-display pos', `+${fmt(offer.money)} Kč`));
-  if (!offer.horses?.length && !offer.money) recSec.appendChild(makeEl('p', 'dim', 'Nic'));
-  dom.actionContent.appendChild(recSec);
-
-  // Co zaplatím
-  const paySec = makeEl('div', 'trade-section');
-  paySec.appendChild(makeEl('div', 'trade-section-title', '📥 Na oplátku chce:'));
-  (request.horses || []).forEach(sid => {
-    const sp   = state.boardData[sid];
-    const item = makeEl('div', 'trade-horse-item');
-    const dot  = makeEl('span', 'trade-dot'); dot.style.background = safeColor(sp?.groupColor);
-    item.appendChild(dot);
-    item.appendChild(makeEl('span', '', sp?.name ?? sid));
-    paySec.appendChild(item);
-  });
-  if (request.money > 0) paySec.appendChild(makeEl('div', 'trade-money-display neg', `-${fmt(request.money)} Kč`));
-  if (!request.horses?.length && !request.money) paySec.appendChild(makeEl('p', 'dim', 'Nic'));
-  dom.actionContent.appendChild(paySec);
-
-  const btns = makeEl('div', 'action-buttons row');
-  btns.style.marginTop = '8px';
-  btns.appendChild(actionBtn('✅ Přijmout', 'btn-green', () => {
-    audioManager.play('trade_accept');
-    socket.emit('game:respond', { decision: 'accept' });
-  }));
-  btns.appendChild(actionBtn('❌ Odmítnout', 'btn-outline', () => {
-    audioManager.play('trade_reject');
-    socket.emit('game:respond', { decision: 'reject' });
-  }));
-  dom.actionContent.appendChild(btns);
 }
 
 function renderGameOver(winner, reason) {

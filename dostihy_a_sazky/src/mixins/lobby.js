@@ -52,12 +52,16 @@ module.exports = {
     const startBonus = Number(nextConfig.startBonus);
     const buyoutMultiplier = Number(nextConfig.buyoutMultiplier);
     const timeLimitMinutes = Number(nextConfig.timeLimitMinutes);
+    const turnTimeLimitSeconds = Number(nextConfig.turnTimeLimitSeconds);
 
     this.config.startBalance = Number.isFinite(startBalance) ? Math.max(1000, Math.round(startBalance)) : 30000;
     this.config.startBonus = Number.isFinite(startBonus) ? Math.max(0, Math.round(startBonus)) : 4000;
     this.config.buyoutMultiplier = Number.isFinite(buyoutMultiplier) ? Math.max(0, buyoutMultiplier) : 0;
     this.config.timeLimitMinutes = Number.isFinite(timeLimitMinutes)
       ? Math.max(0, Math.min(MAX_TIME_LIMIT_MINUTES, Math.round(timeLimitMinutes)))
+      : 0;
+    this.config.turnTimeLimitSeconds = Number.isFinite(turnTimeLimitSeconds)
+      ? Math.max(0, Math.min(300, Math.round(turnTimeLimitSeconds)))
       : 0;
 
     this._broadcast();
@@ -107,7 +111,7 @@ module.exports = {
     const player = this.players.get(playerId);
     if (!player) return;
     player.disconnected = true;
-    this._addLog(`📡 ${player.name} se odpojil(a) — čekáme 30s na znovupřipojení...`);
+    this._addLog(`📡 ${player.name} se odpojil(a) — čekáme 2 min na znovupřipojení...`);
     this._broadcast();
   },
 
@@ -135,6 +139,7 @@ module.exports = {
 
     this.phase = 'playing';
     this.timeLimitEndsAt = null;
+    this.gameStartTime = Date.now();
     this.timeLimitExpired = false;
     if (this._gameTimeLimitTimer) {
       clearTimeout(this._gameTimeLimitTimer);
@@ -150,11 +155,11 @@ module.exports = {
     this.turnOrder = keys;
     this.currentTurnIdx = 0;
 
-    this.pendingAction = {
+    this._setPendingAction({
       type: 'selecting_starter',
       targetId: this.turnOrder[0],
       data: { starterId: this.turnOrder[0] },
-    };
+    });
 
     this._addLog('🏁 Hra začala! Losuje se začínající hráč...');
 
@@ -176,7 +181,7 @@ module.exports = {
 
     setTimeout(() => {
       if (this.pendingAction?.type === 'selecting_starter') {
-        this.pendingAction = null;
+        this._setPendingAction(null);
         this._startTurn();
       }
     }, 5000);

@@ -21,6 +21,8 @@ const IDS = {
   logList:       'log-list',
   bcTurn:        'bc-turn',
   bcRound:       'bc-round',
+  gameTimer:     'game-timer',
+  timerValue:    'timer-value',
   toast:         'toast',
   tooltip:       'space-tip',
   debugBtn:      'debug-btn',

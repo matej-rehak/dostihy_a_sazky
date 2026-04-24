@@ -12,6 +12,7 @@ import { animatePawnsIfNeeded }                 from './animations/pawns.js';
 import { playBuyAnimation, playTokenAnimation } from './animations/cards.js';
 import { generateParticles }                    from './animations/particles.js';
 import { audioManager }                         from './audio.js';
+import { initDebugPanel, showDebugBtnIfNeeded } from './ui/debug.js';
 
 // ─── Load HTML partials ───────────────────────────────────────────────────────
 
@@ -247,6 +248,8 @@ function processState(gameState) {
 
   const canRoll = pa && (pa.type === 'wait_roll' || pa.type === 'service_roll') && pa.targetId === state.myId;
   document.getElementById('dice-3d')?.classList.toggle('dice-rollable', !!canRoll);
+
+  showDebugBtnIfNeeded(gameState);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -254,6 +257,7 @@ function processState(gameState) {
 (async () => {
   audioManager.init();
   await loadPartials();
+  initDebugPanel();
 
   // Reconnect overlay (DOM teď existuje)
   socket.on('disconnect', () => {

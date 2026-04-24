@@ -39,7 +39,7 @@ function throttle(socket, event, limitMs) {
 // playerId → { timer, roomId } — aktivní grace timery při odpojení
 const reconnectTimers = new Map();
 
-const RECONNECT_GRACE_MS = 30_000;
+const RECONNECT_GRACE_MS = 120_000;
 
 function getRoomList() {
   return Array.from(rooms.entries()).map(([id, r]) => ({

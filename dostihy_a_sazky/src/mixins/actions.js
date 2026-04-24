@@ -17,16 +17,16 @@ module.exports = {
     const { decision, spaceId, tokenType } = data || {};
     const actionData = this.pendingAction.data || {};
     const action = this.pendingAction.type;
-    this.pendingAction = null;
+    this._setPendingAction(null);
 
     switch (action) {
-      case 'debt_manage':  return this._handleDebtManage(pid, decision, spaceId);
-      case 'buy_offer':    return this._handleBuyOffer(pid, decision, spaceId);
+      case 'debt_manage': return this._handleDebtManage(pid, decision, spaceId);
+      case 'buy_offer': return this._handleBuyOffer(pid, decision, spaceId);
       case 'buyout_offer': return this._handleBuyoutOffer(pid, decision, actionData);
-      case 'card_ack':     return this._handleCardAck(pid, actionData);
-      case 'jail_choice':  return this._handleJailChoice(pid, decision);
+      case 'card_ack': return this._handleCardAck(pid, actionData);
+      case 'jail_choice': return this._handleJailChoice(pid, decision);
       case 'token_manage': return this._handleTokenManage(pid, decision, spaceId, tokenType);
-      case 'trade_offer':  return this._handleTradeOffer(pid, decision, actionData);
+      case 'trade_offer': return this._handleTradeOffer(pid, decision, actionData);
     }
   },
 
@@ -35,7 +35,7 @@ module.exports = {
       this._sellProperty(pid, spaceId);
       const p = this.players.get(pid);
       if (p.balance < 0) {
-        this.pendingAction = { type: 'debt_manage', targetId: pid };
+        this._setPendingAction({ type: 'debt_manage', targetId: pid });
         this._broadcast();
       } else {
         const fn = this._resumeFn;
@@ -110,7 +110,7 @@ module.exports = {
         player.jailTurns = 0;
         player.rollAccumulator = 0;
         this._addLog(`🔓 ${player.name} hodil(a) šestku — opouští Distanc a hází ještě jednou!`);
-        this.pendingAction = { type: 'wait_roll', targetId: pid };
+        this._setPendingAction({ type: 'wait_roll', targetId: pid });
         this._broadcast();
       } else {
         player.jailTurns--;
@@ -122,7 +122,7 @@ module.exports = {
       player.inJail = false;
       player.jailTurns = 0;
       this._addLog(`${player.name} použil(a) kartu "Zrušen distanc" a opouští vězení!`);
-      this.pendingAction = { type: 'wait_roll', targetId: pid };
+      this._setPendingAction({ type: 'wait_roll', targetId: pid });
       this._broadcast();
     }
   },
@@ -145,7 +145,7 @@ module.exports = {
   _handleTradeOffer(pid, decision, actionData) {
     const { fromId, offer, request, fromContext } = actionData;
     const initiator = this.players.get(fromId);
-    const target    = this.players.get(pid);
+    const target = this.players.get(pid);
 
     if (decision === 'accept' && initiator && target) {
       if (target.balance < request.money) {
@@ -173,8 +173,8 @@ module.exports = {
       // Peníze
       initiator.balance -= offer.money;
       initiator.balance += request.money;
-      target.balance    -= request.money;
-      target.balance    += offer.money;
+      target.balance -= request.money;
+      target.balance += offer.money;
       this._checkBankrupt(fromId);
       this._checkBankrupt(pid);
       this._addLog(`🤝 ${initiator.name} a ${target.name} uzavřeli obchod!`);
@@ -192,7 +192,7 @@ module.exports = {
       // Vrátit wait_roll původnímu hráči (obchod netrhá tah)
       this._scheduleAction(ACTION_DELAY_MS, () => {
         if (this.players.get(fromId) && !this.players.get(fromId).bankrupt) {
-          this.pendingAction = { type: 'wait_roll', targetId: fromId };
+          this._setPendingAction({ type: 'wait_roll', targetId: fromId });
           this._broadcast();
         } else {
           this._advanceTurn();
@@ -200,4 +200,42 @@ module.exports = {
       });
     }
   },
+
+  _handleTurnTimeout() {
+    if (this.phase !== 'playing' || !this.pendingAction) return;
+    const { type, targetId, data } = this.pendingAction;
+    const player = this.players.get(targetId);
+    if (!player) return;
+
+    this._addLog(`⏳ ${player.name} nestihl(a) odehrát v časovém limitu!`);
+
+    switch (type) {
+      case 'wait_roll':
+      case 'service_roll':
+        this.handleRoll({ playerId: targetId, emit: () => { } });
+        break;
+      case 'buy_offer':
+        this._handleBuyOffer(targetId, 'decline', data?.spaceId);
+        break;
+      case 'buyout_offer':
+        this._handleBuyoutOffer(targetId, 'decline', data);
+        break;
+      case 'card_ack':
+        this._handleCardAck(targetId, data);
+        break;
+      case 'jail_choice':
+        this._handleJailChoice(targetId, 'roll_jail');
+        break;
+      case 'token_manage':
+        this._handleTokenManage(targetId, 'end_turn', data?.spaceId, null);
+        break;
+      case 'trade_offer':
+        this._handleTradeOffer(targetId, 'decline', data);
+        break;
+      case 'selecting_starter':
+        this._setPendingAction(null);
+        this._startTurn();
+        break;
+    }
+  }
 };

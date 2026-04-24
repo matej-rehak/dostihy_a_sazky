@@ -30,12 +30,35 @@ class GameEngine {
     this.round = 1;
     this.financeCards = FinanceDeck();
     this.nahodaCards = NahodaDeck();
-    this.config = { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0 };
+    this.config = { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0 };
     this.timeLimitEndsAt = null;
     this.timeLimitExpired = false;
+    this.gameStartTime = null;
     this._gameTimeLimitTimer = null;
+    this.turnTimerEndsAt = null;
+    this._turnTimer = null;
     this._timer = null;
     this._resumeFn = null;
+  }
+
+  _setPendingAction(action) {
+    this.pendingAction = action;
+    if (this._turnTimer) {
+      clearTimeout(this._turnTimer);
+      this._turnTimer = null;
+      this.turnTimerEndsAt = null;
+    }
+    if (action && this.config.turnTimeLimitSeconds > 0 && action.type !== 'debt_manage') {
+      const delayMs = this.config.turnTimeLimitSeconds * 1000;
+      this.turnTimerEndsAt = Date.now() + delayMs;
+      this._turnTimer = setTimeout(() => {
+        this._turnTimer = null;
+        this.turnTimerEndsAt = null;
+        if (typeof this._handleTurnTimeout === 'function') {
+          this._handleTurnTimeout();
+        }
+      }, delayMs);
+    }
   }
 }
 

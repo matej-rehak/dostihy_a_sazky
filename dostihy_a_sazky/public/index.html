@@ -11,21 +11,48 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="audio-controls" class="audio-controls">
-    <button id="global-audio-toggle" class="btn-icon audio-floating-btn" onclick="window.toggleGameAudio()" aria-label="Zapnout nebo vypnout zvuk">
-      <span class="audio-toggle-icon">🔊</span>
+  <div class="top-right-controls">
+    <button id="settings-toggle-btn" class="btn-icon header-btn" onclick="window.toggleSettingsModal()" aria-label="Otevřít nastavení" title="Nastavení">
+      ⚙️
     </button>
-    <button id="audio-settings-toggle" class="btn-icon audio-floating-btn" onclick="window.toggleAudioSettings()" aria-label="Nastaveni hlasitosti">
-      <span>⚙</span>
-    </button>
-    <div id="audio-settings-panel" class="audio-settings-panel hidden">
-      <div class="audio-settings-title">Hlasitost</div>
-      <div class="audio-volume-row">
-        <button class="audio-vol-step" onclick="window.stepGameVolume(-10)" aria-label="Snizit hlasitost">-</button>
-        <input id="audio-volume-range" class="audio-volume-range" type="range" min="0" max="100" step="1" value="100" oninput="window.setGameVolumeFromUi(this.value)" />
-        <button class="audio-vol-step" onclick="window.stepGameVolume(10)" aria-label="Zvysit hlasitost">+</button>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-overlay" class="overlays-bg hidden" style="z-index: 10000;">
+    <div class="settings-modal modal-card">
+      <div class="modal-header">
+        <h2>Nastavení hry</h2>
+        <button class="btn-icon" onclick="window.toggleSettingsModal()" aria-label="Zavřít">✖</button>
       </div>
-      <div id="audio-volume-value" class="audio-volume-value">100%</div>
+      <div class="modal-body">
+        
+        <div class="settings-group">
+          <h3>Zvuk a Hudba</h3>
+          <div class="setting-row">
+            <label for="sfx-volume">Zvukové efekty</label>
+            <div class="volume-slider-wrap">
+              <span id="sfx-vol-val" class="vol-label">100%</span>
+              <input id="sfx-volume" type="range" min="0" max="100" value="100" oninput="window.setSfxVolume(this.value)">
+            </div>
+          </div>
+          <div class="setting-row">
+            <label for="music-volume">Hudba v pozadí</label>
+            <div class="volume-slider-wrap">
+              <span id="music-vol-val" class="vol-label">50%</span>
+              <input id="music-volume" type="range" min="0" max="100" value="50" oninput="window.setMusicVolume(this.value)">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>Zobrazení</h3>
+          <div class="setting-row">
+            <label>Režim celé obrazovky</label>
+            <button class="btn btn-outline btn-sm" onclick="window.toggleFullscreen()">Přepnout Fullscreen</button>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 

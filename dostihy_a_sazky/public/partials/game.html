@@ -45,6 +45,11 @@
     <!-- Right panel -->
     <div id="right-panel">
 
+      <div id="game-timer" class="game-timer hidden">
+        <span class="timer-icon">⏱</span>
+        <span id="timer-value">00:00</span>
+      </div>
+
       <section id="players-section">
         <h2 class="section-title">Hráči</h2>
         <div id="players-list"></div>
@@ -66,6 +71,24 @@
         <button id="game-leave-btn" class="btn btn-outline btn-xs" style="flex:1">Odpojit se</button>
       </div>
 
+    </div>
+
+    <!-- Debug tlačítko — zobrazí se jen při ?debug v URL -->
+    <button id="debug-btn" class="debug-btn hidden" title="Debug">🐞</button>
+
+    <!-- Debug panel overlay -->
+    <div id="debug-panel" class="debug-overlay hidden">
+      <div class="debug-modal">
+        <div class="debug-header">
+          <h3>🐞 Debug stav hry</h3>
+          <button id="debug-close" class="debug-close">✖</button>
+        </div>
+        <div id="debug-body" class="debug-body"></div>
+        <div class="debug-footer">
+          <button id="debug-cancel" class="btn btn-outline btn-sm">Zrušit</button>
+          <button id="debug-apply" class="btn btn-gold btn-sm">Použít</button>
+        </div>
+      </div>
     </div>
 
   </div>

@@ -116,7 +116,7 @@ module.exports = {
     }
 
     if (player.balance >= buyoutCost) {
-      this.pendingAction = { type: 'buyout_offer', targetId: pid, data: { spaceId, buyoutCost } };
+      this._setPendingAction({ type: 'buyout_offer', targetId: pid, data: { spaceId, buyoutCost } });
       this._broadcast();
     } else {
       this._offerTokensOrEnd(pid);
@@ -184,11 +184,11 @@ module.exports = {
       ? `🏆 ${winner.name} vyhrál(a) hru s ${fmt(winner.balance)} Kč!`
       : '🏁 Hra skončila nerozhodně.'
     );
-    this.pendingAction = {
+    this._setPendingAction({
       type: 'game_over',
       winner: winner ? { name: winner.name, balance: winner.balance } : null,
       reason,
-    };
+    });
     this._broadcast();
   },
 };

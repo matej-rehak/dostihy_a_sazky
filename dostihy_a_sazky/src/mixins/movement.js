@@ -64,7 +64,7 @@ module.exports = {
         const card = space.type === 'finance' ? this.financeCards.draw() : this.nahodaCards.draw();
         const label = space.type === 'finance' ? 'Finance' : 'Náhoda';
         this._addLog(`🃏 ${player.name} táhne kartu ${label}: "${card.text}"`);
-        this.pendingAction = { type: 'card_ack', targetId: pid, data: { card, label, spaceId: space.id } };
+        this._setPendingAction({ type: 'card_ack', targetId: pid, data: { card, label, spaceId: space.id } });
         this._broadcast();
         break;
       }
@@ -74,7 +74,7 @@ module.exports = {
         const owner = this.ownerships[space.id];
         if (!owner) {
           if (player.balance >= space.price) {
-            this.pendingAction = { type: 'buy_offer', targetId: pid, data: { spaceId: space.id } };
+            this._setPendingAction({ type: 'buy_offer', targetId: pid, data: { spaceId: space.id } });
             this._broadcast();
           } else {
             this._addLog(`${player.name} nemá dostatek prostředků ke koupi ${space.name} (${fmt(space.price)} Kč)`);
@@ -86,7 +86,7 @@ module.exports = {
         } else {
           if (space.serviceType === 'preprava' || space.serviceType === 'staje') {
             this._addLog(`🕒 ${player.name} musí hodit pro určení poplatku (${space.name})`);
-            this.pendingAction = { type: 'service_roll', targetId: pid, data: { spaceId: space.id } };
+            this._setPendingAction({ type: 'service_roll', targetId: pid, data: { spaceId: space.id } });
             this._broadcast();
           } else {
             const rent = this._calcRent(space.id, this.lastDice?.value || 1);

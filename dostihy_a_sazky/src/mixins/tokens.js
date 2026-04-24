@@ -47,7 +47,7 @@ module.exports = {
   _offerTokensOrEnd(pid) {
     const eligible = this._eligibleTokenSpaces(pid);
     if (eligible.length > 0) {
-      this.pendingAction = { type: 'token_manage', targetId: pid, data: { eligible } };
+      this._setPendingAction({ type: 'token_manage', targetId: pid, data: { eligible } });
       this._broadcast();
     } else {
       this._advanceTurn();

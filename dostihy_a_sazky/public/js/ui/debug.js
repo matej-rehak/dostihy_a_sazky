@@ -47,7 +47,7 @@ export function initDebugPanel() {
 
 export function showDebugBtnIfNeeded(gameState) {
   if (!dom.debugBtn) return;
-  if (gameState?.phase === 'playing') {
+  if (gameState?.phase === 'playing' && location.search.includes('debug')) {
     dom.debugBtn.classList.remove('hidden');
   } else {
     dom.debugBtn.classList.add('hidden');

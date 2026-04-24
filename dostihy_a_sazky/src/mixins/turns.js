@@ -22,12 +22,12 @@ module.exports = {
       if (player.jailTurns <= 0) {
         player.inJail = false;
         this._addLog(`${player.name} je propuštěn(a) z Distancu`);
-        this.pendingAction = { type: 'wait_roll', targetId: pid };
+        this._setPendingAction({ type: 'wait_roll', targetId: pid });
       } else {
-        this.pendingAction = { type: 'jail_choice', targetId: pid };
+        this._setPendingAction({ type: 'jail_choice', targetId: pid });
       }
     } else {
-      this.pendingAction = { type: 'wait_roll', targetId: pid };
+      this._setPendingAction({ type: 'wait_roll', targetId: pid });
     }
     this._broadcast();
   },
@@ -50,21 +50,21 @@ module.exports = {
         // Dvojitá šestka → jde do Distancu z libovolného místa
         player.rollAccumulator = 0;
         this._addLog(`🎲 ${player.name} hodil(a) 6 dvakrát za sebou → jde do Distancu! 🔒`);
-        this.pendingAction = null;
+        this._setPendingAction(null);
         this._sendToJail(pid);
         this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
       } else {
         player.rollAccumulator = prevAccumulator + dice;
         if (dice === 6) {
           this._addLog(`🎲 ${player.name} hodil(a) 6! Celkem nasčítáno: ${player.rollAccumulator}. Hází znovu...`);
-          this.pendingAction = { type: 'wait_roll', targetId: pid };
+          this._setPendingAction({ type: 'wait_roll', targetId: pid });
           this._broadcast();
         } else {
           const totalSteps = player.rollAccumulator;
           player.rollAccumulator = 0;
           this._addLog(`🎲 ${player.name} hodil(a) ${dice}. Celkem se posouvá o ${totalSteps} polí.`);
           player.moveDirection = 1;
-          this.pendingAction = null;
+          this._setPendingAction(null);
           this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, totalSteps));
         }
       }
@@ -83,7 +83,7 @@ module.exports = {
         this._addLog(`💸 ${player.name} platí poplatek ${fmt(rent)} Kč → ${ownerPlayer.name} (${space.name})`);
       });
 
-      this.pendingAction = null;
+      this._setPendingAction(null);
       this._transfer(pid, owner, rent);
       this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
     } else {
@@ -112,7 +112,7 @@ module.exports = {
       tries < this.turnOrder.length
     );
 
-    this.pendingAction = null;
+    this._setPendingAction(null);
     if (this.currentTurnIdx === 0) this.round++;
     this._scheduleAction(600, () => this._startTurn());
   },
