@@ -2485,7 +2485,6 @@ body {
   padding: 2px 6px;
   font-size: 12px;
 }
-<<<<<<< HEAD
 
 .debug-prop-row,
 .debug-token-row {
@@ -2676,8 +2675,6 @@ body {
   min-width: 40px;
   text-align: right;
 }
-=======
-.debug-token-row label { display: flex; align-items: center; gap: 4px; color: var(--text-dim, #aaa); }
 
 /* ─── Player balance wrap + assets ──────────────────────────────────────────── */
 .p-balance-wrap {
@@ -2701,4 +2698,3 @@ body {
   border-top: 1px solid var(--border);
   margin-top: 4px;
 }
->>>>>>> 01d82a51ee353a6caaf4c55b4eb3e7839ffcacd3
