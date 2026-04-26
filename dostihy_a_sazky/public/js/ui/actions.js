@@ -6,17 +6,33 @@ import { showCardOverlay, hideCardOverlay } from '../animations/cards.js';
 import { runStarterAnimation } from '../animations/starter.js';
 import { audioManager } from '../audio.js';
 import { actionBtn, buildWaitEl } from './actionsHelpers.js';
-import { tradeDraft, setTradeDraft, renderTradeBuild, renderTradeOffer } from './actionsTrade.js';
+import { tradeDraft, setTradeDraft, renderTradeBuild, renderTradeOffer, renderIncomingTradeOffer } from './actionsTrade.js';
 import { renderDebtModal } from './actionsDebt.js';
 
 /** Spustí trade builder pro daného hráče — lze volat z jiných modulů (players.js) */
 export function startTradeWith(targetId, gameState, me) {
   const pa = gameState?.pendingAction;
+
+  // Pokud je protihráč v dluhu a já nejsem dlužník, jsem "spectator" dluhové situace.
+  // updateActionPanel by zavolal renderDebtManage(isTargeted=false) a hned vrátil —
+  // renderTradeBuild by se nikdy nezavolal. Proto modal otevřeme přímo.
+  const isOpponentDebt = pa?.type === 'debt_manage' && pa?.targetId !== state.myId;
+
   const context = pa?.targetId === state.myId && (pa?.type === 'debt_manage' || pa?.type === 'jail_choice')
     ? pa.type
     : 'wait_roll';
+
   setTradeDraft({ targetId, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context });
-  updateActionPanel(gameState);
+
+  if (isOpponentDebt) {
+    // Přímé otevření obchodního modalu bez průchodu přes action panel
+    renderTradeBuild(gameState, me, () => {
+      setTradeDraft(null);
+      updateActionPanel(gameState);
+    });
+  } else {
+    updateActionPanel(gameState);
+  }
 }
 
 // ─── Hlavní funkce ────────────────────────────────────────────────────────────
@@ -26,10 +42,37 @@ export function updateActionPanel(gameState) {
 
   if (!pa || pa.type !== 'card_ack') hideCardOverlay();
 
+  // Skrýt dluhový modal pokud akce už není debt_manage
+  if (pa?.type !== 'debt_manage' && dom.debtOverlay) {
+    dom.debtOverlay.classList.add('hidden');
+  }
+
+  // Skrýt obchodní modal pokud jsme zpět v debt_manage (obchod byl zpracován)
+  // nebo pokud čekáme na odpověď protihráče na trade_offer a my nejsme cíl
+  const tradeOverlayShouldClose =
+    (pa?.type === 'debt_manage' && !tradeDraft) ||
+    (pa?.type === 'trade_offer' && pa?.targetId !== state.myId && pa?.data?.fromId !== state.myId);
+  if (tradeOverlayShouldClose && dom.tradeOverlay) {
+    dom.tradeOverlay.classList.add('hidden');
+  }
+
   const canKeepTradeDraft = pa
     && pa.targetId === state.myId
     && (pa.type === 'wait_roll' || pa.type === 'debt_manage' || pa.type === 'jail_choice');
   if (!canKeepTradeDraft) setTradeDraft(null);
+
+  // --- Auto-open novou příchozí nabídku ---
+  const myIncoming = gameState.tradeOffers?.filter(o => o.targetId === state.myId) || [];
+  const incomingCount = myIncoming.length;
+  if (incomingCount > (state.lastIncomingCount || 0) && !tradeDraft) {
+    state.lastIncomingCount = incomingCount;
+    // Přebít zobrazení a hned otevřít novou nabídku
+    import('./actionsTrade.js').then(({ renderIncomingTradeOffer }) => {
+      renderIncomingTradeOffer(myIncoming[myIncoming.length - 1], gameState);
+    });
+  }
+  state.lastIncomingCount = incomingCount;
+  // ----------------------------------------
 
   if (!pa) {
     if (dom.actionTitle) dom.actionTitle.textContent = 'Akce';
@@ -40,6 +83,7 @@ export function updateActionPanel(gameState) {
       p.textContent = '⏳ Zpracovávám...';
       dom.actionContent.appendChild(p);
     }
+    appendUniversalOffersButton(gameState);
     return;
   }
 
@@ -77,6 +121,27 @@ export function updateActionPanel(gameState) {
       dom.actionContent.innerHTML = '';
       dom.actionContent.appendChild(makeEl('p', 'dim', '...'));
   }
+
+  // Univerzální entry-point pro obchodní nabídky — dostupný v libovolném stavu akčního panelu,
+  // aby hráč po zavření trade modalu (přes X) měl vždy cestu zpět k vyřízení nabídky/protinabídky.
+  appendUniversalOffersButton(gameState);
+}
+
+function appendUniversalOffersButton(gameState) {
+  if (!dom.actionContent) return;
+  // Skip pokud je herní konec — duplicitní button by se míchal s game-over UI
+  if (gameState?.pendingAction?.type === 'game_over') return;
+
+  const myOffers = gameState.tradeOffers?.filter(o =>
+    o.targetId === state.myId || o.fromId === state.myId || o.targetId === null
+  ) || [];
+  if (!myOffers.length) return;
+
+  const btn = makeEl('button', 'btn btn-gold trade-offers-btn', `📩 Obchodní nabídky (${myOffers.length})`);
+  btn.style.marginTop = '8px';
+  btn.style.width = '100%';
+  btn.onclick = () => renderIncomingTradeOffer(myOffers[0], gameState);
+  dom.actionContent.appendChild(btn);
 }
 
 // ─── Rendery jednotlivých akcí ────────────────────────────────────────────────
@@ -94,6 +159,9 @@ function renderWaitRoll(isTargeted, targetPlayer, gameState, me) {
     }
     dom.actionContent.appendChild(makeEl('p', 'action-desc', `Jste na řadě, ${targetPlayer?.name ?? ''}!`));
     dom.actionContent.appendChild(actionBtn('🎲 Hodit kostkou', 'btn-gold btn-lg', () => socket.emit('game:roll')));
+
+    // (Tlačítko pro příchozí nabídky obchodu je univerzálně přidáno v appendUniversalOffersButton)
+
     const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
     if (others.length > 0) {
       const tradeBtn = actionBtn('🤝 Navrhnout obchod', 'btn-outline', () => {
@@ -213,6 +281,12 @@ function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
   if (!isTargeted) {
     dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'řeší své dluhy...'));
     dom.debtOverlay.classList.add('hidden');
+
+    if (targetPlayer && !targetPlayer.bankrupt) {
+      const tradeBtn = actionBtn(`🤝 Nabídnout obchod`, 'btn-outline', () => startTradeWith(targetPlayer.id, gameState, me));
+      tradeBtn.style.marginTop = '10px';
+      dom.actionContent.appendChild(tradeBtn);
+    }
     return;
   }
 

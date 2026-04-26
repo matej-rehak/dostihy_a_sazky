@@ -62,6 +62,7 @@ module.exports = {
       timeLimitEndsAt: this.timeLimitEndsAt,
       gameStartTime: this.gameStartTime,
       turnTimerEndsAt: this.turnTimerEndsAt,
+      tradeOffers: this.tradeOffers,
     };
   },
 

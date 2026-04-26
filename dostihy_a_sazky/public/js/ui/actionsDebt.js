@@ -5,7 +5,7 @@ import { socket } from '../socket.js';
 import { audioManager } from '../audio.js';
 import { buildWaitEl } from './actionsHelpers.js';
 import { showTip, moveTip } from './tooltip.js';
-import { tradeDraft, setTradeDraft, renderTradeBuild } from './actionsTrade.js';
+import { tradeDraft, setTradeDraft, renderTradeBuild, renderIncomingTradeOffer } from './actionsTrade.js';
 
 let selectedIds = [];
 
@@ -56,6 +56,9 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
 
   // Property list
   if (me.properties?.length) {
+    // Filter out horses I no longer own
+    selectedIds = selectedIds.filter(sid => me.properties.includes(sid));
+
     dom.debtContent.appendChild(makeEl('div', 'debt-grid-title', 'Vaše stáje k prodeji (50% ceny):'));
     const grid = makeEl('div', 'trade-grid');
     
@@ -150,12 +153,31 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
       grid.appendChild(card);
     });
     dom.debtContent.appendChild(grid);
+  } else {
+    selectedIds = []; // Reset if no horses
+    dom.debtContent.appendChild(makeEl('div', 'trade-empty-msg', 'Nemáte žádné stáje k prodeji. Musíte vyhlásit bankrot.'));
   }
 
   // Footer buttons
   const footer = makeEl('div', 'debt-footer');
   
   const leftBtns = makeEl('div', 'action-buttons row');
+  leftBtns.style.gap = '10px';
+  
+  // Incoming trade offers count
+  const myOffers = gameState.tradeOffers?.filter(o => o.targetId === state.myId || o.fromId === state.myId || o.targetId === null) || [];
+  if (myOffers.length > 0) {
+    const offerBtn = makeEl('button', 'btn btn-gold', `📩 Obchodní nabídky (${myOffers.length})`);
+    offerBtn.onclick = () => {
+      // Zavřeme dluhový modal a otevřeme nabídku — X vrátí zpět do dluhu
+      dom.debtOverlay.classList.add('hidden');
+      renderIncomingTradeOffer(myOffers[0], gameState, () => {
+        renderDebtModal(isTargeted, targetPlayer, gameState, me);
+      });
+    };
+    leftBtns.appendChild(offerBtn);
+  }
+
   const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
   if (others.length > 0) {
     const tradeBtn = makeEl('button', 'btn btn-outline', '🤝 Vyjednat obchod');
@@ -171,19 +193,19 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
   footer.appendChild(leftBtns);
 
   const rightBtns = makeEl('div', 'action-buttons row');
+  rightBtns.style.gap = '10px';
   
-  if (selectedIds.length > 0) {
-    const confirmBtn = makeEl('button', 'btn btn-green', `Prodat vybrané (+${fmt(projectedTotal)})`);
-    confirmBtn.onclick = () => {
-      if (confirm(`Opravdu chcete prodat vybrané stáje za celkem ${fmt(projectedTotal)} Kč?`)) {
-        audioManager.play('money_out');
-        socket.emit('game:respond', { decision: 'sell_batch', spaceIds: [...selectedIds] });
-        selectedIds = [];
-        dom.debtOverlay.classList.add('hidden');
-      }
-    };
-    rightBtns.appendChild(confirmBtn);
-  }
+  const confirmBtn = makeEl('button', 'btn btn-green', selectedIds.length > 0 ? `Potvrdit prodej (+${fmt(projectedTotal)})` : 'Vyberte k prodeji');
+  if (selectedIds.length === 0) confirmBtn.disabled = true;
+  confirmBtn.onclick = () => {
+    if (confirm(`Opravdu chcete prodat vybrané stáje za celkem ${fmt(projectedTotal)} Kč?`)) {
+      audioManager.play('money_out');
+      socket.emit('game:respond', { decision: 'sell_batch', spaceIds: [...selectedIds] });
+      selectedIds = [];
+      dom.debtOverlay.classList.add('hidden');
+    }
+  };
+  rightBtns.appendChild(confirmBtn);
 
   const bankruptBtn = makeEl('button', 'btn btn-red', 'Vyhlásit bankrot 💀');
   bankruptBtn.onclick = () => {

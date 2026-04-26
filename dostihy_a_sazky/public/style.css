@@ -2849,10 +2849,10 @@ body {
   gap: 12px;
   max-height: 400px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px 8px;
   margin: 0 -8px;
-  flex: 1; /* Push money box down */
-  align-items: start; /* Prevent vertical stretching */
+  align-items: start;
 }
 
 .trade-empty-msg {
@@ -2878,7 +2878,6 @@ body {
   flex-direction: column;
   gap: 8px;
   position: relative;
-  /* overflow: hidden; Removed to allow hover effects if needed, but scale is better */
 }
 
 .trade-card:hover {
@@ -2916,15 +2915,14 @@ body {
 }
 
 .trade-money-box {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-hi);
   border-radius: 12px;
   padding: 14px 16px;
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-top: auto; /* Ensure it stays at bottom if column is flex-1 */
-  box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
+  margin-top: auto; /* Push to bottom of flex column */
 }
 
 .trade-money-label {
@@ -2980,11 +2978,11 @@ body {
   padding: 12px 42px 12px 42px !important;
   font-family: var(--font-h);
   font-size: 1.6rem !important;
-  color: var(--gold) !important;
+  color: #fff !important;
   text-align: right;
-  background: rgba(0, 0, 0, 0.5) !important;
-  border: 1px solid var(--border-hi) !important;
-  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px;
   width: 100%;
   min-width: 180px; /* Wider input */
   box-sizing: border-box;
@@ -2998,20 +2996,37 @@ body {
 }
 
 .trade-col-title select {
-  background: rgba(255, 255, 255, 0.05);
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(0, 0, 0, 0.3) url("data:image/svg+xml;utf8,<svg fill='%23ffd700' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>") no-repeat right 8px center;
+  background-size: 18px;
   border: 1px solid var(--border-hi);
   color: var(--gold);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-family: var(--font-main);
+  border-radius: 8px;
+  padding: 6px 32px 6px 12px;
+  font-family: var(--font-h);
   font-size: 14px;
   cursor: pointer;
   outline: none;
+  transition: all 0.2s ease;
+  min-width: 150px;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
+}
+
+.trade-col-title select:hover {
+  background-color: rgba(0, 0, 0, 0.4);
+  border-color: var(--gold-dim);
 }
 
 .trade-col-title select:focus {
   border-color: var(--gold);
-  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.15), inset 0 2px 10px rgba(0,0,0,0.2);
+}
+
+.trade-col-title select option {
+  background: #111a28; /* Dark premium background for options */
+  color: #fff;
+  padding: 8px;
 }
 
 /* Hide spin buttons */
@@ -3188,7 +3203,8 @@ input:checked + .slider:before {
 
 /* ─── Debt / Bankruptcy Modal ─── */
 .debt-modal {
-  max-width: 800px;
+  width: 90%;
+  max-width: 1000px;
   border-color: var(--red);
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 77, 77, 0.15);
 }
@@ -3247,6 +3263,8 @@ input:checked + .slider:before {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
 }
 
 .debt-card {

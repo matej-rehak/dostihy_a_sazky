@@ -46,6 +46,26 @@ module.exports = {
     p.properties = p.properties.filter(id => id !== spaceId);
     delete this.ownerships[spaceId];
     this._addLog(`📉 ${p.name} prodal(a) ${space.name} za ${fmt(addedValue)} Kč`);
+
+    this._cancelStaleTradeOffers([spaceId]);
+  },
+
+  _cancelStaleTradeOffers(spaceIds) {
+    if (!spaceIds || spaceIds.length === 0) return;
+    const stale = this.tradeOffers.filter(o =>
+      o.offer.horses.some(sid => spaceIds.includes(sid)) || 
+      o.request.horses.some(sid => spaceIds.includes(sid))
+    );
+    if (stale.length > 0) {
+      this.tradeOffers = this.tradeOffers.filter(o =>
+        !o.offer.horses.some(sid => spaceIds.includes(sid)) && 
+        !o.request.horses.some(sid => spaceIds.includes(sid))
+      );
+      stale.forEach(o => {
+        const from = this.players.get(o.fromId);
+        this._addLog(`❌ Nabídka obchodu od ${from?.name ?? '?'} zrušena (kůň změnil majitele).`);
+      });
+    }
   },
 
   _sellMultipleProperties(pid, spaceIds) {
@@ -152,7 +172,8 @@ module.exports = {
   _checkBankrupt(pid) {
     const player = this.players.get(pid);
     if (player && player.balance < 0 && !player.bankrupt) {
-      if (this._calcAssetsValue(pid) + player.balance < 0) {
+      const assets = this._calcAssetsValue(pid);
+      if (assets + player.balance < 0 || (player.properties.length === 0 && player.balance < 0)) {
         this._declareBankrupt(pid);
       }
     }
@@ -162,11 +183,21 @@ module.exports = {
     const player = this.players.get(pid);
     if (!player || player.bankrupt) return;
     player.bankrupt = true;
+    const soldHorses = [...player.properties];
     player.properties.forEach(sid => {
       delete this.ownerships[sid];
       delete this.tokens[sid];
     });
     player.properties = [];
+    this._cancelStaleTradeOffers(soldHorses);
+    
+    // Zrušit VŠECHNY nabídky obchodu spojené s tímto hráčem
+    const playerOffers = this.tradeOffers.filter(o => o.fromId === pid || o.targetId === pid);
+    if (playerOffers.length > 0) {
+      this.tradeOffers = this.tradeOffers.filter(o => o.fromId !== pid && o.targetId !== pid);
+      this._addLog(`❌ Obchodní nabídky hráče ${player.name} byly zrušeny (bankrot).`);
+    }
+
     this._addLog(`💀 ${player.name} je v bankrotu a vypadává ze hry!`);
     this._removeFromTurnOrder(pid);
 

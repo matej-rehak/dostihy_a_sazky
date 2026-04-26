@@ -13,18 +13,29 @@ module.exports = {
   handleRespond(socket, data) {
     if (this.phase !== 'playing') return;
     const pid = socket.playerId;
+
+    const { decision, spaceId, tokenType, offer: clientOffer, request: clientRequest, tradeOfferId } = data || {};
+
+    // Odpovědi na obchodní nabídky ve frontě (tradeOffers) jsou nezávislé na pendingAction —
+    // reaguje na ně cíl nabídky, který typicky NENÍ hráč na tahu. Routujeme dřív, než se aplikuje
+    // guard pendingAction.targetId !== pid, jinak by se odpověď nepatřičně tiše zahodila
+    // (klasický flow i debt_manage / jail_choice).
+    if (tradeOfferId) {
+      return this._handleTradeResponse(pid, decision, tradeOfferId, clientOffer, clientRequest);
+    }
+
     if (!this.pendingAction) return;
 
     // Pro trade_offer s targetId=null (veřejná nabídka) může odpovědět kdokoli kromě iniciátora
     if (this.pendingAction.type === 'trade_offer' && this.pendingAction.targetId === null) {
-      if (this.pendingAction.data.fromId === pid) return; 
+      if (this.pendingAction.data.fromId === pid) return;
     } else if (this.pendingAction.targetId !== pid) {
       return;
     }
 
-    const { decision, spaceId, tokenType, offer: clientOffer, request: clientRequest } = data || {};
     const actionData = this.pendingAction.data || {};
     const action = this.pendingAction.type;
+
     this._setPendingAction(null);
 
     switch (action) {
@@ -38,6 +49,26 @@ module.exports = {
     }
   },
 
+  _handleTradeResponse(pid, decision, tradeOfferId, clientOffer, clientRequest) {
+    const offerIdx = this.tradeOffers.findIndex(o => o.id === tradeOfferId);
+    if (offerIdx === -1) return;
+    const offerData = this.tradeOffers[offerIdx];
+
+    // Iniciátor nesmí odpovídat na vlastní nabídku (zabrání samo-akceptaci protinabídky)
+    if (offerData.fromId === pid) return;
+
+    // Cílená nabídka: jen určený příjemce; veřejná nabídka (targetId === null): kdokoli kromě iniciátora
+    if (offerData.targetId !== null && offerData.targetId !== pid) return;
+
+    // Use existing _handleTradeOffer logic but with cleanup
+    this._handleTradeOffer(pid, decision, offerData, clientOffer, clientRequest);
+
+    // Remove the offer from queue after processing
+    this.tradeOffers = this.tradeOffers.filter(o => o.id !== tradeOfferId);
+
+    this._broadcast();
+  },
+
   _handleDebtManage(pid, decision, spaceId, data) {
     if (decision === 'sell_property' || decision === 'sell_batch' || decision === 'sell_token') {
       if (decision === 'sell_batch' && Array.isArray(data?.spaceIds)) {
@@ -47,6 +78,8 @@ module.exports = {
       } else {
         this._sellProperty(pid, spaceId);
       }
+
+      this._checkBankrupt(pid);
 
       const p = this.players.get(pid);
       if (p.balance < 0) {
@@ -96,6 +129,7 @@ module.exports = {
     this.ownerships[spaceId] = pid;
     p.properties.push(spaceId);
     delete this.tokens[spaceId];
+    this._cancelStaleTradeOffers([spaceId]);
     // Žetony nelze koupit okamžitě po odkupu — až po příštím zastavení
     this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
   },
@@ -182,17 +216,20 @@ module.exports = {
 
       if (valid) {
         this._addLog(`🔄 ${target?.name ?? '?'} posílá protinabídku hráči ${initiator?.name ?? '?'}...`);
-        this._setPendingAction({
-          type: 'trade_offer',
+        const counterOfferId = 'trade_' + Math.random().toString(36).substr(2, 9);
+        const newOffer = {
+          id: counterOfferId,
+          fromId: pid,
           targetId: fromId,
-          data: {
-            fromId: pid,
-            fromContext,
-            turnPlayerId,
-            offer:   { horses: cOfferHorses,   money: cOfferMoney   },
-            request: { horses: cRequestHorses, money: cRequestMoney },
-          },
-        });
+          fromContext,
+          turnPlayerId,
+          offer:   { horses: cOfferHorses,   money: cOfferMoney   },
+          request: { horses: cRequestHorses, money: cRequestMoney },
+          timestamp: Date.now()
+        };
+        // Odstraníme starší nabídku mezi stejnými hráči
+        this.tradeOffers = this.tradeOffers.filter(o => !(o.fromId === pid && o.targetId === fromId));
+        this.tradeOffers.push(newOffer);
         this._broadcast();
         return;
       }
@@ -230,6 +267,10 @@ module.exports = {
       this._checkBankrupt(fromId);
       this._checkBankrupt(pid);
       this._addLog(`🤝 ${initiator.name} a ${target.name} uzavřeli obchod!`);
+      const allTradedHorses = [...offer.horses, ...request.horses];
+      if (allTradedHorses.length > 0) {
+        this._cancelStaleTradeOffers(allTradedHorses);
+      }
     } else {
       this._addLog(`❌ ${target?.name ?? '?'} odmítl(a) nabídku od ${initiator?.name ?? '?'}`);
     }

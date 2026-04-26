@@ -16,8 +16,9 @@ export function updatePlayers(gameState) {
   dom.playersList.innerHTML = '';
 
   const pa = gameState.pendingAction;
-  const canTrade = pa?.targetId === state.myId
+  const meOnTurn = pa?.targetId === state.myId
     && (pa?.type === 'wait_roll' || pa?.type === 'debt_manage' || pa?.type === 'jail_choice');
+  const targetInDebt = pa?.type === 'debt_manage' ? pa.targetId : null;
 
   // Seřadit hráče podle pořadí tahů (turnOrder)
   const sortedPlayers = [...gameState.players];
@@ -80,7 +81,7 @@ export function updatePlayers(gameState) {
     }
     row.appendChild(balWrap);
 
-    if (canTrade && !isMe && !p.bankrupt) {
+    if ((meOnTurn || p.id === targetInDebt) && !isMe && !p.bankrupt) {
       const me = gameState.players.find(pl => pl.id === state.myId);
       const tradeBtn = makeEl('button', 'btn btn-xs btn-trade-icon', '🤝');
       tradeBtn.title = `Navrhnout obchod s ${p.name}`;

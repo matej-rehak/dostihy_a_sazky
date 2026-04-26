@@ -39,6 +39,7 @@ class GameEngine {
     this._turnTimer = null;
     this._timer = null;
     this._resumeFn = null;
+    this.tradeOffers = [];
   }
 
   _setPendingAction(action) {
