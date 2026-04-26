@@ -7,10 +7,15 @@ import { runStarterAnimation } from '../animations/starter.js';
 import { audioManager } from '../audio.js';
 import { actionBtn, buildWaitEl } from './actionsHelpers.js';
 import { tradeDraft, setTradeDraft, renderTradeBuild, renderTradeOffer } from './actionsTrade.js';
+import { renderDebtModal } from './actionsDebt.js';
 
 /** Spustí trade builder pro daného hráče — lze volat z jiných modulů (players.js) */
 export function startTradeWith(targetId, gameState, me) {
-  setTradeDraft({ targetId, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'wait_roll' });
+  const pa = gameState?.pendingAction;
+  const context = pa?.targetId === state.myId && (pa?.type === 'debt_manage' || pa?.type === 'jail_choice')
+    ? pa.type
+    : 'wait_roll';
+  setTradeDraft({ targetId, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context });
   updateActionPanel(gameState);
 }
 
@@ -21,7 +26,10 @@ export function updateActionPanel(gameState) {
 
   if (!pa || pa.type !== 'card_ack') hideCardOverlay();
 
-  if (!pa || pa.type !== 'wait_roll' || pa.targetId !== state.myId) setTradeDraft(null);
+  const canKeepTradeDraft = pa
+    && pa.targetId === state.myId
+    && (pa.type === 'wait_roll' || pa.type === 'debt_manage' || pa.type === 'jail_choice');
+  if (!canKeepTradeDraft) setTradeDraft(null);
 
   if (!pa) {
     if (dom.actionTitle) dom.actionTitle.textContent = 'Akce';
@@ -35,9 +43,12 @@ export function updateActionPanel(gameState) {
     return;
   }
 
-  const isTargeted   = pa.targetId === state.myId;
-  const targetPlayer = gameState.players.find(p => p.id === pa.targetId);
-  const me           = gameState.players.find(p => p.id === state.myId);
+  const me = gameState.players.find(p => p.id === state.myId);
+  const isPublicTrade = pa.type === 'trade_offer' && pa.targetId === null;
+  const isTargeted = isPublicTrade
+    ? (pa.data.fromId !== state.myId)
+    : (pa.targetId === state.myId);
+  const targetPlayer = isPublicTrade ? null : gameState.players.find(p => p.id === pa.targetId);
 
   if (pa.type === 'selecting_starter') {
     if (!state.isStarterAnimating) {
@@ -52,16 +63,16 @@ export function updateActionPanel(gameState) {
   if (!dom.actionTitle || !dom.actionContent) return;
 
   switch (pa.type) {
-    case 'wait_roll':    renderWaitRoll(isTargeted, targetPlayer, gameState, me); break;
+    case 'wait_roll': renderWaitRoll(isTargeted, targetPlayer, gameState, me); break;
     case 'service_roll': renderServiceRoll(isTargeted, targetPlayer, pa); break;
-    case 'buy_offer':    renderBuyOffer(isTargeted, targetPlayer, pa, me); break;
+    case 'buy_offer': renderBuyOffer(isTargeted, targetPlayer, pa, me); break;
     case 'buyout_offer': renderBuyoutOffer(isTargeted, targetPlayer, pa); break;
-    case 'debt_manage':  renderDebtManage(isTargeted, targetPlayer, gameState, me); break;
-    case 'card_ack':     renderCardAck(isTargeted, targetPlayer, pa); break;
-    case 'jail_choice':  renderJailChoice(isTargeted, targetPlayer); break;
+    case 'debt_manage': renderDebtManage(isTargeted, targetPlayer, gameState, me); break;
+    case 'card_ack': renderCardAck(isTargeted, targetPlayer, pa); break;
+    case 'jail_choice': renderJailChoice(isTargeted, targetPlayer, gameState, me); break;
     case 'token_manage': renderTokenManage(isTargeted, targetPlayer, pa, gameState, me); break;
-    case 'trade_offer':  renderTradeOffer(isTargeted, targetPlayer, pa, gameState); break;
-    case 'game_over':    renderGameOver(pa.winner, pa.reason); break;
+    case 'trade_offer': renderTradeOffer(isTargeted, targetPlayer, pa, gameState); break;
+    case 'game_over': renderGameOver(pa.winner, pa.reason); break;
     default:
       dom.actionContent.innerHTML = '';
       dom.actionContent.appendChild(makeEl('p', 'dim', '...'));
@@ -122,7 +133,7 @@ function renderBuyOffer(isTargeted, targetPlayer, pa, me) {
   }
 
   const balAfter = (me?.balance ?? 0) - space.price;
-  const card     = makeEl('div', 'buy-card');
+  const card = makeEl('div', 'buy-card');
 
   const strip = makeEl('div', 'buy-strip');
   strip.style.background = safeColor(space.groupColor ?? '#5b8dee', '#5b8dee');
@@ -170,7 +181,7 @@ function renderBuyOffer(isTargeted, targetPlayer, pa, me) {
 
 function renderBuyoutOffer(isTargeted, targetPlayer, pa) {
   const space = state.boardData[pa.data.spaceId];
-  const cost  = pa.data.buyoutCost;
+  const cost = pa.data.buyoutCost;
   dom.actionTitle.textContent = 'Nepřátelský odkup';
   dom.actionContent.innerHTML = '';
 
@@ -194,72 +205,34 @@ function renderBuyoutOffer(isTargeted, targetPlayer, pa) {
   dom.actionContent.appendChild(btns);
 }
 
+
 function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
-  dom.actionTitle.textContent = 'Dluh! Prodejte majetek';
+  dom.actionTitle.textContent = isTargeted ? 'Bankrot!' : 'Dluhy...';
   dom.actionContent.innerHTML = '';
 
   if (!isTargeted) {
     dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'řeší své dluhy...'));
+    dom.debtOverlay.classList.add('hidden');
     return;
   }
 
-  if (tradeDraft?.context === 'debt_manage') {
-    renderTradeBuild(gameState, me, () => {
-      const self = gameState.players.find(p => p.id === state.myId);
-      renderDebtManage(true, self, gameState, me);
-    });
+  // If trade modal is active for debt_manage, sidebar should show wait
+  if (tradeDraft?.context === 'debt_manage' && dom.tradeOverlay && !dom.tradeOverlay.classList.contains('hidden')) {
+    dom.actionContent.appendChild(makeEl('p', 'dim', 'Probíhá vyjednávání v obchodě...'));
     return;
   }
 
-  const warn = makeEl('div', 'jail-display');
-  warn.style.cssText = 'border-color:var(--red);padding:10px;margin-bottom:10px;border:1px solid var(--red)';
-  warn.textContent = `⚠️ Jste v mínusu: ${fmt(me.balance)} Kč! Musíte prodat majetek nebo zkrachovat.`;
-  dom.actionContent.appendChild(warn);
+  renderDebtModal(true, targetPlayer, gameState, me);
 
-  const list = makeEl('div', 'token-list');
-  list.style.marginTop = '10px';
-
-  if (me.properties?.length) {
-    me.properties.forEach(sid => {
-      const sp  = state.boardData[sid];
-      const tok = gameState.tokens[sid];
-      let val   = Math.floor(sp.price / 2);
-      if (tok) {
-        if (tok.big)        val += Math.floor(sp.bigTokenCost / 2) + Math.floor(sp.tokenCost / 2) * 4;
-        else if (tok.small) val += Math.floor(sp.tokenCost / 2) * tok.small;
-      }
-
-      const item    = makeEl('div', 'token-item');
-      const nameDiv = makeEl('div', 'tok-name', `${sp.name} (+ ${fmt(val)} Kč)`);
-      nameDiv.style.cssText = `border-left:3px solid ${safeColor(sp.groupColor, '#5b8dee')};padding-left:6px`;
-      const btnsDiv = makeEl('div', 'tok-btns');
-      btnsDiv.appendChild(actionBtn('Prodat', 'btn btn-xs btn-outline', () =>
-        socket.emit('game:respond', { decision: 'sell_property', spaceId: sid })
-      ));
-      item.appendChild(nameDiv);
-      item.appendChild(btnsDiv);
-      list.appendChild(item);
-    });
-  } else {
-    list.appendChild(makeEl('p', 'dim', 'Žádný majetek k prodeji.'));
-  }
-  dom.actionContent.appendChild(list);
-
-  const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
-  if (others.length > 0) {
-    const negotiateBtn = actionBtn('🤝 Vyjednat obchod', 'btn-outline', () => {
-      setTradeDraft({ targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'debt_manage' });
-      renderDebtManage(isTargeted, targetPlayer, gameState, me);
-    });
-    negotiateBtn.style.cssText = 'margin-top:10px;width:100%';
-    dom.actionContent.appendChild(negotiateBtn);
-  }
-
-  const bankruptBtn = actionBtn('Vyhlásit bankrot 💀', 'btn-red', () =>
-    socket.emit('game:respond', { decision: 'declare_bankrupt' })
-  );
-  bankruptBtn.style.cssText = 'margin-top:6px;width:100%';
-  dom.actionContent.appendChild(bankruptBtn);
+  // Sidebar backup
+  const info = makeEl('div', 'jail-display');
+  info.style.cssText = 'border-color:var(--red);padding:10px;border:1px solid var(--red)';
+  info.textContent = `⚠️ Máte dluh ${fmt(me.balance)} Kč. Otevřeno okno pro prodej majetku.`;
+  dom.actionContent.appendChild(info);
+  
+  const reopenBtn = actionBtn('Otevřít správu dluhu', 'btn-red btn-sm', () => renderDebtModal(true, targetPlayer, gameState, me));
+  reopenBtn.style.marginTop = '10px';
+  dom.actionContent.appendChild(reopenBtn);
 }
 
 function renderCardAck(isTargeted, targetPlayer, pa) {
@@ -267,16 +240,8 @@ function renderCardAck(isTargeted, targetPlayer, pa) {
   dom.actionTitle.textContent = 'Tažená karta';
   dom.actionContent.innerHTML = '';
 
-  const cardDiv = makeEl('div', 'card-display');
-  cardDiv.appendChild(makeEl('div', 'card-header', label));
-  if (card.amount) {
-    const isPay  = card.type === 'pay' || card.type === 'pay_to_all';
-    const impact = makeEl('div', `card-impact ${isPay ? 'neg' : 'pos'}`);
-    impact.textContent = (isPay ? '-' : '+') + fmt(card.amount) + ' Kč';
-    cardDiv.appendChild(impact);
-  }
-  cardDiv.appendChild(makeEl('div', 'card-text', card.text));
-  dom.actionContent.appendChild(cardDiv);
+  // We don't show the card details in the sidebar anymore since we have the 3D overlay
+  // This avoids the "white field" description the user wants to remove.
 
   if (isTargeted) {
     dom.actionContent.appendChild(
@@ -289,12 +254,20 @@ function renderCardAck(isTargeted, targetPlayer, pa) {
   showCardOverlay(label, card.text, isTargeted, () => socket.emit('game:respond', { decision: 'ok' }));
 }
 
-function renderJailChoice(isTargeted, targetPlayer) {
+function renderJailChoice(isTargeted, targetPlayer, gameState, me) {
   dom.actionTitle.textContent = 'Distanc 🔒';
   dom.actionContent.innerHTML = '';
 
   if (!isTargeted) {
     dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'je v Distancu...'));
+    return;
+  }
+
+  if (tradeDraft?.context === 'jail_choice') {
+    renderTradeBuild(gameState, me, () => {
+      const self = gameState.players.find(p => p.id === state.myId);
+      renderJailChoice(true, self, gameState, me);
+    });
     return;
   }
 
@@ -322,6 +295,15 @@ function renderJailChoice(isTargeted, targetPlayer) {
       })
     );
   }
+  const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
+  if (others.length > 0) {
+    const tradeBtn = actionBtn('🤝  Navrhnout obchod', 'btn-outline', () => {
+      setTradeDraft({ targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'jail_choice' });
+      renderJailChoice(true, targetPlayer, gameState, me);
+    });
+    tradeBtn.style.cssText = 'margin-top:8px;width:100%';
+    jailDiv.appendChild(tradeBtn);
+  }
   dom.actionContent.appendChild(jailDiv);
 }
 
@@ -335,19 +317,19 @@ function renderTokenManage(isTargeted, targetPlayer, pa, gameState, me) {
   }
 
   dom.actionContent.appendChild(makeEl('p', 'token-intro', 'Přidat žetony dostihů ke svým stájím?'));
-  const list     = makeEl('div', 'token-list');
+  const list = makeEl('div', 'token-list');
   const eligible = pa.data.eligible || [];
 
   if (!eligible.length) {
     list.appendChild(makeEl('p', 'dim', 'Nelze přidat žetony (nedostatek peněz nebo žetonů).'));
   } else {
     eligible.forEach(sid => {
-      const sp   = state.boardData[sid];
-      const tok  = gameState.tokens[sid] || { small: 0, big: false };
-      const canS = !tok.big && tok.small < 4  && (me?.balance ?? 0) >= sp.tokenCost;
+      const sp = state.boardData[sid];
+      const tok = gameState.tokens[sid] || { small: 0, big: false };
+      const canS = !tok.big && tok.small < 4 && (me?.balance ?? 0) >= sp.tokenCost;
       const canB = !tok.big && tok.small >= 4 && (me?.balance ?? 0) >= sp.bigTokenCost;
 
-      const item    = makeEl('div', 'token-item');
+      const item = makeEl('div', 'token-item');
       const nameDiv = makeEl('div', 'tok-name', `${sp.name} — ${tok.small}× ${tok.big ? '🏆' : ''}`);
       nameDiv.style.cssText = `border-left:3px solid ${safeColor(sp.groupColor)};padding-left:6px`;
       item.appendChild(nameDiv);

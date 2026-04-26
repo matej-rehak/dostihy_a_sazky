@@ -13,14 +13,22 @@ module.exports = {
   handleRespond(socket, data) {
     if (this.phase !== 'playing') return;
     const pid = socket.playerId;
-    if (!this.pendingAction || this.pendingAction.targetId !== pid) return;
+    if (!this.pendingAction) return;
+
+    // Pro trade_offer s targetId=null (veřejná nabídka) může odpovědět kdokoli kromě iniciátora
+    if (this.pendingAction.type === 'trade_offer' && this.pendingAction.targetId === null) {
+      if (this.pendingAction.data.fromId === pid) return; 
+    } else if (this.pendingAction.targetId !== pid) {
+      return;
+    }
+
     const { decision, spaceId, tokenType, offer: clientOffer, request: clientRequest } = data || {};
     const actionData = this.pendingAction.data || {};
     const action = this.pendingAction.type;
     this._setPendingAction(null);
 
     switch (action) {
-      case 'debt_manage': return this._handleDebtManage(pid, decision, spaceId);
+      case 'debt_manage': return this._handleDebtManage(pid, decision, spaceId, data);
       case 'buy_offer': return this._handleBuyOffer(pid, decision, spaceId);
       case 'buyout_offer': return this._handleBuyoutOffer(pid, decision, actionData);
       case 'card_ack': return this._handleCardAck(pid, actionData);
@@ -30,9 +38,16 @@ module.exports = {
     }
   },
 
-  _handleDebtManage(pid, decision, spaceId) {
-    if (decision === 'sell_property') {
-      this._sellProperty(pid, spaceId);
+  _handleDebtManage(pid, decision, spaceId, data) {
+    if (decision === 'sell_property' || decision === 'sell_batch' || decision === 'sell_token') {
+      if (decision === 'sell_batch' && Array.isArray(data?.spaceIds)) {
+        this._sellMultipleProperties(pid, data.spaceIds);
+      } else if (decision === 'sell_token') {
+        this._removeToken(pid, spaceId);
+      } else {
+        this._sellProperty(pid, spaceId);
+      }
+
       const p = this.players.get(pid);
       if (p.balance < 0) {
         this._setPendingAction({ type: 'debt_manage', targetId: pid });
@@ -220,16 +235,16 @@ module.exports = {
     }
 
     if (fromContext === 'debt_manage') {
-      // Obchod byl zahájen z dluhové situace — _scheduleAction automaticky
-      // vrátí do debt_manage pokud dluh trvá, nebo obnoví hru pokud je krytý
+      // Obchod byl zahájen z dluhové situace
       const fn = this._resumeFn;
       this._resumeFn = null;
       this._scheduleAction(ACTION_DELAY_MS, fn);
     } else {
-      // Vrátit wait_roll hráči, který měl tah (zachová se i přes protinabídky)
+      // Vrátit wait_roll hráči, který měl tah
       this._scheduleAction(ACTION_DELAY_MS, () => {
         if (this.players.get(turnPlayerId) && !this.players.get(turnPlayerId).bankrupt) {
-          this._setPendingAction({ type: 'wait_roll', targetId: turnPlayerId });
+          const resumeType = fromContext === 'jail_choice' ? 'jail_choice' : 'wait_roll';
+          this._setPendingAction({ type: resumeType, targetId: turnPlayerId });
           this._broadcast();
         } else {
           this._advanceTurn();

@@ -9,15 +9,20 @@ module.exports = {
 
     const isWaitRoll = this.pendingAction?.type === 'wait_roll' && this.pendingAction.targetId === fromId;
     const isDebtManage = this.pendingAction?.type === 'debt_manage' && this.pendingAction.targetId === fromId;
+    const isJailChoice = this.pendingAction?.type === 'jail_choice' && this.pendingAction.targetId === fromId;
 
-    if (!isWaitRoll && !isDebtManage) {
-      return socket.emit('game:error', { message: 'Obchod lze navrhnout pouze na vašem tahu nebo při řešení dluhu.' });
+    if (!isWaitRoll && !isDebtManage && !isJailChoice) {
+      return socket.emit('game:error', { message: 'Obchod lze navrhnout pouze na vasem tahu, v Distancu nebo pri reseni dluhu.' });
     }
 
     const initiator = this.players.get(fromId);
-    const target = this.players.get(targetId);
-    if (!target || target.bankrupt || targetId === fromId) {
-      return socket.emit('game:error', { message: 'Neplatný cílový hráč.' });
+    let target = null;
+    
+    if (targetId !== 'public') {
+      target = this.players.get(targetId);
+      if (!target || target.bankrupt || targetId === fromId) {
+        return socket.emit('game:error', { message: 'Neplatny cilovy hrac.' });
+      }
     }
 
     const offerHorses = Array.isArray(offer?.horses) ? offer.horses.map(Number) : [];
@@ -26,26 +31,42 @@ module.exports = {
     const requestMoney = Math.max(0, Number(request?.money) || 0);
 
     if (!isDebtManage && initiator.balance < offerMoney) {
-      return socket.emit('game:error', { message: 'Nemáte dostatek peněz pro tuto nabídku.' });
+      return socket.emit('game:error', { message: 'Nemate dostatek penez pro tuto nabidku.' });
     }
     for (const sid of offerHorses) {
       if (this.ownerships[sid] !== fromId) {
-        return socket.emit('game:error', { message: 'Nabízíte koně, který vám nepatří.' });
+        return socket.emit('game:error', { message: 'Nabizite kone, ktery vam nepatri.' });
       }
     }
-    for (const sid of requestHorses) {
-      if (this.ownerships[sid] !== targetId) {
-        return socket.emit('game:error', { message: 'Požadujete koně, který cílovému hráči nepatří.' });
+    
+    if (targetId !== 'public') {
+      for (const sid of requestHorses) {
+        if (this.ownerships[sid] !== targetId) {
+          return socket.emit('game:error', { message: 'Pozadujete kone, ktery cilovemu hraci nepatri.' });
+        }
+      }
+    } else {
+      if (requestHorses.length > 0) {
+        return socket.emit('game:error', { message: 'U veřejné nabídky můžete žádat pouze peníze.' });
       }
     }
 
-    this._addLog(`🤝 ${initiator.name} navrhuje obchod hráči ${target.name}...`);
+    const fromContext = isDebtManage ? 'debt_manage' : (isJailChoice ? 'jail_choice' : 'wait_roll');
+    const turnPlayerId = this.turnOrder[this.currentTurnIdx];
+
+    if (targetId === 'public') {
+      this._addLog(`📢 ${initiator.name} vystavil(a) veřejnou nabídku!`);
+    } else {
+      this._addLog(`🤝 ${initiator.name} navrhuje obchod hráči ${target.name}...`);
+    }
+
     this._setPendingAction({
       type: 'trade_offer',
-      targetId,
+      targetId: targetId === 'public' ? null : targetId, // null = everyone can respond
       data: {
         fromId,
-        fromContext: isDebtManage ? 'debt_manage' : 'wait_roll',
+        fromContext,
+        turnPlayerId,
         offer: { horses: offerHorses, money: offerMoney },
         request: { horses: requestHorses, money: requestMoney },
       },

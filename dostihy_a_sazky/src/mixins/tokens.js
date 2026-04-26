@@ -53,4 +53,28 @@ module.exports = {
       this._advanceTurn();
     }
   },
+
+  _removeToken(pid, spaceId) {
+    const player = this.players.get(pid);
+    const space = BOARD[spaceId];
+    const tok = this.tokens[spaceId];
+    if (!tok) return;
+
+    if (tok.big) {
+      const val = Math.floor(space.bigTokenCost / 2);
+      player.balance += val;
+      tok.big = false;
+      tok.small = 4;
+      this._addLog(`📉 ${player.name} prodal(a) Hlavní dostih na ${space.name} za ${fmt(val)} Kč`);
+    } else if (tok.small > 0) {
+      const val = Math.floor(space.tokenCost / 2);
+      player.balance += val;
+      tok.small--;
+      this._addLog(`📉 ${player.name} prodal(a) žeton na ${space.name} za ${fmt(val)} Kč`);
+    }
+
+    if (tok.small === 0 && !tok.big) {
+      delete this.tokens[spaceId];
+    }
+  },
 };

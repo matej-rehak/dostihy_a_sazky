@@ -56,6 +56,31 @@
     </div>
   </div>
 
+  <!-- Trade Modal -->
+  <div id="trade-overlay" class="overlays-bg hidden" style="z-index: 10001;">
+    <div class="trade-modal modal-card">
+      <div class="modal-header">
+        <h2 id="trade-title">🤝 Obchod</h2>
+        <button class="btn-icon" id="trade-close-btn" aria-label="Zavřít">✖</button>
+      </div>
+      <div id="trade-content" class="modal-body">
+        <!-- Obsah obchodu bude generován dynamicky -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Debt/Bankruptcy Modal -->
+  <div id="debt-overlay" class="overlays-bg hidden" style="z-index: 10005;">
+    <div class="debt-modal modal-card">
+      <div class="modal-header">
+        <h2 id="debt-title">💸 Řešení dluhu</h2>
+      </div>
+      <div id="debt-content" class="modal-body">
+        <!-- Obsah bude generován dynamicky -->
+      </div>
+    </div>
+  </div>
+
   <div id="app-root"></div>
 
   <script src="/socket.io/socket.io.js"></script>

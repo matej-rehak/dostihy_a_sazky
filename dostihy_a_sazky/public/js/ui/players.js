@@ -15,8 +15,9 @@ export function updatePlayers(gameState) {
   if (!dom.playersList) return;
   dom.playersList.innerHTML = '';
 
-  const canTrade = gameState.pendingAction?.type === 'wait_roll'
-    && gameState.pendingAction?.targetId === state.myId;
+  const pa = gameState.pendingAction;
+  const canTrade = pa?.targetId === state.myId
+    && (pa?.type === 'wait_roll' || pa?.type === 'debt_manage' || pa?.type === 'jail_choice');
 
   // Seřadit hráče podle pořadí tahů (turnOrder)
   const sortedPlayers = [...gameState.players];

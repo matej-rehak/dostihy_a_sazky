@@ -95,6 +95,15 @@ module.exports = {
     return 0;
   },
 
+  _calcTokenValue(spaceId) {
+    const space = BOARD[spaceId];
+    const tok = this.tokens[spaceId];
+    if (!tok) return 0;
+    if (tok.big) return space.bigTokenCost + space.tokenCost * 4;
+    if (tok.small > 0) return space.tokenCost * tok.small;
+    return 0;
+  },
+
   _sendToJail(pid) {
     const player = this.players.get(pid);
     player.position = JAIL_SPACE;

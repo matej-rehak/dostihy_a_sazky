@@ -28,6 +28,13 @@ const IDS = {
   debugBtn:      'debug-btn',
   debugPanel:    'debug-panel',
   debugBody:     'debug-body',
+  tradeOverlay:  'trade-overlay',
+  tradeTitle:    'trade-title',
+  tradeContent:  'trade-content',
+  tradeCloseBtn: 'trade-close-btn',
+  debtOverlay:   'debt-overlay',
+  debtTitle:     'debt-title',
+  debtContent:   'debt-content',
 };
 
 export const dom = {};

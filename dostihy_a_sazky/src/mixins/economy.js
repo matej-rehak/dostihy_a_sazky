@@ -48,6 +48,11 @@ module.exports = {
     this._addLog(`📉 ${p.name} prodal(a) ${space.name} za ${fmt(addedValue)} Kč`);
   },
 
+  _sellMultipleProperties(pid, spaceIds) {
+    if (!Array.isArray(spaceIds)) return;
+    spaceIds.forEach(sid => this._sellProperty(pid, sid));
+  },
+
   _calcRent(spaceId, dice) {
     const space = BOARD[spaceId];
     const owner = this.ownerships[spaceId];
@@ -92,8 +97,19 @@ module.exports = {
     const from = this.players.get(fromId);
     const to = this.players.get(toId);
     if (!from || !to) return;
+
+    // How much can they REALLY pay? 
+    // User requested to use FULL value (100%) because of potential player-to-player trades
+    const canPayTotal = from.balance + this._calcAssetsValue(fromId);
+    const actualTransfer = Math.max(0, Math.min(amount, canPayTotal));
+
     from.balance -= amount;
-    to.balance += amount;
+    to.balance += actualTransfer;
+    
+    if (actualTransfer < amount) {
+      this._addLog(`ℹ️ ${from.name} nemá na plnou splátku, ${to.name} dostává jen ${fmt(actualTransfer)} Kč`);
+    }
+
     this._checkBankrupt(fromId);
   },
 
@@ -101,7 +117,17 @@ module.exports = {
     const p = this.players.get(pid);
     if (!p) return 0;
     return p.properties.reduce((sum, spId) => {
-      return sum + BOARD[spId].price + this._calcTokenSellValue(spId);
+      return sum + BOARD[spId].price + this._calcTokenValue(spId);
+    }, 0);
+  },
+
+  _calcLiquidationValue(pid) {
+    const p = this.players.get(pid);
+    if (!p) return 0;
+    return p.properties.reduce((sum, spId) => {
+      const space = BOARD[spId];
+      const sellVal = Math.floor(space.price / 2) + this._calcTokenSellValue(spId);
+      return sum + sellVal;
     }, 0);
   },
 
