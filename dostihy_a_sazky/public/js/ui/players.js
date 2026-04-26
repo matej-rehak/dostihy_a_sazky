@@ -18,7 +18,17 @@ export function updatePlayers(gameState) {
   const canTrade = gameState.pendingAction?.type === 'wait_roll'
     && gameState.pendingAction?.targetId === state.myId;
 
-  gameState.players.forEach(p => {
+  // Seřadit hráče podle pořadí tahů (turnOrder)
+  const sortedPlayers = [...gameState.players];
+  if (gameState.turnOrder && gameState.turnOrder.length > 0) {
+    sortedPlayers.sort((a, b) => {
+      const idxA = gameState.turnOrder.indexOf(a.id);
+      const idxB = gameState.turnOrder.indexOf(b.id);
+      return idxA - idxB;
+    });
+  }
+
+  sortedPlayers.forEach(p => {
     const isMe = p.id === state.myId;
     const isTurn = p.id === gameState.currentTurnId;
 

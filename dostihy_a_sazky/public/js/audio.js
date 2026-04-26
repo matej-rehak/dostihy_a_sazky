@@ -3,6 +3,7 @@ export const audioManager = {
   musicVolume: 0.5,
   sounds: {},
   musicAudio: null,
+  _musicFadeTimer: null,
 
   init() {
     const storedSfx = localStorage.getItem('ds_sfx_volume');
@@ -44,6 +45,9 @@ export const audioManager = {
     this.load('start_bonus', '/sounds/start_bonus.mp3');
     this.load('pay_rent', '/sounds/pay_rent.mp3');
     this.load('upgrade_star', '/sounds/upgrade_star.mp3');
+
+    // Pozadí hry
+    this.load('music', '/sounds/music.mp3');
   },
 
   load(name, src) {
@@ -117,6 +121,59 @@ export const audioManager = {
     if (this.musicAudio) {
       this.musicAudio.volume = this.musicVolume;
     }
+  },
+
+  playMusic() {
+    if (this.musicAudio) return; // Hudba již hraje
+
+    const src = this.sounds['music'];
+    if (!src) return;
+
+    const audio = src.cloneNode();
+    audio.loop = true;
+    audio.volume = 0;
+    this.musicAudio = audio;
+
+    audio.play().catch(() => {});
+
+    // Fade-in na cílovou hlasitost za 2 sekundy
+    let elapsed = 0;
+    const targetVol = this.musicVolume;
+    const step = 50; // ms
+    if (this._musicFadeTimer) clearInterval(this._musicFadeTimer);
+    this._musicFadeTimer = setInterval(() => {
+      elapsed += step;
+      const progress = Math.min(elapsed / 2000, 1);
+      if (this.musicAudio) this.musicAudio.volume = this._clamp01(progress * targetVol);
+      if (progress >= 1) {
+        clearInterval(this._musicFadeTimer);
+        this._musicFadeTimer = null;
+      }
+    }, step);
+  },
+
+  stopMusic() {
+    if (!this.musicAudio) return;
+
+    const audio = this.musicAudio;
+    if (this._musicFadeTimer) clearInterval(this._musicFadeTimer);
+
+    // Fade-out za 1 sekundu
+    let elapsed = 0;
+    const startVol = audio.volume;
+    const step = 50;
+    this._musicFadeTimer = setInterval(() => {
+      elapsed += step;
+      const progress = Math.min(elapsed / 1000, 1);
+      audio.volume = this._clamp01(startVol * (1 - progress));
+      if (progress >= 1) {
+        clearInterval(this._musicFadeTimer);
+        this._musicFadeTimer = null;
+        audio.pause();
+        audio.currentTime = 0;
+        if (this.musicAudio === audio) this.musicAudio = null;
+      }
+    }, step);
   },
 
   updateVolumeUi() {

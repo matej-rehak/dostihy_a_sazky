@@ -151,6 +151,8 @@ function renderBuyOffer(isTargeted, targetPlayer, pa, me) {
   rest.appendChild(strong);
   body.appendChild(rest);
 
+  if (balAfter < 0) showBrokeOverlay(space.name, Math.abs(balAfter));
+
   const btns = makeEl('div', 'action-buttons row');
   btns.style.marginTop = '6px';
   if (balAfter >= 0) {
@@ -366,6 +368,26 @@ function renderTokenManage(isTargeted, targetPlayer, pa, gameState, me) {
   const endBtn = actionBtn('Ukončit tah →', 'btn-gold', () => socket.emit('game:respond', { decision: 'end_turn' }));
   endBtn.style.marginTop = '4px';
   dom.actionContent.appendChild(endBtn);
+}
+
+function showBrokeOverlay(propertyName, shortage) {
+  const existing = document.getElementById('broke-overlay');
+  if (existing) existing.remove();
+
+  const overlay = makeEl('div', 'broke-overlay');
+  overlay.id = 'broke-overlay';
+
+  const card = makeEl('div', 'broke-card');
+  card.appendChild(makeEl('div', 'broke-icon', '💸'));
+  card.appendChild(makeEl('div', 'broke-title', 'Nedostatek peněz'));
+  card.appendChild(makeEl('div', 'broke-property', propertyName));
+  card.appendChild(makeEl('div', 'broke-amount', `Chybí ${fmt(shortage)} Kč`));
+  overlay.appendChild(card);
+
+  const dismiss = () => overlay.remove();
+  overlay.addEventListener('click', dismiss);
+  document.body.appendChild(overlay);
+  setTimeout(dismiss, 3000);
 }
 
 function renderGameOver(winner, reason) {

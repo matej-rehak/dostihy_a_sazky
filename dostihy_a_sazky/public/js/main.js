@@ -61,9 +61,13 @@ function resetLocalState() {
   state.prevLobbyCount    = 0;
   state.prevBankruptCount = 0;
   state.prevPaJSON        = null;
+  state.prevPhase         = null;
 
   if (state.particleIntervalId) { clearInterval(state.particleIntervalId); state.particleIntervalId = null; }
   if (dom.board) dom.board.innerHTML = '';
+
+  // Zastav pozadí hudbu při návratu do lobby
+  audioManager.stopMusic();
 
   dom.introView.classList.remove('hidden');
   dom.lobbyView.classList.add('hidden');
@@ -106,12 +110,19 @@ function processState(gameState) {
     if (!me && state.allColors.length > 0) {
       buildColorPicker(state.allColors, gameState.players.map(p => p.color));
     }
+    state.prevPhase = 'lobby';
     return;
   }
 
   // ── Herní fáze ──────────────────────────────────────────────────────────────
   dom.lobbyView.classList.add('hidden');
   dom.gameView.classList.remove('hidden');
+
+  // Spustit pozadí hudbu při přechodu lobby → playing (jen jednou)
+  if (state.prevPhase === 'lobby' || state.prevPhase === null) {
+    audioManager.playMusic();
+  }
+  state.prevPhase = gameState.phase;
 
   if (!state.boardBuilt && state.boardData) {
     buildBoard(state.boardData);
@@ -207,11 +218,8 @@ function processState(gameState) {
     }
   });
 
-  // Trackování tahu a zvukových notifikací turnu
+  // Trackování tahu
   if (state.prevTurnId !== gameState.currentTurnId) {
-    if (gameState.currentTurnId === state.myId && gameState.phase === 'playing') {
-      audioManager.play('bell');
-    }
     state.prevTurnId = gameState.currentTurnId;
   }
 
@@ -224,8 +232,12 @@ function processState(gameState) {
       audioManager.play('trade_offer');
     } else if (pa && pa.type === 'game_over') {
       audioManager.play('win');
+      audioManager.stopMusic(); // Zastav hudbu při konci hry
     } else if (pa && pa.type === 'card_ack') {
       audioManager.play('card');
+    } else if (pa && pa.targetId === state.myId && (pa.type === 'wait_roll' || pa.type === 'jail_choice')) {
+      // Oznámení, že jsi na tahu
+      audioManager.play('bell');
     }
     state.prevPaJSON = currentPaJSON;
   }

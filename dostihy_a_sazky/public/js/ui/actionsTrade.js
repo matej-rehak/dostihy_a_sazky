@@ -15,17 +15,21 @@ export function setTradeDraft(v) {
 
 // ─── Trade: builder (sestavení nabídky) ───────────────────────────────────────
 
-export function renderTradeBuild(gameState, me, onCancel) {
-  dom.actionTitle.textContent = '🤝 Navrhnout obchod';
+export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, submitFn = null) {
+  dom.actionTitle.textContent = fixedTargetId ? '🔄 Protinabídka' : '🤝 Navrhnout obchod';
   dom.actionContent.innerHTML = '';
 
   const others = gameState.players.filter(p => !p.bankrupt && p.id !== state.myId);
   if (!others.length) { setTradeDraft(null); return; }
 
-  if (!others.find(p => p.id === tradeDraft.targetId)) tradeDraft.targetId = others[0].id;
+  if (fixedTargetId) {
+    tradeDraft.targetId = fixedTargetId;
+  } else if (!others.find(p => p.id === tradeDraft.targetId)) {
+    tradeDraft.targetId = others[0].id;
+  }
   const target = others.find(p => p.id === tradeDraft.targetId);
 
-  if (others.length > 1) {
+  if (!fixedTargetId && others.length > 1) {
     const sel = makeEl('div', 'trade-target-sel');
     others.forEach(p => {
       const active = p.id === tradeDraft.targetId;
@@ -34,11 +38,16 @@ export function renderTradeBuild(gameState, me, onCancel) {
       btn.addEventListener('click', () => {
         tradeDraft.targetId = p.id;
         tradeDraft.request.horses = [];
-        renderTradeBuild(gameState, me, onCancel);
+        renderTradeBuild(gameState, me, onCancel, fixedTargetId, submitFn);
       });
       sel.appendChild(btn);
     });
     dom.actionContent.appendChild(sel);
+  } else if (fixedTargetId && target) {
+    const info = makeEl('p', 'dim');
+    info.style.cssText = 'margin:0 0 8px;font-size:0.9em';
+    info.textContent = `Pro hráče: ${target.name}`;
+    dom.actionContent.appendChild(info);
   }
 
   // ── Nabízím ──────────────────────────────────────────────────────────────
@@ -117,7 +126,7 @@ export function renderTradeBuild(gameState, me, onCancel) {
 
   const btns = makeEl('div', 'action-buttons row');
   btns.style.marginTop = '8px';
-  btns.appendChild(actionBtn('Potvrdit obchod ✓', 'btn-green', () => {
+  btns.appendChild(actionBtn('Potvrdit ✓', 'btn-green', () => {
     if (tradeDraft.offer.money > myBalance) {
       let errEl = dom.actionContent.querySelector('.trade-money-error');
       if (!errEl) {
@@ -129,12 +138,16 @@ export function renderTradeBuild(gameState, me, onCancel) {
       mi1.focus();
       return;
     }
-    socket.emit('game:trade_init', {
-      targetId: tradeDraft.targetId,
+    const payload = {
       offer:   { horses: [...tradeDraft.offer.horses],   money: tradeDraft.offer.money   },
       request: { horses: [...tradeDraft.request.horses], money: tradeDraft.request.money },
-    });
-    setTradeDraft(null);
+    };
+    if (submitFn) {
+      submitFn(payload);
+    } else {
+      socket.emit('game:trade_init', { targetId: tradeDraft.targetId, ...payload });
+      setTradeDraft(null);
+    }
   }));
   btns.appendChild(actionBtn('Zrušit', 'btn-outline', () => {
     setTradeDraft(null);
@@ -156,6 +169,8 @@ export function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
 
   const { fromId, offer, request } = pa.data;
   const initiator = gameState.players.find(p => p.id === fromId);
+  const incomingOffer = offer;
+  const incomingRequest = request;
 
   const recSec = makeEl('div', 'trade-section');
   recSec.appendChild(makeEl('div', 'trade-section-title', `📤 ${initiator?.name ?? '?'} nabízí:`));
@@ -195,5 +210,34 @@ export function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
     audioManager.play('trade_reject');
     socket.emit('game:respond', { decision: 'reject' });
   }));
+  const counterBtn = actionBtn('🔄 Protinabídka', 'btn-outline', () => {
+    const me = gameState.players.find(p => p.id === state.myId);
+    setTradeDraft({
+      targetId: fromId,
+      offer:   { horses: [...(incomingRequest.horses || [])], money: incomingRequest.money || 0 },
+      request: { horses: [...(incomingOffer.horses  || [])], money: incomingOffer.money  || 0 },
+      context: 'counter',
+    });
+    renderCounterBuild(gameState, me, pa);
+  });
+  counterBtn.style.marginTop = '4px';
   dom.actionContent.appendChild(btns);
+  dom.actionContent.appendChild(counterBtn);
+}
+
+// ─── Counter-offer builder ────────────────────────────────────────────────────
+
+function renderCounterBuild(gameState, me, pa) {
+  const { fromId } = pa.data;
+  const initiator = gameState.players.find(p => p.id === fromId);
+  renderTradeBuild(
+    gameState,
+    me,
+    () => renderTradeOffer(true, initiator, pa, gameState),
+    fromId,
+    ({ offer, request }) => {
+      socket.emit('game:respond', { decision: 'counter', offer, request });
+      setTradeDraft(null);
+    }
+  );
 }

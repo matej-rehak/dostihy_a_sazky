@@ -48,7 +48,7 @@ class GameEngine {
       this._turnTimer = null;
       this.turnTimerEndsAt = null;
     }
-    if (action && this.config.turnTimeLimitSeconds > 0 && action.type !== 'debt_manage') {
+    if (action && this.config.turnTimeLimitSeconds > 0 && action.type !== 'debt_manage' && action.type !== 'trade_offer') {
       const delayMs = this.config.turnTimeLimitSeconds * 1000;
       this.turnTimerEndsAt = Date.now() + delayMs;
       this._turnTimer = setTimeout(() => {

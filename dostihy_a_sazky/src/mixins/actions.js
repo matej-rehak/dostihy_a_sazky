@@ -14,7 +14,7 @@ module.exports = {
     if (this.phase !== 'playing') return;
     const pid = socket.playerId;
     if (!this.pendingAction || this.pendingAction.targetId !== pid) return;
-    const { decision, spaceId, tokenType } = data || {};
+    const { decision, spaceId, tokenType, offer: clientOffer, request: clientRequest } = data || {};
     const actionData = this.pendingAction.data || {};
     const action = this.pendingAction.type;
     this._setPendingAction(null);
@@ -26,7 +26,7 @@ module.exports = {
       case 'card_ack': return this._handleCardAck(pid, actionData);
       case 'jail_choice': return this._handleJailChoice(pid, decision);
       case 'token_manage': return this._handleTokenManage(pid, decision, spaceId, tokenType);
-      case 'trade_offer': return this._handleTradeOffer(pid, decision, actionData);
+      case 'trade_offer': return this._handleTradeOffer(pid, decision, actionData, clientOffer, clientRequest);
     }
   },
 
@@ -142,10 +142,47 @@ module.exports = {
     }
   },
 
-  _handleTradeOffer(pid, decision, actionData) {
+  _handleTradeOffer(pid, decision, actionData, clientOffer, clientRequest) {
     const { fromId, offer, request, fromContext } = actionData;
+    const turnPlayerId = actionData.turnPlayerId || fromId;
     const initiator = this.players.get(fromId);
     const target = this.players.get(pid);
+
+    if (decision === 'counter' && clientOffer && clientRequest) {
+      const cOfferHorses   = Array.isArray(clientOffer.horses)   ? clientOffer.horses.map(Number)   : [];
+      const cRequestHorses = Array.isArray(clientRequest.horses) ? clientRequest.horses.map(Number) : [];
+      const cOfferMoney    = Math.max(0, Number(clientOffer.money)   || 0);
+      const cRequestMoney  = Math.max(0, Number(clientRequest.money) || 0);
+
+      let valid = true;
+      for (const sid of cOfferHorses) {
+        if (this.ownerships[sid] !== pid) { valid = false; break; }
+      }
+      if (valid) {
+        for (const sid of cRequestHorses) {
+          if (this.ownerships[sid] !== fromId) { valid = false; break; }
+        }
+      }
+      if (valid && cOfferMoney > 0 && target && target.balance < cOfferMoney) valid = false;
+
+      if (valid) {
+        this._addLog(`🔄 ${target?.name ?? '?'} posílá protinabídku hráči ${initiator?.name ?? '?'}...`);
+        this._setPendingAction({
+          type: 'trade_offer',
+          targetId: fromId,
+          data: {
+            fromId: pid,
+            fromContext,
+            turnPlayerId,
+            offer:   { horses: cOfferHorses,   money: cOfferMoney   },
+            request: { horses: cRequestHorses, money: cRequestMoney },
+          },
+        });
+        this._broadcast();
+        return;
+      }
+      decision = 'decline';
+    }
 
     if (decision === 'accept' && initiator && target) {
       if (request.money > 0 && target.balance < request.money) {
@@ -189,10 +226,10 @@ module.exports = {
       this._resumeFn = null;
       this._scheduleAction(ACTION_DELAY_MS, fn);
     } else {
-      // Vrátit wait_roll původnímu hráči (obchod netrhá tah)
+      // Vrátit wait_roll hráči, který měl tah (zachová se i přes protinabídky)
       this._scheduleAction(ACTION_DELAY_MS, () => {
-        if (this.players.get(fromId) && !this.players.get(fromId).bankrupt) {
-          this._setPendingAction({ type: 'wait_roll', targetId: fromId });
+        if (this.players.get(turnPlayerId) && !this.players.get(turnPlayerId).bankrupt) {
+          this._setPendingAction({ type: 'wait_roll', targetId: turnPlayerId });
           this._broadcast();
         } else {
           this._advanceTurn();

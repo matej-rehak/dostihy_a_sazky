@@ -64,6 +64,68 @@
   }
 }
 
+/* ─── Broke Overlay (nedostatek peněz) ─── */
+.broke-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  animation: brokeIn 0.25s ease;
+}
+
+@keyframes brokeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.broke-card {
+  background: var(--bg-card);
+  border: 2px solid var(--red);
+  border-radius: 16px;
+  padding: 32px 48px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 77, 77, 0.2);
+  pointer-events: none;
+}
+
+.broke-icon {
+  font-size: 52px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.broke-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+
+.broke-property {
+  font-size: 14px;
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+
+.broke-amount {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
 /* ─── Starter Animation ─── */
 #starter-overlay {
   position: fixed;
@@ -1544,8 +1606,13 @@ body {
 
 /* Players section */
 #players-section {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Klíčové: povolí smrštění sekce */
+  max-height: 350px; /* Pojistka: sekce hráčů nezabere víc než 350px */
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
 }
 
 #players-list {
@@ -1553,6 +1620,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  flex: 1; /* Vyplní prostor sekce */
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .08) transparent;
 }
 
 .player-row {
@@ -1911,6 +1982,55 @@ body {
   justify-content: center;
 }
 
+.broke-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  animation: toastIn .25s ease;
+}
+
+.broke-card {
+  background: var(--bg-card);
+  border: 2px solid var(--red);
+  border-radius: 16px;
+  padding: 32px 48px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 77, 77, 0.2);
+  pointer-events: none;
+}
+
+.broke-icon {
+  font-size: 52px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.broke-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+
+.broke-property {
+  font-size: 14px;
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+
+.broke-amount {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
 .card-3d-scene {
   width: 280px;
   height: 400px;
@@ -2090,7 +2210,7 @@ body {
 /* Log section */
 #log-section {
   flex-shrink: 0;
-  height: 190px;
+  height: 160px; /* Sníženo ze 190px */
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--border);
@@ -2698,3 +2818,4 @@ body {
   border-top: 1px solid var(--border);
   margin-top: 4px;
 }
+
