@@ -37,6 +37,7 @@ module.exports = {
       properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: false, disconnected: false,
       canFly: false,
+      rerollsLeft: 0,
     };
     this.players.set(socket.playerId, player);
     this._addLog(`🐎 ${name} se připojil(a) k hře`);
@@ -72,6 +73,16 @@ module.exports = {
 
     const airportFee = Number(nextConfig.airportFee);
     this.config.airportFee = Number.isFinite(airportFee) ? Math.max(0, Math.round(airportFee)) : 2000;
+
+    const rerollsPerGame = Number(nextConfig.rerollsPerGame);
+    this.config.rerollsPerGame = Number.isFinite(rerollsPerGame)
+      ? Math.max(0, Math.min(20, Math.round(rerollsPerGame)))
+      : 0;
+
+    const rerollConfirmSeconds = Number(nextConfig.rerollConfirmSeconds);
+    this.config.rerollConfirmSeconds = Number.isFinite(rerollConfirmSeconds)
+      ? Math.max(1, Math.min(30, Math.round(rerollConfirmSeconds)))
+      : 5;
 
     this._broadcast();
   },
@@ -154,7 +165,10 @@ module.exports = {
       clearTimeout(this._gameTimeLimitTimer);
       this._gameTimeLimitTimer = null;
     }
-    this.players.forEach(p => p.balance = this.config.startBalance);
+    this.players.forEach(p => {
+      p.balance = this.config.startBalance;
+      p.rerollsLeft = this.config.rerollsPerGame;
+    });
 
     const keys = [...this.players.keys()];
     for (let i = keys.length - 1; i > 0; i--) {

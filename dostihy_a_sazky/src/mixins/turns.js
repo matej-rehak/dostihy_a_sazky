@@ -1,7 +1,7 @@
 'use strict';
 
 const BOARD = require('../data/boardData');
-const { ACTION_DELAY_MS, roll, fmt } = require('../constants');
+const { ACTION_DELAY_MS, BOARD_SIZE, roll, fmt } = require('../constants');
 
 module.exports = {
 
@@ -56,9 +56,24 @@ module.exports = {
         // Dvojitá šestka → jde do Distancu z libovolného místa
         player.rollAccumulator = 0;
         this._addLog(`🎲 ${player.name} hodil(a) 6 dvakrát za sebou → jde do Distancu! 🔒`);
-        this._setPendingAction(null);
-        this._sendToJail(pid);
-        this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
+        if (this.config.rerollsPerGame > 0 && player.rerollsLeft > 0 && this.config.rerollConfirmSeconds > 0) {
+          const totalMs = this.config.rerollConfirmSeconds * 1000;
+          this._setPendingAction({
+            type: 'confirm_roll',
+            targetId: pid,
+            data: {
+              outcome: 'jail',
+              rerollsLeft: player.rerollsLeft,
+              deadlineAt: Date.now() + totalMs,
+              totalMs,
+            },
+          });
+          this._broadcast();
+        } else {
+          this._setPendingAction(null);
+          this._sendToJail(pid);
+          this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
+        }
       } else {
         player.rollAccumulator = prevAccumulator + dice;
         if (dice === 6) {
@@ -69,9 +84,27 @@ module.exports = {
           const totalSteps = player.rollAccumulator;
           player.rollAccumulator = 0;
           this._addLog(`🎲 ${player.name} hodil(a) ${dice}. Celkem se posouvá o ${totalSteps} polí.`);
-          player.moveDirection = 1;
-          this._setPendingAction(null);
-          this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, totalSteps));
+          if (this.config.rerollsPerGame > 0 && player.rerollsLeft > 0 && this.config.rerollConfirmSeconds > 0) {
+            const targetPos = (player.position + totalSteps) % BOARD_SIZE;
+            const totalMs = this.config.rerollConfirmSeconds * 1000;
+            this._setPendingAction({
+              type: 'confirm_roll',
+              targetId: pid,
+              data: {
+                outcome: 'move',
+                steps: totalSteps,
+                targetPos,
+                rerollsLeft: player.rerollsLeft,
+                deadlineAt: Date.now() + totalMs,
+                totalMs,
+              },
+            });
+            this._broadcast();
+          } else {
+            player.moveDirection = 1;
+            this._setPendingAction(null);
+            this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, totalSteps));
+          }
         }
       }
     } else if (this.pendingAction.type === 'service_roll') {

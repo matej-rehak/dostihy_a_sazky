@@ -30,7 +30,7 @@ class GameEngine {
     this.round = 1;
     this.financeCards = FinanceDeck();
     this.nahodaCards = NahodaDeck();
-    this.config = { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', airportFee: 2000 };
+    this.config = { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', airportFee: 2000, rerollsPerGame: 0, rerollConfirmSeconds: 5 };
     this.timeLimitEndsAt = null;
     this.timeLimitExpired = false;
     this.gameStartTime = null;
@@ -40,6 +40,7 @@ class GameEngine {
     this._timer = null;
     this._resumeFn = null;
     this.tradeOffers = [];
+    this._rerollTimer = null;
   }
 
   _setPendingAction(action) {
@@ -49,6 +50,10 @@ class GameEngine {
       this._turnTimer = null;
       this.turnTimerEndsAt = null;
     }
+    if (this._rerollTimer) {
+      clearTimeout(this._rerollTimer);
+      this._rerollTimer = null;
+    }
     if (action && this.config.turnTimeLimitSeconds > 0 && action.type !== 'debt_manage' && action.type !== 'trade_offer') {
       const delayMs = this.config.turnTimeLimitSeconds * 1000;
       this.turnTimerEndsAt = Date.now() + delayMs;
@@ -57,6 +62,18 @@ class GameEngine {
         this.turnTimerEndsAt = null;
         if (typeof this._handleTurnTimeout === 'function') {
           this._handleTurnTimeout();
+        }
+      }, delayMs);
+    }
+    if (action && action.type === 'confirm_roll' && this.config.rerollConfirmSeconds > 0) {
+      const targetId = action.targetId;
+      const delayMs = this.config.rerollConfirmSeconds * 1000;
+      this._rerollTimer = setTimeout(() => {
+        this._rerollTimer = null;
+        if (this.pendingAction?.type === 'confirm_roll' && this.pendingAction.targetId === targetId) {
+          if (typeof this._handleConfirmRoll === 'function') {
+            this._handleConfirmRoll(targetId, 'confirm');
+          }
         }
       }, delayMs);
     }

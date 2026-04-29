@@ -48,6 +48,7 @@ module.exports = {
       case 'trade_offer': return this._handleTradeOffer(pid, decision, actionData, clientOffer, clientRequest);
       case 'airport_choice': return this._handleAirportChoice(pid, decision);
       case 'airport_select_target': return this._handleAirportSelectTarget(pid, decision, spaceId);
+      case 'confirm_roll': return this._handleConfirmRoll(pid, decision);
     }
   },
 
