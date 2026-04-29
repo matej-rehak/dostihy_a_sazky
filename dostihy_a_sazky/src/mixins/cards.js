@@ -97,17 +97,35 @@ module.exports = {
 
       case 'move_nearest': {
         const oldPos = player.position;
-        let found = -1;
-        for (let i = 1; i < BOARD_SIZE; i++) {
-          const idx = (player.position + i) % BOARD_SIZE;
+        const matches = (idx) => {
           const s = BOARD[idx];
-          if (card.serviceType && s.serviceType === card.serviceType) { found = idx; break; }
-          if (card.category === 'type' && s.type === card.value) { found = idx; break; }
+          if (card.serviceType && s.serviceType === card.serviceType) return true;
+          if (card.category === 'type' && s.type === card.value) return true;
+          return false;
+        };
+        let foundFwd = -1, distFwd = BOARD_SIZE;
+        let foundBwd = -1, distBwd = BOARD_SIZE;
+        for (let i = 1; i < BOARD_SIZE; i++) {
+          if (foundFwd === -1) {
+            const idx = (player.position + i) % BOARD_SIZE;
+            if (matches(idx)) { foundFwd = idx; distFwd = i; }
+          }
+          if (foundBwd === -1) {
+            const idx = (player.position - i + BOARD_SIZE) % BOARD_SIZE;
+            if (matches(idx)) { foundBwd = idx; distBwd = i; }
+          }
+          if (foundFwd !== -1 && foundBwd !== -1) break;
         }
-        if (found !== -1) {
-          player.position = found;
-          player.moveDirection = 1;
-          if (card.passStart && player.position < oldPos) {
+        let chosen = -1, direction = 1;
+        if (foundFwd !== -1 && (foundBwd === -1 || distFwd <= distBwd)) {
+          chosen = foundFwd; direction = 1;
+        } else if (foundBwd !== -1) {
+          chosen = foundBwd; direction = -1;
+        }
+        if (chosen !== -1) {
+          player.position = chosen;
+          player.moveDirection = direction;
+          if (card.passStart && direction === 1 && chosen < oldPos) {
             player.balance += this.config.startBonus;
             this._addLog(`${player.name} prošel(a) START — +${fmt(this.config.startBonus)} Kč`);
           }
