@@ -68,15 +68,16 @@
 .broke-overlay {
   position: fixed;
   inset: 0;
-  z-index: 600;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  z-index: 10020;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  animation: brokeIn 0.25s ease;
+  padding: 24px;
+  animation: fadeIn 0.4s ease-out;
 }
 
 @keyframes brokeIn {
@@ -92,38 +93,58 @@
 }
 
 .broke-card {
+  width: min(560px, 100%);
   background: var(--bg-card);
-  border: 2px solid var(--red);
-  border-radius: 16px;
-  padding: 32px 48px;
+  border: 1px solid rgba(255, 77, 77, 0.45);
+  border-radius: 22px;
+  padding: clamp(28px, 5vw, 48px);
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 77, 77, 0.2);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.82), 0 0 42px rgba(255, 77, 77, 0.18);
   pointer-events: none;
+  animation: winnerReveal 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .broke-icon {
-  font-size: 52px;
+  font-size: clamp(44px, 8vw, 64px);
   line-height: 1;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 0 18px rgba(255, 77, 77, 0.35));
 }
 
 .broke-title {
-  font-size: 18px;
-  font-weight: 700;
+  font-family: var(--font-h);
+  font-size: clamp(26px, 5vw, 36px);
+  letter-spacing: 4px;
   color: var(--red);
-  margin-bottom: 6px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  text-shadow: 0 0 22px rgba(255, 77, 77, 0.26);
 }
 
 .broke-property {
-  font-size: 14px;
+  font-family: var(--font-h);
+  font-size: clamp(46px, 10vw, 82px);
+  letter-spacing: 3px;
   color: var(--gold);
-  margin-bottom: 10px;
+  line-height: 0.95;
+  margin-bottom: 18px;
+  text-shadow: 0 0 36px rgba(255, 215, 0, 0.22);
+  text-transform: uppercase;
 }
 
 .broke-amount {
-  font-size: 22px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 215, 0, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 215, 0, 0.08);
+  font-size: clamp(18px, 4vw, 24px);
+  font-weight: 800;
   color: var(--text);
+  box-shadow: inset 0 0 18px rgba(255, 215, 0, 0.06);
 }
 
 /* ─── Starter Animation ─── */
@@ -2025,50 +2046,71 @@ select.text-input option {
 .broke-overlay {
   position: fixed;
   inset: 0;
-  z-index: 600;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  z-index: 10020;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  animation: toastIn .25s ease;
+  padding: 24px;
+  animation: fadeIn 0.4s ease-out;
 }
 
 .broke-card {
+  width: min(560px, 100%);
   background: var(--bg-card);
-  border: 2px solid var(--red);
-  border-radius: 16px;
-  padding: 32px 48px;
+  border: 1px solid rgba(255, 77, 77, 0.45);
+  border-radius: 22px;
+  padding: clamp(28px, 5vw, 48px);
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 77, 77, 0.2);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.82), 0 0 42px rgba(255, 77, 77, 0.18);
   pointer-events: none;
+  animation: winnerReveal 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .broke-icon {
-  font-size: 52px;
+  font-size: clamp(44px, 8vw, 64px);
   line-height: 1;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 0 18px rgba(255, 77, 77, 0.35));
 }
 
 .broke-title {
-  font-size: 18px;
-  font-weight: 700;
+  font-family: var(--font-h);
+  font-size: clamp(26px, 5vw, 36px);
+  letter-spacing: 4px;
   color: var(--red);
-  margin-bottom: 6px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  text-shadow: 0 0 22px rgba(255, 77, 77, 0.26);
 }
 
 .broke-property {
-  font-size: 14px;
+  font-family: var(--font-h);
+  font-size: clamp(46px, 10vw, 82px);
+  letter-spacing: 3px;
   color: var(--gold);
-  margin-bottom: 10px;
+  line-height: 0.95;
+  margin-bottom: 18px;
+  text-shadow: 0 0 36px rgba(255, 215, 0, 0.22);
+  text-transform: uppercase;
 }
 
 .broke-amount {
-  font-size: 22px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 215, 0, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 215, 0, 0.08);
+  font-size: clamp(18px, 4vw, 24px);
+  font-weight: 800;
   color: var(--text);
+  box-shadow: inset 0 0 18px rgba(255, 215, 0, 0.06);
 }
 
 .card-3d-scene {

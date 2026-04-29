@@ -87,6 +87,17 @@ module.exports = {
             this._broadcast();
           } else {
             this._addLog(`${player.name} nemá dostatek prostředků ke koupi ${space.name} (${fmt(space.price)} Kč)`);
+            this._setPendingAction({
+              type: 'insufficient_funds',
+              targetId: pid,
+              data: {
+                spaceId: space.id,
+                kind: 'property',
+                price: space.price,
+                balance: player.balance,
+                shortage: Math.max(0, space.price - player.balance),
+              },
+            });
             this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
           }
         } else if (owner === pid) {

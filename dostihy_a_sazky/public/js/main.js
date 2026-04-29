@@ -57,6 +57,7 @@ function resetLocalState() {
   state.prevBalances      = {};
   state.allColors         = [];
   state.isStarterAnimating = false;
+  state.lastInsufficientFundsKey = null;
   state.prevDiceId        = null;
   state.prevTurnId        = null;
   state.prevLobbyCount    = 0;

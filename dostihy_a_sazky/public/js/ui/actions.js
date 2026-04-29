@@ -104,11 +104,16 @@ export function updateActionPanel(gameState) {
     document.getElementById('starter-overlay')?.classList.add('hidden');
   }
 
+  if (pa.type !== 'insufficient_funds' && pa.type !== 'airport_choice' && pa.type !== 'airport_select_target') {
+    state.lastInsufficientFundsKey = null;
+  }
+
   if (!dom.actionTitle || !dom.actionContent) return;
 
   switch (pa.type) {
     case 'wait_roll': renderWaitRoll(isTargeted, targetPlayer, gameState, me); break;
     case 'service_roll': renderServiceRoll(isTargeted, targetPlayer, pa); break;
+    case 'insufficient_funds': renderInsufficientFunds(isTargeted, targetPlayer, pa); break;
     case 'buy_offer': renderBuyOffer(isTargeted, targetPlayer, pa, me); break;
     case 'buyout_offer': renderBuyoutOffer(isTargeted, targetPlayer, pa); break;
     case 'debt_manage': renderDebtManage(isTargeted, targetPlayer, gameState, me); break;
@@ -148,6 +153,44 @@ function appendUniversalOffersButton(gameState) {
 
 // ─── Rendery jednotlivých akcí ────────────────────────────────────────────────
 
+function renderInsufficientFunds(isTargeted, targetPlayer, pa) {
+  const space = state.boardData[pa.data.spaceId];
+  const shortage = pa.data.shortage ?? Math.max(0, (pa.data.price ?? 0) - (pa.data.balance ?? 0));
+  const kind = pa.data.kind ?? 'property';
+  const subject = kind === 'token'
+    ? (pa.data.tokenType === 'big' ? `hlavní dostih na ${space?.name ?? 'stáji'}` : `žeton na ${space?.name ?? 'stáji'}`)
+    : `${space?.name ?? 'toto pole'}`;
+
+  dom.actionTitle.textContent = isTargeted ? 'Nedostatek pen\u011bz' : '\u010cek\u00e1 se...';
+  dom.actionContent.innerHTML = '';
+
+  if (!isTargeted) {
+    dom.actionContent.appendChild(buildWaitEl(targetPlayer, `nemá dost peněz na ${kind === 'token' ? subject : `koupi ${subject}`}...`));
+    return;
+  }
+
+  const key = `${pa.type}:${kind}:${pa.targetId}:${pa.data.spaceId}:${pa.data.price}:${pa.data.balance}`;
+  if (state.lastInsufficientFundsKey !== key) {
+    state.lastInsufficientFundsKey = key;
+    showBrokeOverlay(kind === 'token' ? subject : (space?.name ?? 'Toto pole'), shortage);
+  }
+
+  const info = makeEl('div', 'jail-display');
+  info.style.cssText = 'border-color:var(--red);padding:10px;margin-bottom:10px;border:1px solid var(--red)';
+  info.appendChild(makeEl('div', 'jail-icon', '\ud83d\udcb8'));
+  const text = makeEl('p', 'jail-text');
+  text.appendChild(document.createTextNode(kind === 'token'
+    ? `Na ${subject} nemáš dost peněz.`
+    : `Na koupi ${subject} nemáš dost peněz.`
+  ));
+  text.appendChild(document.createElement('br'));
+  text.appendChild(document.createTextNode('Chyb\u00ed: '));
+  const amount = makeEl('strong', '', `${fmt(shortage)} Kč`);
+  amount.style.color = 'var(--red)';
+  text.appendChild(amount);
+  info.appendChild(text);
+  dom.actionContent.appendChild(info);
+}
 function renderWaitRoll(isTargeted, targetPlayer, gameState, me) {
   dom.actionTitle.textContent = isTargeted ? 'Váš tah' : 'Čeká se...';
   dom.actionContent.innerHTML = '';
@@ -305,7 +348,7 @@ function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
   info.style.cssText = 'border-color:var(--red);padding:10px;border:1px solid var(--red)';
   info.textContent = `⚠️ Máte dluh ${fmt(me.balance)} Kč. Otevřeno okno pro prodej majetku.`;
   dom.actionContent.appendChild(info);
-  
+
   // Idempotentní toggle — modal lze zavřít křížkem a znovu otevřít opakovaně, proto bez auto-disable.
   const reopenBtn = makeEl('button', 'btn btn-red btn-sm', 'Otevřít správu dluhu');
   reopenBtn.style.marginTop = '10px';
@@ -434,26 +477,41 @@ function renderTokenManage(isTargeted, targetPlayer, pa, gameState, me) {
 }
 
 function renderAirportChoice(isTargeted, targetPlayer, pa, me) {
-  dom.actionTitle.textContent = isTargeted ? 'Letiště ✈️' : 'Čeká se...';
+  dom.actionTitle.textContent = isTargeted ? 'Leti\u0161t\u011b \u2708\ufe0f' : '\u010cek\u00e1 se...';
   dom.actionContent.innerHTML = '';
 
   if (!isTargeted) {
-    dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'rozhoduje se na letišti...'));
+    dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'rozhoduje se na leti\u0161ti...'));
     return;
   }
 
   const fee = pa.data?.fee ?? 0;
   const hasMoney = (me?.balance ?? 0) >= fee;
+  const shortage = Math.max(0, fee - (me?.balance ?? 0));
 
   const info = makeEl('div', 'jail-display');
   info.style.cssText = 'border-color:var(--gold);padding:10px;margin-bottom:10px;border:1px solid var(--gold)';
-  info.appendChild(document.createTextNode('Stojíš na letišti. Můžeš letět na libovolné pole za poplatek '));
+  info.appendChild(document.createTextNode('Stoj\u00ed\u0161 na leti\u0161ti. M\u016f\u017ee\u0161 let\u011bt na libovoln\u00e9 pole za poplatek '));
   info.appendChild(makeEl('strong', '', `${fmt(fee)} Kč`));
   info.appendChild(document.createTextNode(', nebo hodit kostkou jako obvykle.'));
+  if (!hasMoney) {
+    info.appendChild(document.createElement('br'));
+    const warn = makeEl('span', '', `Nemáš dost peněz na let. Chybí ${fmt(shortage)} Kč.`);
+    warn.style.color = 'var(--red)';
+    info.appendChild(warn);
+  }
   dom.actionContent.appendChild(info);
 
+  if (!hasMoney) {
+    const key = `airport:${state.myId}:${fee}:${me?.balance ?? 0}`;
+    if (state.lastInsufficientFundsKey !== key) {
+      state.lastInsufficientFundsKey = key;
+      showBrokeOverlay('Leti\u0161t\u011b', shortage);
+    }
+  }
+
   const btns = makeEl('div', 'action-buttons');
-  btns.appendChild(actionBtn('🎲 Hodit kostkou', 'btn-gold btn-lg', () =>
+  btns.appendChild(actionBtn('\ud83c\udfb2 Hodit kostkou', 'btn-gold btn-lg', () =>
     socket.emit('game:respond', { decision: 'roll' })
   ));
 
@@ -463,12 +521,11 @@ function renderAirportChoice(isTargeted, targetPlayer, pa, me) {
   });
   if (!hasMoney) {
     flyBtn.disabled = true;
-    flyBtn.title = 'Nemáš dostatek peněz';
+    flyBtn.title = 'Nem\u00e1\u0161 dostatek pen\u011bz';
   }
   btns.appendChild(flyBtn);
   dom.actionContent.appendChild(btns);
 }
-
 function renderAirportSelectTarget(isTargeted, targetPlayer, pa, gameState, me) {
   dom.actionTitle.textContent = isTargeted ? 'Vyber cíl letu ✈️' : 'Čeká se...';
   dom.actionContent.innerHTML = '';
@@ -513,7 +570,7 @@ function showBrokeOverlay(propertyName, shortage) {
 
   const card = makeEl('div', 'broke-card');
   card.appendChild(makeEl('div', 'broke-icon', '💸'));
-  card.appendChild(makeEl('div', 'broke-title', 'Nedostatek peněz'));
+  card.appendChild(makeEl('div', 'broke-title', 'Nedostatek peněz na:'));
   card.appendChild(makeEl('div', 'broke-property', propertyName));
   card.appendChild(makeEl('div', 'broke-amount', `Chybí ${fmt(shortage)} Kč`));
   overlay.appendChild(card);

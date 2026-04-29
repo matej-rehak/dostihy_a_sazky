@@ -11,6 +11,7 @@ export const state = {
   prevBalances:      {},
   allColors:         [],
   isStarterAnimating: false,
+  lastInsufficientFundsKey: null,
   selectedColor:     null,
   particleIntervalId: null,
   roomListIntervalId: null,

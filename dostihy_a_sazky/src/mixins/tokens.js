@@ -44,12 +44,45 @@ module.exports = {
     return [spaceId];
   },
 
+  _getTokenInsufficientFunds(pid) {
+    const player = this.players.get(pid);
+    if (!player) return null;
+
+    const spaceId = player.position;
+    if (!player.properties.includes(spaceId)) return null;
+
+    const space = BOARD[spaceId];
+    if (space.type !== 'horse') return null;
+
+    const tok = this.tokens[spaceId] || { small: 0, big: false };
+    if (tok.big) return null;
+    if (!this._ownsFullGroup(pid, space.group)) return null;
+
+    const price = tok.small >= 4 ? space.bigTokenCost : space.tokenCost;
+    if (player.balance >= price) return null;
+
+    return {
+      spaceId,
+      kind: 'token',
+      price,
+      balance: player.balance,
+      shortage: Math.max(0, price - player.balance),
+      tokenType: tok.small >= 4 ? 'big' : 'small',
+    };
+  },
+
   _offerTokensOrEnd(pid) {
     const eligible = this._eligibleTokenSpaces(pid);
     if (eligible.length > 0) {
       this._setPendingAction({ type: 'token_manage', targetId: pid, data: { eligible } });
       this._broadcast();
     } else {
+      const insufficientFunds = this._getTokenInsufficientFunds(pid);
+      if (insufficientFunds) {
+        this._setPendingAction({ type: 'insufficient_funds', targetId: pid, data: insufficientFunds });
+        this._scheduleAction(1200, () => this._advanceTurn());
+        return;
+      }
       this._advanceTurn();
     }
   },
