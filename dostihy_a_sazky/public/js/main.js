@@ -13,6 +13,7 @@ import { playBuyAnimation, playTokenAnimation } from './animations/cards.js';
 import { generateParticles }                    from './animations/particles.js';
 import { audioManager }                         from './audio.js';
 import { initDebugPanel, showDebugBtnIfNeeded } from './ui/debug.js';
+import { confirmDialog }                        from './ui/confirm.js';
 
 // ─── Load HTML partials ───────────────────────────────────────────────────────
 
@@ -272,6 +273,7 @@ function processState(gameState) {
 
 (async () => {
   audioManager.init();
+  window.confirmDialog = confirmDialog;
   await loadPartials();
   initDebugPanel();
 

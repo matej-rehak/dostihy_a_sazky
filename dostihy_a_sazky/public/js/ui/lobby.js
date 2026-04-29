@@ -2,6 +2,7 @@ import { makeEl, fmt, safeColor, isSafeColor, showToast } from '../utils.js';
 import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { socket } from '../socket.js';
+import { confirmDialog } from './confirm.js';
 
 export function renderLobby(gameState, me) {
   dom.lobbyView.classList.remove('hidden');
@@ -216,11 +217,11 @@ export function initLobbyListeners(onLeave) {
   });
 
   // Leave buttons
-  document.getElementById('lobby-leave-btn')?.addEventListener('click', () => {
-    if (confirm('Opravdu chcete opustit místnost?')) onLeave();
+  document.getElementById('lobby-leave-btn')?.addEventListener('click', async () => {
+    if (await confirmDialog('Opravdu chcete opustit místnost?')) onLeave();
   });
-  document.getElementById('game-leave-btn')?.addEventListener('click', () => {
-    if (confirm('Opravdu chcete opustit hru? Pokud odejdete během zápasu, zbankrotujete.')) {
+  document.getElementById('game-leave-btn')?.addEventListener('click', async () => {
+    if (await confirmDialog('Opravdu chcete opustit hru? Pokud odejdete během zápasu, zbankrotujete.')) {
       onLeave();
     }
   });

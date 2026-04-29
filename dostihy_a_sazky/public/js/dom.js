@@ -35,6 +35,7 @@ const IDS = {
   debtOverlay:   'debt-overlay',
   debtTitle:     'debt-title',
   debtContent:   'debt-content',
+  debtCloseBtn:  'debt-close-btn',
 };
 
 export const dom = {};

@@ -379,16 +379,16 @@
   const gameLeaveBtn = getEl('game-leave-btn');
 
   if (lobbyLeaveBtn) {
-    lobbyLeaveBtn.addEventListener('click', () => {
-      if (confirm('Opravdu chcete opustit místnost?')) {
+    lobbyLeaveBtn.addEventListener('click', async () => {
+      if (await confirmDialog('Opravdu chcete opustit místnost?')) {
         socket.emit('game:leave');
         resetLocalState();
       }
     });
   }
   if (gameLeaveBtn) {
-    gameLeaveBtn.addEventListener('click', () => {
-      if (confirm('Opravdu chcete opustit hru? Pokud odejdete během zápasu, zbankrotujete.')) {
+    gameLeaveBtn.addEventListener('click', async () => {
+      if (await confirmDialog('Opravdu chcete opustit hru? Pokud odejdete během zápasu, zbankrotujete.')) {
         socket.emit('game:leave');
         resetLocalState();
       }

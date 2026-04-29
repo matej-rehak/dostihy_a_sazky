@@ -306,8 +306,13 @@ function renderDebtManage(isTargeted, targetPlayer, gameState, me) {
   info.textContent = `⚠️ Máte dluh ${fmt(me.balance)} Kč. Otevřeno okno pro prodej majetku.`;
   dom.actionContent.appendChild(info);
   
-  const reopenBtn = actionBtn('Otevřít správu dluhu', 'btn-red btn-sm', () => renderDebtModal(true, targetPlayer, gameState, me));
+  // Idempotentní toggle — modal lze zavřít křížkem a znovu otevřít opakovaně, proto bez auto-disable.
+  const reopenBtn = makeEl('button', 'btn btn-red btn-sm', 'Otevřít správu dluhu');
   reopenBtn.style.marginTop = '10px';
+  reopenBtn.addEventListener('click', () => {
+    audioManager.play('click');
+    renderDebtModal(true, targetPlayer, gameState, me);
+  });
   dom.actionContent.appendChild(reopenBtn);
 }
 

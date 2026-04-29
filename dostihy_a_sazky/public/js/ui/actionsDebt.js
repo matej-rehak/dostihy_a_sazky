@@ -6,6 +6,7 @@ import { audioManager } from '../audio.js';
 import { buildWaitEl } from './actionsHelpers.js';
 import { showTip, moveTip } from './tooltip.js';
 import { tradeDraft, setTradeDraft, renderTradeBuild, renderIncomingTradeOffer } from './actionsTrade.js';
+import { confirmDialog } from './confirm.js';
 
 let selectedIds = [];
 
@@ -21,6 +22,9 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
   }
 
   dom.debtOverlay.classList.remove('hidden');
+  if (dom.debtCloseBtn) {
+    dom.debtCloseBtn.onclick = () => dom.debtOverlay.classList.add('hidden');
+  }
   dom.debtContent.innerHTML = '';
   
   const currentBalance = me.balance;
@@ -91,10 +95,10 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
         
         if (tok.big) {
           const star = makeEl('div', 'trade-token-star', '★');
-          star.onclick = (ev) => {
+          star.onclick = async (ev) => {
             ev.stopPropagation();
             const val = Math.floor(sp.bigTokenCost / 2);
-            if (confirm(`Prodat Hlavní dostih za ${fmt(val)} Kč? (Vrátí se 4 malé dostihy)`)) {
+            if (await confirmDialog(`Prodat Hlavní dostih za ${fmt(val)} Kč? (Vrátí se 4 malé dostihy)`)) {
               audioManager.play('money_out');
               socket.emit('game:respond', { decision: 'sell_token', spaceId: sid });
             }
@@ -103,10 +107,10 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
         } else {
           for (let i = 0; i < tok.small; i++) {
             const dot = makeEl('div', 'trade-token-dot');
-            dot.onclick = (ev) => {
+            dot.onclick = async (ev) => {
               ev.stopPropagation();
               const val = Math.floor(sp.tokenCost / 2);
-              if (confirm(`Prodat 1 žeton dostihů za ${fmt(val)} Kč?`)) {
+              if (await confirmDialog(`Prodat 1 žeton dostihů za ${fmt(val)} Kč?`)) {
                 audioManager.play('money_out');
                 socket.emit('game:respond', { decision: 'sell_token', spaceId: sid });
               }
@@ -197,8 +201,8 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
   
   const confirmBtn = makeEl('button', 'btn btn-green', selectedIds.length > 0 ? `Potvrdit prodej (+${fmt(projectedTotal)})` : 'Vyberte k prodeji');
   if (selectedIds.length === 0) confirmBtn.disabled = true;
-  confirmBtn.onclick = () => {
-    if (confirm(`Opravdu chcete prodat vybrané stáje za celkem ${fmt(projectedTotal)} Kč?`)) {
+  confirmBtn.onclick = async () => {
+    if (await confirmDialog(`Opravdu chcete prodat vybrané stáje za celkem ${fmt(projectedTotal)} Kč?`)) {
       audioManager.play('money_out');
       socket.emit('game:respond', { decision: 'sell_batch', spaceIds: [...selectedIds] });
       selectedIds = [];
@@ -208,8 +212,8 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
   rightBtns.appendChild(confirmBtn);
 
   const bankruptBtn = makeEl('button', 'btn btn-red', 'Vyhlásit bankrot 💀');
-  bankruptBtn.onclick = () => {
-    if (confirm('Opravdu chcete vyhlásit bankrot? Tato akce vás vyřadí ze hry.')) {
+  bankruptBtn.onclick = async () => {
+    if (await confirmDialog('Opravdu chcete vyhlásit bankrot? Tato akce vás vyřadí ze hry.')) {
       audioManager.play('gameover');
       socket.emit('game:respond', { decision: 'declare_bankrupt' });
       selectedIds = [];
