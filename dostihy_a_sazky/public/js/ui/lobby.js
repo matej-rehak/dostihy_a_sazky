@@ -15,11 +15,18 @@ export function renderLobby(gameState, me) {
     dom.joinedWait?.classList.remove('hidden');
     renderHostControls(gameState, me);
     renderReadyButton(me);
+    state.selectedColor = me.color;
   } else {
     dom.joinForm?.classList.remove('hidden');
     dom.joinedWait?.classList.add('hidden');
     dom.hostControls?.classList.add('hidden');
-    if (state.allColors.length > 0) buildColorPicker(state.allColors, gameState.players.map(p => p.color));
+  }
+
+  if (state.allColors.length > 0) {
+    const usedColors = gameState.players
+      .filter(p => p.id !== state.myId)
+      .map(p => p.color);
+    buildColorPicker(state.allColors, usedColors, !!me);
   }
 }
 
@@ -82,7 +89,7 @@ function renderHostControls(gameState, me) {
   if (cfgTurnTime && document.activeElement !== cfgTurnTime) cfgTurnTime.value = c.turnTimeLimitSeconds ?? 0;
   if (cfgField20 && document.activeElement !== cfgField20) cfgField20.value = c.field20Mode ?? 'parking';
   if (cfgFee && document.activeElement !== cfgFee) cfgFee.value = c.airportFee ?? 2000;
-  if (cfgFeeRow) cfgFeeRow.style.display = (c.field20Mode === 'airport') ? '' : 'none';
+  if (cfgFeeRow) cfgFeeRow.classList.toggle('hidden', c.field20Mode !== 'airport');
 
   const allReady = gameState.players.every(p => p.ready);
   if (dom.startBtn) {
@@ -137,7 +144,7 @@ export function renderRoomList(list) {
 
 // ─── Color picker ─────────────────────────────────────────────────────────────
 
-export function buildColorPicker(colors, usedColors = []) {
+export function buildColorPicker(colors, usedColors = [], isJoined = false) {
   if (!dom.colorPicker) return;
   dom.colorPicker.innerHTML = '';
   if (state.selectedColor && usedColors.includes(state.selectedColor)) state.selectedColor = null;
@@ -152,11 +159,14 @@ export function buildColorPicker(colors, usedColors = []) {
       document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       state.selectedColor = c;
+      if (isJoined) {
+        socket.emit('game:change_color', { color: c });
+      }
     });
     dom.colorPicker.appendChild(btn);
   });
 
-  if (!state.selectedColor && dom.colorPicker.firstChild) {
+  if (!state.selectedColor && dom.colorPicker.firstChild && !isJoined) {
     dom.colorPicker.firstChild.click();
   }
 }

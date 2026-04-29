@@ -195,4 +195,23 @@ module.exports = {
       }
     }, 5000);
   },
+ 
+  changeColor(playerId, color) {
+    if (this.phase !== 'lobby') return;
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const usedColors = [...this.players.values()]
+      .filter(p => p.id !== playerId)
+      .map(p => p.color);
+
+    if (usedColors.includes(color) || !PLAYER_COLORS.includes(color)) {
+      return;
+    }
+
+    const oldColor = player.color;
+    player.color = color;
+    this._addLog(`🎨 ${player.name} si změnil(a) barvu figurky`);
+    this._broadcast();
+  },
 };
