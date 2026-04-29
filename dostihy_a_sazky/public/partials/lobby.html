@@ -57,6 +57,17 @@
             <label>Čas na tah (s):</label>
             <input type="number" id="cfg-turnTimeLimit" class="text-input" value="0" step="5" min="0" max="300" />
           </div>
+          <div class="config-row">
+            <label>Pole 20:</label>
+            <select id="cfg-field20Mode" class="text-input">
+              <option value="parking">Parkoviště</option>
+              <option value="airport">Letiště</option>
+            </select>
+          </div>
+          <div class="config-row" id="cfg-airportFee-row">
+            <label>Cena letu (Kč):</label>
+            <input type="number" id="cfg-airportFee" class="text-input" value="2000" step="500" min="0" />
+          </div>
           <p class="dim" style="margin-bottom:8px">0 = bez limitu. Ostatní hráči vidí aktuální pravidla níže.
           </p>
         </div>

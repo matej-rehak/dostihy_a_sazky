@@ -116,6 +116,8 @@ export function updateActionPanel(gameState) {
     case 'jail_choice': renderJailChoice(isTargeted, targetPlayer, gameState, me); break;
     case 'token_manage': renderTokenManage(isTargeted, targetPlayer, pa, gameState, me); break;
     case 'trade_offer': renderTradeOffer(isTargeted, targetPlayer, pa, gameState); break;
+    case 'airport_choice': renderAirportChoice(isTargeted, targetPlayer, pa, me); break;
+    case 'airport_select_target': renderAirportSelectTarget(isTargeted, targetPlayer, pa, gameState, me); break;
     case 'game_over': renderGameOver(pa.winner, pa.reason); break;
     default:
       dom.actionContent.innerHTML = '';
@@ -424,6 +426,77 @@ function renderTokenManage(isTargeted, targetPlayer, pa, gameState, me) {
   const endBtn = actionBtn('Ukončit tah →', 'btn-gold', () => socket.emit('game:respond', { decision: 'end_turn' }));
   endBtn.style.marginTop = '4px';
   dom.actionContent.appendChild(endBtn);
+}
+
+function renderAirportChoice(isTargeted, targetPlayer, pa, me) {
+  dom.actionTitle.textContent = isTargeted ? 'Letiště ✈️' : 'Čeká se...';
+  dom.actionContent.innerHTML = '';
+
+  if (!isTargeted) {
+    dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'rozhoduje se na letišti...'));
+    return;
+  }
+
+  const fee = pa.data?.fee ?? 0;
+  const hasMoney = (me?.balance ?? 0) >= fee;
+
+  const info = makeEl('div', 'jail-display');
+  info.style.cssText = 'border-color:var(--gold);padding:10px;margin-bottom:10px;border:1px solid var(--gold)';
+  info.appendChild(document.createTextNode('Stojíš na letišti. Můžeš letět na libovolné pole za poplatek '));
+  info.appendChild(makeEl('strong', '', `${fmt(fee)} Kč`));
+  info.appendChild(document.createTextNode(', nebo hodit kostkou jako obvykle.'));
+  dom.actionContent.appendChild(info);
+
+  const btns = makeEl('div', 'action-buttons');
+  btns.appendChild(actionBtn('🎲 Hodit kostkou', 'btn-gold btn-lg', () =>
+    socket.emit('game:respond', { decision: 'roll' })
+  ));
+
+  const flyBtn = actionBtn(`✈️ Letět (${fmt(fee)} Kč)`, hasMoney ? 'btn-gold btn-lg' : 'btn-outline btn-lg', () => {
+    if (!hasMoney) return;
+    socket.emit('game:respond', { decision: 'fly' });
+  });
+  if (!hasMoney) {
+    flyBtn.disabled = true;
+    flyBtn.title = 'Nemáš dostatek peněz';
+  }
+  btns.appendChild(flyBtn);
+  dom.actionContent.appendChild(btns);
+}
+
+function renderAirportSelectTarget(isTargeted, targetPlayer, pa, gameState, me) {
+  dom.actionTitle.textContent = isTargeted ? 'Vyber cíl letu ✈️' : 'Čeká se...';
+  dom.actionContent.innerHTML = '';
+
+  if (!isTargeted) {
+    dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'vybírá cíl letu...'));
+    return;
+  }
+
+  const fee = pa.data?.fee ?? 0;
+  const hasMoney = (me?.balance ?? 0) >= fee;
+
+  const info = makeEl('div', 'jail-display');
+  info.style.cssText = 'border-color:var(--gold);padding:10px;margin-bottom:10px;border:1px solid var(--gold)';
+  info.appendChild(makeEl('div', 'jail-icon', '✈️'));
+  const txt = makeEl('p', 'jail-text');
+  txt.appendChild(document.createTextNode('Klikni na pole na herním plánu, kam chceš letět.'));
+  txt.appendChild(document.createElement('br'));
+  txt.appendChild(document.createTextNode('Poplatek: '));
+  txt.appendChild(makeEl('strong', '', `${fmt(fee)} Kč`));
+  if (!hasMoney) {
+    txt.appendChild(document.createElement('br'));
+    const warn = makeEl('span', '', '⚠️ Nemáš dost peněz!');
+    warn.style.color = 'var(--red)';
+    txt.appendChild(warn);
+  }
+  info.appendChild(txt);
+  dom.actionContent.appendChild(info);
+
+  const cancelBtn = actionBtn('✖ Zrušit (raději hodím kostkou)', 'btn-outline', () =>
+    socket.emit('game:respond', { decision: 'cancel' })
+  );
+  dom.actionContent.appendChild(cancelBtn);
 }
 
 function showBrokeOverlay(propertyName, shortage) {

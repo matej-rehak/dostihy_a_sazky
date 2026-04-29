@@ -1,7 +1,7 @@
 'use strict';
 
 const BOARD = require('../data/boardData');
-const { ACTION_DELAY_MS, JAIL_FINE, roll, fmt } = require('../constants');
+const { ACTION_DELAY_MS, JAIL_FINE, BOARD_SIZE, roll, fmt } = require('../constants');
 
 const MOVE_CARD_TYPES = new Set([
   'move_to', 'move_forward', 'move_backward',
@@ -46,6 +46,8 @@ module.exports = {
       case 'jail_choice': return this._handleJailChoice(pid, decision);
       case 'token_manage': return this._handleTokenManage(pid, decision, spaceId, tokenType);
       case 'trade_offer': return this._handleTradeOffer(pid, decision, actionData, clientOffer, clientRequest);
+      case 'airport_choice': return this._handleAirportChoice(pid, decision);
+      case 'airport_select_target': return this._handleAirportSelectTarget(pid, decision, spaceId);
     }
   },
 
@@ -294,6 +296,68 @@ module.exports = {
     }
   },
 
+  _handleAirportChoice(pid, decision) {
+    const player = this.players.get(pid);
+    if (!player) return;
+    if (decision === 'fly') {
+      this._setPendingAction({
+        type: 'airport_select_target',
+        targetId: pid,
+        data: { fee: this.config.airportFee },
+      });
+      this._broadcast();
+    } else {
+      player.canFly = false;
+      this._setPendingAction({ type: 'wait_roll', targetId: pid });
+      this._broadcast();
+    }
+  },
+
+  _handleAirportSelectTarget(pid, decision, spaceId) {
+    const player = this.players.get(pid);
+    if (!player) return;
+    const fee = this.config.airportFee;
+
+    if (decision === 'cancel') {
+      this._setPendingAction({
+        type: 'airport_choice',
+        targetId: pid,
+        data: { fee },
+      });
+      this._broadcast();
+      return;
+    }
+
+    const target = Number(spaceId);
+
+    if (!Number.isInteger(target) || target < 0 || target >= BOARD_SIZE || target === player.position) {
+      this._setPendingAction({
+        type: 'airport_select_target',
+        targetId: pid,
+        data: { fee },
+      });
+      this._broadcast();
+      return;
+    }
+
+    if (player.balance < fee) {
+      this._addLog(`✈️ ${player.name} nemá dostatek na let (${fmt(fee)} Kč) — letiště ruší.`);
+      player.canFly = false;
+      this._setPendingAction({ type: 'wait_roll', targetId: pid });
+      this._broadcast();
+      return;
+    }
+
+    player.balance -= fee;
+    player.canFly = false;
+    player.moveDirection = 1;
+    this._addLog(`✈️ ${player.name} odlétá z letiště na ${BOARD[target].name} (poplatek ${fmt(fee)} Kč)`);
+
+    const steps = (target - player.position + BOARD_SIZE) % BOARD_SIZE;
+    this._setPendingAction(null);
+    this._scheduleAction(ACTION_DELAY_MS, () => this._movePlayer(pid, steps));
+  },
+
   _handleTurnTimeout() {
     if (this.phase !== 'playing' || !this.pendingAction) return;
     const { type, targetId, data } = this.pendingAction;
@@ -329,6 +393,16 @@ module.exports = {
         this._setPendingAction(null);
         this._startTurn();
         break;
+      case 'airport_choice':
+        this._handleAirportChoice(targetId, 'roll');
+        break;
+      case 'airport_select_target': {
+        const p = this.players.get(targetId);
+        if (p) p.canFly = false;
+        this._setPendingAction({ type: 'wait_roll', targetId });
+        this._broadcast();
+        break;
+      }
     }
   }
 };

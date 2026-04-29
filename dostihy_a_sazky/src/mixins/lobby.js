@@ -36,6 +36,7 @@ module.exports = {
       bankrupt: false, inJail: false, jailTurns: 0, skipTurns: 0,
       properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: false, disconnected: false,
+      canFly: false,
     };
     this.players.set(socket.playerId, player);
     this._addLog(`🐎 ${name} se připojil(a) k hře`);
@@ -63,6 +64,14 @@ module.exports = {
     this.config.turnTimeLimitSeconds = Number.isFinite(turnTimeLimitSeconds)
       ? Math.max(0, Math.min(300, Math.round(turnTimeLimitSeconds)))
       : 0;
+
+    const field20Mode = nextConfig.field20Mode;
+    this.config.field20Mode = (field20Mode === 'airport' || field20Mode === 'parking')
+      ? field20Mode
+      : 'parking';
+
+    const airportFee = Number(nextConfig.airportFee);
+    this.config.airportFee = Number.isFinite(airportFee) ? Math.max(0, Math.round(airportFee)) : 2000;
 
     this._broadcast();
   },

@@ -26,6 +26,12 @@ module.exports = {
       } else {
         this._setPendingAction({ type: 'jail_choice', targetId: pid });
       }
+    } else if (player.canFly && this.config.field20Mode === 'airport') {
+      this._setPendingAction({
+        type: 'airport_choice',
+        targetId: pid,
+        data: { fee: this.config.airportFee },
+      });
     } else {
       this._setPendingAction({ type: 'wait_roll', targetId: pid });
     }

@@ -35,8 +35,17 @@ module.exports = {
 
     switch (space.type) {
       case 'start':
-      case 'free_parking':
         this._addLog(`${player.name} odpočívá na poli ${space.name}`);
+        this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
+        break;
+
+      case 'free_parking':
+        if (this.config.field20Mode === 'airport') {
+          player.canFly = true;
+          this._addLog(`✈️ ${player.name} přistál(a) na letišti — v příštím tahu může letět.`);
+        } else {
+          this._addLog(`${player.name} odpočívá na poli ${space.name}`);
+        }
         this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
         break;
 

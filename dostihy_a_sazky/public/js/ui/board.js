@@ -1,6 +1,7 @@
 import { makeEl, fmt, safeColor } from '../utils.js';
 import { dom } from '../dom.js';
 import { state } from '../state.js';
+import { socket } from '../socket.js';
 import { showTip, moveTip } from './tooltip.js';
 
 // ─── Pozice políček na CSS gridu ──────────────────────────────────────────────
@@ -89,6 +90,14 @@ export function buildBoard(board) {
     el.addEventListener('mouseenter', ev => showTip(space, state.gameState, ev));
     el.addEventListener('mousemove',  ev => moveTip(ev));
     el.addEventListener('mouseleave', () => dom.tooltip?.classList.add('hidden'));
+    el.addEventListener('click', () => {
+      const gs = state.gameState;
+      const pa = gs?.pendingAction;
+      if (!pa || pa.type !== 'airport_select_target' || pa.targetId !== state.myId) return;
+      const me = gs.players?.find(p => p.id === state.myId);
+      if (!me || me.position === space.id) return;
+      socket.emit('game:respond', { decision: 'fly', spaceId: space.id });
+    });
 
     dom.board.appendChild(el);
   });
@@ -126,6 +135,29 @@ export function updateBoard(gameState) {
       el.appendChild(makeEl('div', 'dot-big'));
     } else {
       for (let i = 0; i < tok.small; i++) el.appendChild(makeEl('div', 'dot-small'));
+    }
+  });
+
+  const field20Mode = gameState.config?.field20Mode ?? 'parking';
+  const field20El = dom.board?.querySelector(`.space[data-id="20"]`);
+  if (field20El) {
+    const iconEl = field20El.querySelector('.corner-icon');
+    const nameEl = field20El.querySelector('.corner-name');
+    if (iconEl) iconEl.textContent = field20Mode === 'airport' ? '✈️' : '🅿️';
+    if (nameEl) nameEl.textContent = field20Mode === 'airport' ? 'Letiště' : 'Parkoviště';
+  }
+
+  const pa = gameState.pendingAction;
+  const inAirportSelect = pa?.type === 'airport_select_target' && pa?.targetId === state.myId;
+  const me = gameState.players?.find(p => p.id === state.myId);
+  const myPos = me?.position;
+  document.querySelectorAll('.space').forEach(spaceEl => {
+    spaceEl.classList.remove('airport-selectable', 'is-self');
+    if (inAirportSelect) {
+      spaceEl.classList.add('airport-selectable');
+      if (Number(spaceEl.dataset.id) === myPos) {
+        spaceEl.classList.add('is-self');
+      }
     }
   });
 }
