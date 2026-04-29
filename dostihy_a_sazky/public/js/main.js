@@ -120,8 +120,8 @@ function processState(gameState) {
   dom.lobbyView.classList.add('hidden');
   dom.gameView.classList.remove('hidden');
 
-  // Spustit pozadí hudbu při přechodu lobby → playing (jen jednou)
-  if (state.prevPhase === 'lobby' || state.prevPhase === null) {
+  // Zajištění hudby v herní fázi
+  if (gameState.phase === 'playing') {
     audioManager.playMusic();
   }
   state.prevPhase = gameState.phase;

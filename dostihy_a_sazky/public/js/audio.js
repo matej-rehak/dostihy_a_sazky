@@ -4,6 +4,7 @@ export const audioManager = {
   sounds: {},
   musicAudio: null,
   _musicFadeTimer: null,
+  _wantsMusic: false,
 
   init() {
     const storedSfx = localStorage.getItem('ds_sfx_volume');
@@ -14,12 +15,14 @@ export const audioManager = {
 
     this.audioContext = null;
 
-    // Zapnout Web Audio API na první kliknutí
-    const initSynth = () => {
+    // Zapnout Web Audio API na první kliknutí + obnovit hudbu pokud má hrát
+    const handleInteraction = () => {
       if (!this.audioContext) this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      document.removeEventListener('click', initSynth);
+      this.resumeMusic();
+      // Necháme listener aktivní pro případ, že se hudba zapne až později
     };
-    document.addEventListener('click', initSynth);
+    document.addEventListener('click', handleInteraction);
+    document.addEventListener('keydown', handleInteraction);
 
     this.updateVolumeUi();
 
@@ -119,32 +122,47 @@ export const audioManager = {
     this.updateVolumeUi();
 
     if (this.musicAudio) {
-      this.musicAudio.volume = this.musicVolume;
+      this.musicAudio.volume = this.musicVolume * this.musicVolume;
+    }
+  },
+
+  resumeMusic() {
+    if (this._wantsMusic) {
+      this.playMusic();
     }
   },
 
   playMusic() {
-    if (this.musicAudio) return; // Hudba již hraje
+    this._wantsMusic = true;
+    if (this.musicAudio && !this.musicAudio.paused) return; // Hudba již hraje
 
-    const src = this.sounds['music'];
-    if (!src) return;
+    if (!this.musicAudio) {
+      const src = this.sounds['music'];
+      if (!src) return;
 
-    const audio = src.cloneNode();
-    audio.loop = true;
-    audio.volume = 0;
-    this.musicAudio = audio;
+      const audio = src.cloneNode();
+      audio.loop = true;
+      audio.volume = 0;
+      this.musicAudio = audio;
+    }
 
-    audio.play().catch(() => {});
+    this.musicAudio.play().catch(() => {
+      console.log("Music play blocked by browser, waiting for interaction...");
+    });
 
-    // Fade-in na cílovou hlasitost za 2 sekundy
+    if (this._musicFadeTimer) return;
+
+    // Fade-in na cílovou hlasitost za 2 sekundy (pokud už není na cíli)
     let elapsed = 0;
-    const targetVol = this.musicVolume;
+    const targetVol = this.musicVolume * this.musicVolume;
+    const startVol = this.musicAudio.volume;
     const step = 50; // ms
-    if (this._musicFadeTimer) clearInterval(this._musicFadeTimer);
+
     this._musicFadeTimer = setInterval(() => {
       elapsed += step;
       const progress = Math.min(elapsed / 2000, 1);
-      if (this.musicAudio) this.musicAudio.volume = this._clamp01(progress * targetVol);
+      const currentVol = startVol + (targetVol - startVol) * progress;
+      if (this.musicAudio) this.musicAudio.volume = this._clamp01(currentVol);
       if (progress >= 1) {
         clearInterval(this._musicFadeTimer);
         this._musicFadeTimer = null;
@@ -153,6 +171,7 @@ export const audioManager = {
   },
 
   stopMusic() {
+    this._wantsMusic = false;
     if (!this.musicAudio) return;
 
     const audio = this.musicAudio;
