@@ -70,7 +70,11 @@ module.exports = {
 
       case 'finance':
       case 'nahoda': {
-        const card = space.type === 'finance' ? this.financeCards.draw() : this.nahodaCards.draw();
+        const rawCard = space.type === 'finance' ? this.financeCards.draw() : this.nahodaCards.draw();
+        const card = { ...rawCard };
+        if (card.text) {
+          card.text = card.text.replace(/{startBonus}/g, fmt(this.config.startBonus));
+        }
         const label = space.type === 'finance' ? 'Finance' : 'Náhoda';
         this._addLog(`🃏 ${player.name} táhne kartu ${label}: "${card.text}"`);
         this._setPendingAction({ type: 'card_ack', targetId: pid, data: { card, label, spaceId: space.id } });

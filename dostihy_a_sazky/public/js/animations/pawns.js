@@ -2,6 +2,7 @@ import { makeEl, safeColor } from '../utils.js';
 import { state } from '../state.js';
 import { dom } from '../dom.js';
 import { audioManager } from '../audio.js';
+import { getPawnStepDelay, hasPendingPawnAnimation } from './pawnAnimationGate.mjs';
 
 export function renderPawns(gameState) {
   document.querySelectorAll('.space-pawns').forEach(el => { el.innerHTML = ''; });
@@ -41,13 +42,21 @@ export function renderPawns(gameState) {
   });
 }
 
-export function animatePawnsIfNeeded(gameState) {
-  const needsAnim = gameState.players.some(
-    p => !p.bankrupt && state.clientVisualPos[p.id] !== p.position
-  );
+export function animatePawnsIfNeeded(gameState, onDone = null) {
+  const needsAnim = hasPendingPawnAnimation(gameState.players, state.clientVisualPos);
 
   if (needsAnim && !state.isAnimatingPawn) {
     state.isAnimatingPawn = true;
+    const longestDistance = gameState.players.reduce((max, p) => {
+      if (p.bankrupt || state.clientVisualPos[p.id] === p.position) return max;
+      const current = state.clientVisualPos[p.id];
+      const forward = (p.position - current + 40) % 40;
+      const backward = (current - p.position + 40) % 40;
+      const distance = p.moveDirection === -1 ? backward : forward;
+      return Math.max(max, distance);
+    }, 0);
+    const stepDelay = getPawnStepDelay(longestDistance);
+
     const step = () => {
       let stillNeeds = false;
       gameState.players.forEach(p => {
@@ -68,11 +77,17 @@ export function animatePawnsIfNeeded(gameState) {
         }
       });
       renderPawns(gameState);
-      if (stillNeeds) setTimeout(step, 180);
-      else { state.isAnimatingPawn = false; renderPawns(gameState); }
+      if (stillNeeds) setTimeout(step, stepDelay);
+      else {
+        state.isAnimatingPawn = false;
+        renderPawns(gameState);
+        if (typeof onDone === 'function') onDone();
+      }
     };
     step();
+    return true;
   } else if (!state.isAnimatingPawn) {
     renderPawns(gameState);
   }
+  return state.isAnimatingPawn;
 }

@@ -237,13 +237,14 @@ module.exports = {
     }
     this.timeLimitEndsAt = null;
     const winner = winnerId ? this.players.get(winnerId) : null;
+    const winnerAssets = winner ? winner.balance + this._calcAssetsValue(winnerId) : 0;
     this._addLog(winner
-      ? `🏆 ${winner.name} vyhrál(a) hru s ${fmt(winner.balance)} Kč!`
+      ? `🏆 ${winner.name} vyhrál(a) hru s celkovým majetkem ${fmt(winnerAssets)} Kč!`
       : '🏁 Hra skončila nerozhodně.'
     );
     this._setPendingAction({
       type: 'game_over',
-      winner: winner ? { name: winner.name, balance: winner.balance } : null,
+      winner: winner ? { name: winner.name, balance: winner.balance, totalAssets: winnerAssets } : null,
       reason,
     });
     this._broadcast();

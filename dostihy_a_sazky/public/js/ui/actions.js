@@ -591,7 +591,7 @@ function renderGameOver(winner, reason) {
     goDiv.appendChild(makeEl('p', 'dim', 'Hra skončila po vypršení časového limitu.'));
   }
   goDiv.appendChild(makeEl('div', 'gameover-title', winner ? `${winner.name} vyhrál(a)!` : 'Konec hry!'));
-  if (winner) goDiv.appendChild(makeEl('div', 'gameover-balance', `Výsledný zůstatek: ${fmt(winner.balance)} Kč`));
+  if (winner) goDiv.appendChild(makeEl('div', 'gameover-balance', `Celkový majetek: ${fmt(winner.totalAssets ?? winner.balance)} Kč`));
 
   const replayBtn = makeEl('button', 'btn btn-gold btn-lg', 'Hrát znovu');
   replayBtn.addEventListener('click', () => window.__resetLocalState?.());

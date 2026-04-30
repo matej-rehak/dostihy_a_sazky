@@ -157,7 +157,10 @@ module.exports = {
         const oldPos = player.position;
         player.position = card.space;
         player.moveDirection = -1;
-        if (card.bonus) player.balance += card.bonus;
+        if (card.bonus) {
+          const bonusAmt = (card.bonus === 'startBonus') ? this.config.startBonus : card.bonus;
+          player.balance += bonusAmt;
+        }
         if (card.passStart && player.position > oldPos) {
           player.balance += this.config.startBonus;
           this._addLog(`${player.name} prošel(a) START (pozpátku) — +${fmt(this.config.startBonus)} Kč`);

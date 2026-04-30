@@ -3,12 +3,23 @@ import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { startTradeWith } from './actions.js';
 
-function calcAssetsValue(p) {
-  if (!state.boardData || !p.properties?.length) return 0;
-  return p.properties.reduce((sum, spId) => {
-    const sp = state.boardData.find(s => s.id === spId);
-    return sum + (sp?.price ?? 0);
-  }, 0);
+function calcAssetsValue(p, gameState) {
+  if (!state.boardData) return 0;
+  let total = 0;
+  if (p.properties) {
+    p.properties.forEach(spId => {
+      const sp = state.boardData[spId];
+      if (sp) {
+        total += (sp.price ?? 0);
+        const tok = gameState.tokens?.[spId];
+        if (tok) {
+          if (tok.big) total += (sp.bigTokenCost ?? 0) + (sp.tokenCost ?? 0) * 4;
+          else if (tok.small > 0) total += (sp.tokenCost ?? 0) * tok.small;
+        }
+      }
+    });
+  }
+  return total;
 }
 
 export function updatePlayers(gameState) {
@@ -19,6 +30,26 @@ export function updatePlayers(gameState) {
   const meOnTurn = pa?.targetId === state.myId
     && (pa?.type === 'wait_roll' || pa?.type === 'debt_manage' || pa?.type === 'jail_choice');
   const targetInDebt = pa?.type === 'debt_manage' ? pa.targetId : null;
+
+  // Výpočet majetků pro určení lídra (korunka)
+  const playerAssets = gameState.players.map(p => ({
+    id: p.id,
+    total: p.bankrupt ? -1 : (p.balance + calcAssetsValue(p, gameState))
+  }));
+  const maxAssets = Math.max(...playerAssets.map(pa => pa.total));
+
+  // Určení lídra — korunku dostane ten, kdo má nejvíce, ale jen pokud nejsou všichni nastejno
+  const alivePlayers = gameState.players.filter(p => !p.bankrupt);
+  let leaders = [];
+  if (alivePlayers.length > 1) {
+    const leaderCandidates = playerAssets.filter(pa => pa.total === maxAssets && pa.total > 0);
+    // Pokud jsou všichni naživu nastejno (např. start hry), nikdo nemá korunku
+    if (leaderCandidates.length < alivePlayers.length) {
+      leaders = leaderCandidates.map(lc => lc.id);
+    }
+  } else if (alivePlayers.length === 1) {
+    leaders = [alivePlayers[0].id];
+  }
 
   // Seřadit hráče podle pořadí tahů (turnOrder)
   const sortedPlayers = [...gameState.players];
@@ -39,6 +70,10 @@ export function updatePlayers(gameState) {
     const avatar = makeEl('div', 'p-avatar');
     avatar.style.background = safeColor(p.color);
     avatar.textContent = p.name[0].toUpperCase();
+    if (leaders.includes(p.id)) {
+      const crown = makeEl('div', 'p-crown', '👑');
+      avatar.appendChild(crown);
+    }
     row.appendChild(avatar);
 
     const info = makeEl('div', 'p-info');
@@ -75,7 +110,7 @@ export function updatePlayers(gameState) {
     balEl.id = `pb-${p.id}`;
     balWrap.appendChild(balEl);
     if (!p.bankrupt && state.boardData) {
-      const total = p.balance + calcAssetsValue(p);
+      const total = p.balance + calcAssetsValue(p, gameState);
       const assetsEl = makeEl('div', 'p-assets', `Celkem ${fmt(total)} Kč`);
       balWrap.appendChild(assetsEl);
     }

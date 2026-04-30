@@ -16,6 +16,9 @@ export function renderLobby(gameState, me) {
     renderHostControls(gameState, me);
     renderReadyButton(me);
     state.selectedColor = me.color;
+    if (dom.lobbyNameInput && document.activeElement !== dom.lobbyNameInput) {
+      dom.lobbyNameInput.value = me.name;
+    }
   } else {
     dom.joinForm?.classList.remove('hidden');
     dom.joinedWait?.classList.add('hidden');
@@ -217,6 +220,15 @@ export function initLobbyListeners(onLeave) {
     socket.emit('game:join', { name, color: state.selectedColor });
   });
   dom.nameInput?.addEventListener('keydown', e => { if (e.key === 'Enter') dom.joinBtn?.click(); });
+  
+  // Lobby — změna jména
+  dom.updateNameBtn?.addEventListener('click', () => {
+    const name = dom.lobbyNameInput?.value.trim();
+    if (!name) { showToast('Jméno nesmí být prázdné!', true); return; }
+    socket.emit('game:change_name', { name });
+    showToast('Jméno uloženo.');
+  });
+  dom.lobbyNameInput?.addEventListener('keydown', e => { if (e.key === 'Enter') dom.updateNameBtn?.click(); });
 
   // Start + ready
   dom.startBtn?.addEventListener('click', () => { dom.startBtn.disabled = true; socket.emit('game:start'); });

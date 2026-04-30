@@ -19,6 +19,7 @@
 npm install      # instalace závislostí
 npm run dev      # vývoj (nodemon server.js)
 npm start        # produkce (node server.js)
+npm test         # node --test (auto-discovery všech tests/**/*.test.js)
 ```
 
 Server běží na: **http://localhost:3001**  
@@ -81,7 +82,10 @@ server.js                   ← HTTP + Socket.IO server, správa místností, re
 │   ├── TASKS.md            ← Fronta úkolů
 │   ├── MEMORY.md           ← Technická rozhodnutí a poznatky
 │   └── CONTEXT.md          ← Kontext projektu pro agenty
-└── prompts/                ← Systémové prompty pro jednotlivé agenty
+├── prompts/                ← Systémové prompty pro jednotlivé agenty
+└── tests/                  ← Node test runner soubory (*.test.js, npm test)
+    ├── movement-insufficient-funds.test.js  ← _evaluateSpace + _offerTokensOrEnd insufficient funds
+    └── trade-debt-resume.test.js            ← non-debt trade návrat nesmí přepsat debt_manage / card_ack
 ```
 
 ### Partials systém (jak funguje)
@@ -213,3 +217,15 @@ Složka `agents/` implementuje orchestrátor pattern pro AI-asistovaný vývoj:
 **Aktuální úkol:** —  
 **Kontext:** —  
 **Hotovo bude:** —
+
+---
+
+## Poslední fix (2026-04-30)
+
+**Bug:** Po vyřešení dluhové situace (`debt_manage`) hráč občas znovu hodil kostkou místo aby tah řádně skončil.
+
+**Příčina:** `_handleTradeOffer` v non-debt větvi (`src/mixins/actions.js`) bezpodmínečně obnovoval `wait_roll`/`jail_choice` pro `turnPlayerId` podle stale `fromContext` zachyceného při vystavení obchodu. Frontovaný systém nabídek znamená, že iniciátor mezitím mohl pokročit do jiného stavu (typicky `debt_manage` po hodu) — restorer pak přepsal aktuální `pendingAction` (a přes `_scheduleAction` i `_resumeFn`).
+
+**Fix:** Restorer nyní respektuje aktuální `pendingAction`. Když je hra mid-flow, jen broadcastne; když je `pendingAction` null, naplánuje obnovení s guardem.
+
+**Test:** `tests/trade-debt-resume.test.js` (5 testů — hlavní: „akceptace frontovaného obchodu nepřepíše debt_manage iniciátora").

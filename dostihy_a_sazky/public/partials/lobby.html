@@ -18,7 +18,11 @@
 
       <!-- Waiting (shown after joining) -->
       <div id="joined-wait" class="hidden">
-        <p class="joined-text">✅ Jste v lobby! Pro start hry se připravte...</p>
+        <p class="joined-text">✅ Jste v lobby!</p>
+        <div class="name-change-wrap" style="margin-top: 10px; display: flex; gap: 8px;">
+          <input id="lobby-name-input" class="text-input" type="text" placeholder="Změnit jméno..." maxlength="20" />
+          <button id="update-name-btn" class="btn btn-outline btn-xs">Uložit</button>
+        </div>
         <button id="toggle-ready-btn" class="btn btn-gold btn-lg" style="width:100%; margin-top:20px;">JSEM
           PŘIPRAVEN</button>
       </div>

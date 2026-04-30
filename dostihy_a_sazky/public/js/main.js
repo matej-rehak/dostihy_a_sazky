@@ -257,15 +257,21 @@ function processState(gameState) {
   }
   state.prevBankruptCount = bankrupts;
 
+  const updateActionControls = (nextState) => {
+    updateActionPanel(nextState);
+    const nextPa = nextState.pendingAction;
+    const canRoll = nextPa && (nextPa.type === 'wait_roll' || nextPa.type === 'service_roll' || nextPa.type === 'jail_choice') && nextPa.targetId === state.myId;
+    document.getElementById('dice-3d')?.classList.toggle('dice-rollable', !!canRoll);
+  };
+
   updateBoard(gameState);
-  animatePawnsIfNeeded(gameState);
-  updateActionPanel(gameState);
+  const actionControlsDelayed = animatePawnsIfNeeded(gameState, () => {
+    updateActionControls(state.gameState);
+  });
+  if (!actionControlsDelayed) updateActionControls(gameState);
   updateLog(gameState);
   updateCenter(gameState);
   if (state.devMode) showDebugBtnIfNeeded(gameState);
-
-  const canRoll = pa && (pa.type === 'wait_roll' || pa.type === 'service_roll' || pa.type === 'jail_choice') && pa.targetId === state.myId;
-  document.getElementById('dice-3d')?.classList.toggle('dice-rollable', !!canRoll);
 
   showDebugBtnIfNeeded(gameState);
 }

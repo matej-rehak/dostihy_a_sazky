@@ -283,16 +283,25 @@ module.exports = {
       this._resumeFn = null;
       this._scheduleAction(ACTION_DELAY_MS, fn);
     } else {
-      // Vrátit wait_roll hráči, který měl tah
-      this._scheduleAction(ACTION_DELAY_MS, () => {
-        if (this.players.get(turnPlayerId) && !this.players.get(turnPlayerId).bankrupt) {
+      // Frontovaný systém nabídek pendingAction iniciátora nekonzumuje, takže když se
+      // hra mezitím posunula (např. do debt_manage po hodu kostkou), nepřepisujeme stav
+      // stale fromContextem — jinak by hráč po vyřešení dluhu znovu hodil kostkou.
+      const turnPlayer = this.players.get(turnPlayerId);
+      if (!turnPlayer || turnPlayer.bankrupt) {
+        if (this.pendingAction) this._broadcast();
+        else this._advanceTurn();
+      } else if (this.pendingAction) {
+        this._broadcast();
+      } else {
+        this._scheduleAction(ACTION_DELAY_MS, () => {
+          if (this.pendingAction) { this._broadcast(); return; }
+          const tp = this.players.get(turnPlayerId);
+          if (!tp || tp.bankrupt) { this._advanceTurn(); return; }
           const resumeType = fromContext === 'jail_choice' ? 'jail_choice' : 'wait_roll';
           this._setPendingAction({ type: resumeType, targetId: turnPlayerId });
           this._broadcast();
-        } else {
-          this._advanceTurn();
-        }
-      });
+        });
+      }
     }
   },
 

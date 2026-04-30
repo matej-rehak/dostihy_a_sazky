@@ -214,4 +214,17 @@ module.exports = {
     this._addLog(`🎨 ${player.name} si změnil(a) barvu figurky`);
     this._broadcast();
   },
+
+  changeName(playerId, name) {
+    if (this.phase !== 'lobby') return;
+    const player = this.players.get(playerId);
+    if (!player) return;
+    const cleanName = typeof name === 'string' ? name.trim() : '';
+    if (!cleanName || cleanName.length > 20) return;
+
+    const oldName = player.name;
+    player.name = cleanName;
+    this._addLog(`👤 ${oldName} si změnil(a) jméno na ${cleanName}`);
+    this._broadcast();
+  },
 };

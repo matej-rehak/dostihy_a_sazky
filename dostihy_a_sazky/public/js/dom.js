@@ -36,6 +36,8 @@ const IDS = {
   debtTitle:     'debt-title',
   debtContent:   'debt-content',
   debtCloseBtn:  'debt-close-btn',
+  lobbyNameInput: 'lobby-name-input',
+  updateNameBtn:  'update-name-btn',
 };
 
 export const dom = {};

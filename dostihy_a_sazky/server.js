@@ -161,6 +161,7 @@ io.on('connection', socket => {
   socket.on('game:update_config', d => rooms.get(socket.roomId)?.engine.updateConfig(socket, d));
   socket.on('game:ready', () => rooms.get(socket.roomId)?.engine.toggleReady(socket.playerId));
   socket.on('game:change_color', ({ color }) => rooms.get(socket.roomId)?.engine.changeColor(socket.playerId, color));
+  socket.on('game:change_name', ({ name }) => rooms.get(socket.roomId)?.engine.changeName(socket.playerId, name));
   socket.on('game:roll', () => {
     if (throttle(socket, 'roll', 500)) return;
     rooms.get(socket.roomId)?.engine.handleRoll(socket);
