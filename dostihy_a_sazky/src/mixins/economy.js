@@ -32,6 +32,23 @@ module.exports = {
     player.properties.push(spaceId);
     this._addLog(`🏠 ${player.name} koupil(a) ${space.name} za ${fmt(space.price)} Kč`);
     this._checkBankrupt(pid);
+    this._checkStableCompletion(pid, spaceId);
+  },
+
+  _checkStableCompletion(pid, spaceId) {
+    const space = BOARD[spaceId];
+    if (space && space.type === 'horse') {
+      if (this._ownsFullGroup(pid, space.group)) {
+        this.io.to(this.roomId).emit('game_event', {
+          type: 'stable_completed',
+          pid: pid,
+          group: space.group,
+          groupColor: space.groupColor,
+          playerName: this.players.get(pid).name
+        });
+        this._addLog(`🎉 ${this.players.get(pid).name} zkompletoval(a) celou stáj!`);
+      }
+    }
   },
 
   _sellProperty(pid, spaceId) {

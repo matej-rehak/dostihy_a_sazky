@@ -10,77 +10,81 @@
       </div>
 
       <!-- Join form (hidden after joining) -->
-      <div id="join-form">
-        <input id="name-input" class="text-input" type="text" placeholder="Tvoje jméno..." maxlength="20"
-          autocomplete="off" />
-        <button id="join-btn" class="btn btn-gold btn-lg">Vstoupit do lobby →</button>
-      </div>
+      <div class="lobby-layout">
+        <div class="lobby-main">
+          <div id="join-form">
+            <input id="name-input" class="text-input" type="text" placeholder="Tvoje jméno..." maxlength="20"
+              autocomplete="off" />
+            <button id="join-btn" class="btn btn-gold btn-lg" style="width: 100%; margin-top: 10px;">Vstoupit do lobby →</button>
+          </div>
 
-      <!-- Waiting (shown after joining) -->
-      <div id="joined-wait" class="hidden">
-        <p class="joined-text">✅ Jste v lobby!</p>
-        <div class="name-change-wrap" style="margin-top: 10px; display: flex; gap: 8px;">
-          <input id="lobby-name-input" class="text-input" type="text" placeholder="Změnit jméno..." maxlength="20" />
-          <button id="update-name-btn" class="btn btn-outline btn-xs">Uložit</button>
+          <!-- Waiting (shown after joining) -->
+          <div id="joined-wait" class="hidden">
+            <p class="joined-text">✅ Jste v lobby!</p>
+            <div class="name-change-wrap" style="margin-top: 10px; display: flex; gap: 8px;">
+              <input id="lobby-name-input" class="text-input" type="text" placeholder="Změnit jméno..." maxlength="20" />
+              <button id="update-name-btn" class="btn btn-outline btn-xs">Uložit</button>
+            </div>
+            <button id="toggle-ready-btn" class="btn btn-gold btn-lg" style="width:100%; margin-top:20px;">JSEM PŘIPRAVEN</button>
+          </div>
+
+          <div id="lobby-color-picker-wrap">
+            <p class="label-sm">Barva tvé figurky:</p>
+            <div id="color-picker" class="color-picker"></div>
+          </div>
+
+          <!-- Player list -->
+          <div class="lobby-players-wrap">
+            <p class="label-sm">Hráči v lobby:</p>
+            <div id="lobby-players">
+              <p class="dim">Zatím nikdo...</p>
+            </div>
+          </div>
         </div>
-        <button id="toggle-ready-btn" class="btn btn-gold btn-lg" style="width:100%; margin-top:20px;">JSEM
-          PŘIPRAVEN</button>
-      </div>
 
-      <div id="lobby-color-picker-wrap">
-        <p class="label-sm">Barva tvé figurky:</p>
-        <div id="color-picker" class="color-picker"></div>
-      </div>
-
-      <!-- Player list -->
-      <div class="lobby-players-wrap">
-        <p class="label-sm">Hráči v lobby:</p>
-        <div id="lobby-players">
-          <p class="dim">Zatím nikdo...</p>
+        <!-- Host controls -->
+        <div id="host-controls" class="lobby-side hidden">
+          <div class="config-panel">
+            <p class="label-sm">Nastavení hry:</p>
+            <div class="config-grid">
+              <div class="config-row">
+                <label>Základní kapitál:</label>
+                <input type="number" id="cfg-startBal" class="text-input" value="10000" step="500" min="1000" />
+              </div>
+              <div class="config-row">
+                <label>Průchod STARTEM:</label>
+                <input type="number" id="cfg-startBon" class="text-input" value="4000" step="500" min="0" />
+              </div>
+              <div class="config-row">
+                <label>Odkup koní (×):</label>
+                <input type="number" id="cfg-buyout" class="text-input" value="0" step="0.5" min="0" />
+              </div>
+              <div class="config-row">
+                <label>Limit hry (min):</label>
+                <input type="number" id="cfg-timeLimit" class="text-input" value="0" step="5" min="0" max="240" />
+              </div>
+              <div class="config-row">
+                <label>Čas na tah (s):</label>
+                <input type="number" id="cfg-turnTimeLimit" class="text-input" value="0" step="5" min="0" max="300" />
+              </div>
+              <div class="config-row">
+                <label>Pole 20:</label>
+                <select id="cfg-field20Mode" class="text-input">
+                  <option value="parking">Parkoviště</option>
+                  <option value="airport">Letiště</option>
+                </select>
+              </div>
+              <div class="config-row" id="cfg-airportFee-row">
+                <label>Cena letu (Kč):</label>
+                <input type="number" id="cfg-airportFee" class="text-input" value="2000" step="500" min="0" />
+              </div>
+            </div>
+            <p class="dim" style="margin-top:4px">0 = bez limitu. Ostatní vidí pravidla níže.</p>
+          </div>
+          <button id="start-btn" class="btn btn-green btn-lg" style="width:100%; margin-top: auto;" disabled>
+            ▶ Spustit hru (min. 2 hráči)
+          </button>
         </div>
-      </div>
-
-      <!-- Host controls -->
-      <div id="host-controls" class="hidden">
-        <div class="config-panel">
-          <p class="label-sm">Nastavení hry:</p>
-          <div class="config-row">
-            <label>Základní kapitál:</label>
-            <input type="number" id="cfg-startBal" class="text-input" value="10000" step="500" min="1000" />
-          </div>
-          <div class="config-row">
-            <label>Průchod přes START:</label>
-            <input type="number" id="cfg-startBon" class="text-input" value="4000" step="500" min="0" />
-          </div>
-          <div class="config-row">
-            <label>Násobič odkupu koní:</label>
-            <input type="number" id="cfg-buyout" class="text-input" value="0" step="0.5" min="0" />
-          </div>
-          <div class="config-row">
-            <label>Časový limit hry (min):</label>
-            <input type="number" id="cfg-timeLimit" class="text-input" value="0" step="5" min="0" max="240" />
-          </div>
-          <div class="config-row">
-            <label>Čas na tah (s):</label>
-            <input type="number" id="cfg-turnTimeLimit" class="text-input" value="0" step="5" min="0" max="300" />
-          </div>
-          <div class="config-row">
-            <label>Pole 20:</label>
-            <select id="cfg-field20Mode" class="text-input">
-              <option value="parking">Parkoviště</option>
-              <option value="airport">Letiště</option>
-            </select>
-          </div>
-          <div class="config-row" id="cfg-airportFee-row">
-            <label>Cena letu (Kč):</label>
-            <input type="number" id="cfg-airportFee" class="text-input" value="2000" step="500" min="0" />
-          </div>
-          <p class="dim" style="margin-bottom:8px">0 = bez limitu. Ostatní hráči vidí aktuální pravidla níže.
-          </p>
-        </div>
-        <button id="start-btn" class="btn btn-green btn-lg" disabled>
-          ▶ Spustit hru (min. 2 hráči)
-        </button>
       </div>
 
       <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">

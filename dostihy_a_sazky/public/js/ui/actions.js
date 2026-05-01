@@ -598,3 +598,33 @@ function renderGameOver(winner, reason) {
   goDiv.appendChild(replayBtn);
   dom.actionContent.appendChild(goDiv);
 }
+
+export function showStableOverlay(playerName, group, groupColor) {
+  const existing = document.getElementById('stable-overlay');
+  if (existing) existing.remove();
+
+  const overlay = makeEl('div', 'broke-overlay');
+  overlay.id = 'stable-overlay';
+  overlay.style.zIndex = '12000';
+
+  const card = makeEl('div', 'broke-card');
+  card.style.borderTop = `4px solid ${groupColor || 'var(--gold)'}`;
+
+  card.appendChild(makeEl('div', 'broke-icon', '🏇'));
+  card.appendChild(makeEl('div', 'broke-title', 'Stáj zkompletována!'));
+
+  const textEl = makeEl('div', 'broke-property', playerName);
+  textEl.style.color = groupColor || 'var(--gold)';
+  textEl.style.fontSize = '24px';
+  card.appendChild(textEl);
+
+  const friendlyGroup = (group.charAt(0).toUpperCase() + group.slice(1).replace('_', ' ')) + ' stáj';
+  card.appendChild(makeEl('div', 'broke-amount', `Získal(a) celou: ${friendlyGroup}`));
+
+  overlay.appendChild(card);
+
+  const dismiss = () => overlay.remove();
+  overlay.addEventListener('click', dismiss);
+  document.body.appendChild(overlay);
+  setTimeout(dismiss, 2000);
+}

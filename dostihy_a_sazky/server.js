@@ -7,6 +7,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const GameEngine = require('./src/GameEngine');
 const { generateToken, verifyToken } = require('./src/auth');
+const { PLAYER_COLORS } = require('./src/constants');
 
 // ─── HTTP + Socket.IO setup ──────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ const io = new Server(server);
 const DEV_MODE = process.env.npm_lifecycle_event === 'dev' || process.env.NODE_ENV === 'development';
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/api/config', (_req, res) => res.json({ devMode: DEV_MODE }));
+app.get('/api/config', (_req, res) => res.json({ devMode: DEV_MODE, colors: PLAYER_COLORS }));
 app.get('*', (_req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );

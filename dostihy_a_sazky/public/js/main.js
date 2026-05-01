@@ -5,7 +5,7 @@ import { showToast }                            from './utils.js';
 import { renderRoomList, renderLobby, buildColorPicker, initLobbyListeners } from './ui/lobby.js';
 import { buildBoard, updateBoard }              from './ui/board.js';
 import { updatePlayers }                        from './ui/players.js';
-import { updateActionPanel }                    from './ui/actions.js';
+import { updateActionPanel, showStableOverlay }                    from './ui/actions.js';
 import { updateLog, updateCenter }              from './ui/log.js';
 import { initTooltipListeners }                 from './ui/tooltip.js';
 import { animatePawnsIfNeeded }                 from './animations/pawns.js';
@@ -284,10 +284,11 @@ function processState(gameState) {
   await loadPartials();
   initDebugPanel();
 
-  // Načtení konfigurace (devMode)
+  // Načtení konfigurace (devMode + barvy figurek)
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
     state.devMode = !!cfg.devMode;
+    if (Array.isArray(cfg.colors) && cfg.colors.length) state.allColors = cfg.colors;
   } catch { /* produkce bez config endpointu */ }
 
   if (state.devMode) initDebugPanel();
@@ -322,6 +323,11 @@ function processState(gameState) {
 
   socket.on('game:state', gameState => processState(gameState));
   socket.on('game:error', ({ message }) => showToast(message, true));
+  socket.on('game_event', (event) => {
+    if (event.type === 'stable_completed') {
+      showStableOverlay(event.playerName, event.group, event.groupColor);
+    }
+  });
 
   initLobbyListeners(resetLocalState);
   socket.emit('room:list');

@@ -56,7 +56,9 @@ function renderPlayerList(players) {
 }
 
 function renderHostControls(gameState, me) {
+  const card = dom.lobbyView.querySelector('.lobby-card');
   if (!me.isHost) {
+    if (card) card.classList.remove('is-host');
     dom.hostControls?.classList.add('hidden');
     const balDisp = document.getElementById('cfg-bal-disp');
     if (balDisp) {
@@ -73,6 +75,7 @@ function renderHostControls(gameState, me) {
     return;
   }
 
+  if (card) card.classList.add('is-host');
   dom.hostControls?.classList.remove('hidden');
   document.getElementById('cfg-bal-disp')?.classList.add('hidden');
 
@@ -147,9 +150,10 @@ export function renderRoomList(list) {
 
 // ─── Color picker ─────────────────────────────────────────────────────────────
 
-export function buildColorPicker(colors, usedColors = [], isJoined = false) {
-  if (!dom.colorPicker) return;
-  dom.colorPicker.innerHTML = '';
+export function buildColorPicker(colors, usedColors = [], isJoined = false, container = null) {
+  const el = container || dom.colorPicker;
+  if (!el) return;
+  el.innerHTML = '';
   if (state.selectedColor && usedColors.includes(state.selectedColor)) state.selectedColor = null;
 
   colors.forEach(c => {
@@ -159,18 +163,18 @@ export function buildColorPicker(colors, usedColors = [], isJoined = false) {
     btn.style.background = c;
     btn.title = c;
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+      el.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       state.selectedColor = c;
       if (isJoined) {
         socket.emit('game:change_color', { color: c });
       }
     });
-    dom.colorPicker.appendChild(btn);
+    el.appendChild(btn);
   });
 
-  if (!state.selectedColor && dom.colorPicker.firstChild && !isJoined) {
-    dom.colorPicker.firstChild.click();
+  if (!state.selectedColor && el.firstChild && !isJoined) {
+    el.firstChild.click();
   }
 }
 
@@ -198,6 +202,9 @@ export function initLobbyListeners(onLeave) {
   document.getElementById('show-create-room')?.addEventListener('click', () => {
     roomSelection?.classList.add('hidden');
     roomCreateForm?.classList.remove('hidden');
+    if (state.allColors.length > 0) {
+      buildColorPicker(state.allColors, [], false, dom.newRoomColorPicker);
+    }
   });
   document.getElementById('cancel-create-btn')?.addEventListener('click', () => {
     roomCreateForm?.classList.add('hidden');

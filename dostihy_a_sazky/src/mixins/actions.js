@@ -132,6 +132,7 @@ module.exports = {
     p.properties.push(spaceId);
     delete this.tokens[spaceId];
     this._cancelStaleTradeOffers([spaceId]);
+    this._checkStableCompletion(pid, spaceId);
     // Žetony nelze koupit okamžitě po odkupu — až po příštím zastavení
     this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());
   },
@@ -254,12 +255,14 @@ module.exports = {
         this.ownerships[sid] = pid;
         initiator.properties = initiator.properties.filter(id => id !== sid);
         if (!target.properties.includes(sid)) target.properties.push(sid);
+        this._checkStableCompletion(pid, sid);
       });
       // Koně: target → initiator
       request.horses.forEach(sid => {
         this.ownerships[sid] = fromId;
         target.properties = target.properties.filter(id => id !== sid);
         if (!initiator.properties.includes(sid)) initiator.properties.push(sid);
+        this._checkStableCompletion(fromId, sid);
       });
       // Peníze
       initiator.balance -= offer.money;
