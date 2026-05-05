@@ -52,6 +52,7 @@ function resetLocalState() {
   state.boardBuilt        = false;
   state.clientVisualPos   = {};
   state.isAnimatingPawn   = false;
+  state.prevPawnMoveId    = null;
   state.prevOwnerships    = {};
   state.prevTokens        = {};
   state.prevBalances      = {};

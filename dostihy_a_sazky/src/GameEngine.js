@@ -26,6 +26,7 @@ class GameEngine {
     this.tokens = {};            // { spaceId: { small: 0–4, big: false } }
     this.pendingAction = null;
     this.lastDice = null;
+    this.lastPawnMove = null;
     this.log = [];
     this.round = 1;
     this.financeCards = FinanceDeck();

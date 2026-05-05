@@ -1,7 +1,7 @@
 'use strict';
 
 const BOARD = require('../data/boardData');
-const { ACTION_DELAY_MS, roll, fmt } = require('../constants');
+const { ACTION_DELAY_MS, JAIL_SPACE, roll, fmt } = require('../constants');
 
 module.exports = {
 
@@ -54,7 +54,16 @@ module.exports = {
 
       if (dice === 6 && prevAccumulator > 0) {
         // Dvojitá šestka → jde do Distancu z libovolného místa
+        const from = player.position;
         player.rollAccumulator = 0;
+        this.lastPawnMove = {
+          id: Math.random(),
+          type: 'teleport',
+          reason: 'double_six_jail',
+          playerId: pid,
+          from,
+          to: JAIL_SPACE,
+        };
         this._addLog(`🎲 ${player.name} hodil(a) 6 dvakrát za sebou → jde do Distancu! 🔒`);
         this._setPendingAction(null);
         this._sendToJail(pid);

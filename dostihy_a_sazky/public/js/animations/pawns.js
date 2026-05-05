@@ -2,7 +2,7 @@ import { makeEl, safeColor } from '../utils.js';
 import { state } from '../state.js';
 import { dom } from '../dom.js';
 import { audioManager } from '../audio.js';
-import { getPawnStepDelay, hasPendingPawnAnimation } from './pawnAnimationGate.mjs';
+import { getPawnStepDelay, hasPendingPawnAnimation, isPawnTeleportMove } from './pawnAnimationGate.mjs';
 
 export function renderPawns(gameState) {
   document.querySelectorAll('.space-pawns').forEach(el => { el.innerHTML = ''; });
@@ -37,13 +37,50 @@ export function renderPawns(gameState) {
 
     const pawn = makeEl('div', `pawn${p.id === gameState.currentTurnId ? ' is-active' : ''}`);
     pawn.title = p.name;
+    pawn.dataset.playerId = p.id;
     pawn.appendChild(svg);
     pawnsEl.appendChild(pawn);
   });
 }
 
+function animateTeleportMove(gameState, move, onDone) {
+  const player = gameState.players.find(p => isPawnTeleportMove(p, state.clientVisualPos, move));
+  if (!player || state.prevPawnMoveId === move.id) return false;
+
+  state.prevPawnMoveId = move.id;
+  state.isAnimatingPawn = true;
+
+  const fromSpace = dom.board?.querySelector(`.space[data-id="${move.from}"]`);
+  const fromPawn = fromSpace?.querySelector(`.pawn[data-player-id="${player.id}"]`);
+  fromPawn?.classList.add('pawn-teleport-out');
+  audioManager.play('jail');
+
+  setTimeout(() => {
+    state.clientVisualPos[player.id] = player.position;
+    renderPawns(gameState);
+    const toSpace = dom.board?.querySelector(`.space[data-id="${move.to}"]`);
+    const toPawn = toSpace?.querySelector(`.pawn[data-player-id="${player.id}"]`);
+    toPawn?.classList.add('pawn-teleport-in');
+    toSpace?.classList.add('jail-shake');
+
+    setTimeout(() => {
+      toSpace?.classList.remove('jail-shake');
+      state.isAnimatingPawn = false;
+      renderPawns(gameState);
+      if (typeof onDone === 'function') onDone();
+    }, 520);
+  }, 360);
+
+  return true;
+}
+
 export function animatePawnsIfNeeded(gameState, onDone = null) {
-  const needsAnim = hasPendingPawnAnimation(gameState.players, state.clientVisualPos);
+  const move = gameState.lastPawnMove || null;
+  if (!state.isAnimatingPawn && move?.type === 'teleport' && animateTeleportMove(gameState, move, onDone)) {
+    return true;
+  }
+
+  const needsAnim = hasPendingPawnAnimation(gameState.players, state.clientVisualPos, move);
 
   if (needsAnim && !state.isAnimatingPawn) {
     state.isAnimatingPawn = true;

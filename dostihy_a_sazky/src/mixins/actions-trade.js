@@ -72,7 +72,7 @@ module.exports = {
       if (request.money > 0 && target.balance < request.money) {
         this._addLog(`❌ Obchod zrušen — ${target.name} nemá dostatek peněz (potřeba ${fmt(request.money)} Kč, má ${fmt(target.balance)} Kč)`);
         decision = 'decline';
-      } else if (fromContext !== 'debt_manage' && offer.money > 0 && initiator.balance < offer.money) {
+      } else if (!(fromContext === 'debt_manage' && fromId === turnPlayerId) && offer.money > 0 && initiator.balance < offer.money) {
         this._addLog(`❌ Obchod zrušen — ${initiator.name} nemá dostatek peněz (potřeba ${fmt(offer.money)} Kč, má ${fmt(initiator.balance)} Kč)`);
         decision = 'decline';
       }
@@ -113,6 +113,7 @@ module.exports = {
       // Obchod byl zahájen z dluhové situace
       const fn = this._resumeFn;
       this._resumeFn = null;
+      this._setPendingAction(null);
       this._scheduleAction(ACTION_DELAY_MS, fn);
     } else {
       // Frontovaný systém nabídek pendingAction iniciátora nekonzumuje, takže když se

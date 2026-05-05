@@ -6,6 +6,7 @@ export const state = {
   boardBuilt:        false,
   clientVisualPos:   {},
   isAnimatingPawn:   false,
+  prevPawnMoveId:    null,
   prevOwnerships:    {},
   prevTokens:        {},
   prevBalances:      {},

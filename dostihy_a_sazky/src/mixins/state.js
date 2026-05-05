@@ -56,6 +56,7 @@ module.exports = {
       tokens: this.tokens,
       pendingAction: this.pendingAction,
       lastDice: this.lastDice,
+      lastPawnMove: this.lastPawnMove,
       log: this.log.slice(0, LOG_BROADCAST_MAX),
       round: this.round,
       config: this.config,

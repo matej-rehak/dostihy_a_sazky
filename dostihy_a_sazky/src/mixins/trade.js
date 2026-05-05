@@ -54,7 +54,9 @@ module.exports = {
       }
     }
 
-    const fromContext = fromId === targetPlayerInDebt ? 'debt_manage' : (this.pendingAction?.type === 'jail_choice' ? 'jail_choice' : 'wait_roll');
+    const fromContext = (fromId === targetPlayerInDebt || isTargetInDebt)
+      ? 'debt_manage'
+      : (this.pendingAction?.type === 'jail_choice' ? 'jail_choice' : 'wait_roll');
     const turnPlayerId = this.turnOrder[this.currentTurnIdx];
 
     const offerId = 'trade_' + Math.random().toString(36).substr(2, 9);

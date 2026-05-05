@@ -41,6 +41,99 @@ test('akceptace frontovaného obchodu nepřepíše debt_manage iniciátora', () 
   assert.equal(scheduled, null, 'žádné nové _scheduleAction se nesmí naplánovat');
 });
 
+test('akceptace debt_manage obchodu po dorovnání dluhu vyčistí pendingAction', () => {
+  const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
+  engine.phase = 'playing';
+  engine.players.set('A', { id: 'A', name: 'A', position: 0, balance: -1000, properties: [1], bankrupt: false });
+  engine.players.set('B', { id: 'B', name: 'B', position: 5, balance: 5000, properties: [], bankrupt: false });
+  engine.turnOrder = ['A', 'B'];
+  engine.currentTurnIdx = 0;
+  engine.ownerships = { 1: 'A' };
+  engine.pendingAction = { type: 'debt_manage', targetId: 'A' };
+
+  const originalResume = () => engine._addLog('resume-after-debt');
+  engine._resumeFn = originalResume;
+
+  let scheduled = null;
+  engine._broadcast = () => {};
+  engine._scheduleAction = (delay, fn) => { scheduled = { delay, fn }; };
+
+  engine._handleTradeOffer('B', 'accept', {
+    fromId: 'A',
+    offer: { horses: [], money: 0 },
+    request: { horses: [], money: 2000 },
+    fromContext: 'debt_manage',
+    turnPlayerId: 'A',
+  });
+
+  assert.equal(engine.players.get('A').balance, 1000);
+  assert.equal(engine.players.get('A').bankrupt, false);
+  assert.equal(engine.pendingAction, null);
+  assert.equal(scheduled.fn, originalResume);
+});
+
+test('akceptace obchodu navrženého jiným hráčem zadluženému hráči ukončí debt_manage', () => {
+  const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
+  engine.phase = 'playing';
+  engine.players.set('A', { id: 'A', name: 'A', position: 0, balance: -1000, properties: [1], bankrupt: false });
+  engine.players.set('B', { id: 'B', name: 'B', position: 5, balance: 5000, properties: [], bankrupt: false });
+  engine.turnOrder = ['A', 'B'];
+  engine.currentTurnIdx = 0;
+  engine.ownerships = { 1: 'A' };
+  engine.pendingAction = { type: 'debt_manage', targetId: 'A' };
+
+  const originalResume = () => engine._addLog('resume-after-debt');
+  engine._resumeFn = originalResume;
+
+  let scheduled = null;
+  engine._broadcast = () => {};
+  engine._scheduleAction = (delay, fn) => { scheduled = { delay, fn }; };
+
+  engine.initiateTrade(
+    { playerId: 'B', emit: () => {} },
+    {
+      targetId: 'A',
+      offer: { horses: [], money: 2000 },
+      request: { horses: [], money: 0 },
+    }
+  );
+
+  assert.equal(engine.tradeOffers.length, 1);
+  assert.equal(engine.tradeOffers[0].fromContext, 'debt_manage');
+
+  engine._handleTradeResponse('A', 'accept', engine.tradeOffers[0].id);
+
+  assert.equal(engine.players.get('A').balance, 1000);
+  assert.equal(engine.players.get('A').bankrupt, false);
+  assert.equal(engine.pendingAction, null);
+  assert.equal(scheduled.fn, originalResume);
+});
+
+test('debt_manage obchod od pomocníka se zruší, pokud pomocník už nemá slíbené peníze', () => {
+  const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
+  engine.phase = 'playing';
+  engine.players.set('A', { id: 'A', name: 'A', position: 0, balance: -1000, properties: [1], bankrupt: false });
+  engine.players.set('B', { id: 'B', name: 'B', position: 5, balance: 500, properties: [], bankrupt: false });
+  engine.turnOrder = ['A', 'B'];
+  engine.currentTurnIdx = 0;
+  engine.ownerships = { 1: 'A' };
+  engine.pendingAction = { type: 'debt_manage', targetId: 'A' };
+
+  engine._broadcast = () => {};
+  engine._scheduleAction = () => {};
+
+  engine._handleTradeOffer('A', 'accept', {
+    fromId: 'B',
+    offer: { horses: [], money: 2000 },
+    request: { horses: [], money: 0 },
+    fromContext: 'debt_manage',
+    turnPlayerId: 'A',
+  });
+
+  assert.equal(engine.players.get('A').balance, -1000);
+  assert.equal(engine.players.get('B').balance, 500);
+});
+
 test('akceptace frontovaného obchodu nepřepíše card_ack jiného hráče', () => {
   const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
   engine.phase = 'playing';
