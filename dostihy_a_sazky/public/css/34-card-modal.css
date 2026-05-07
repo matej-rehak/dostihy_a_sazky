@@ -1,0 +1,172 @@
+/* ─── 3D Card Modal ─── */
+.card-3d-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.broke-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 24px;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.broke-card {
+  width: min(560px, 100%);
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 77, 77, 0.45);
+  border-radius: 22px;
+  padding: clamp(28px, 5vw, 48px);
+  text-align: center;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.82), 0 0 42px rgba(255, 77, 77, 0.18);
+  pointer-events: none;
+  animation: winnerReveal 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.broke-icon {
+  font-size: clamp(44px, 8vw, 64px);
+  line-height: 1;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 0 18px rgba(255, 77, 77, 0.35));
+}
+
+.broke-title {
+  font-family: var(--font-h);
+  font-size: clamp(26px, 5vw, 36px);
+  letter-spacing: 4px;
+  color: var(--red);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  text-shadow: 0 0 22px rgba(255, 77, 77, 0.26);
+}
+
+.broke-property {
+  font-family: var(--font-h);
+  font-size: clamp(46px, 10vw, 82px);
+  letter-spacing: 3px;
+  color: var(--gold);
+  line-height: 0.95;
+  margin-bottom: 18px;
+  text-shadow: 0 0 36px rgba(255, 215, 0, 0.22);
+  text-transform: uppercase;
+}
+
+.broke-amount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 18px;
+  border: 1px solid rgba(255, 215, 0, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 215, 0, 0.08);
+  font-size: clamp(18px, 4vw, 24px);
+  font-weight: 800;
+  color: var(--text);
+  box-shadow: inset 0 0 18px rgba(255, 215, 0, 0.06);
+}
+
+.card-3d-scene {
+  width: 280px;
+  height: 400px;
+  perspective: 1200px;
+}
+
+.card-3d {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform: rotateY(180deg);
+  /* hidden back face first */
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 215, 0, 0.4);
+  border-radius: 14px;
+}
+
+.card-3d.flipped {
+  transform: rotateY(0deg);
+}
+
+/* shows front */
+.card-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.card-back {
+  background: radial-gradient(circle at center, #1b263b 0%, #0d1b2a 100%);
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-back-pattern {
+  font-size: 80px;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+}
+
+.card-back-text {
+  color: var(--gold);
+  font-family: var(--font-h);
+  font-size: 24px;
+  text-align: center;
+  margin-top: 10px;
+  line-height: 1.1;
+  letter-spacing: 2px;
+}
+
+.card-front {
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  padding: 30px 24px;
+  text-align: center;
+  transform: rotateY(0deg);
+  border: 2px solid rgba(255, 215, 0, 0.2);
+}
+
+#card-3d-title {
+  font-family: var(--font-h);
+  font-size: 32px;
+  color: var(--gold);
+  letter-spacing: 2px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-hi);
+  padding-bottom: 10px;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+}
+
+#card-3d-text {
+  font-size: 16px;
+  color: var(--text);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* Jail display */

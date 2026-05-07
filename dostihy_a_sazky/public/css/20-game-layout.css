@@ -1,0 +1,39 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   GAME LAYOUT
+═══════════════════════════════════════════════════════════════════════════ */
+#game-view {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ─── Board wrap ────────────────────────────────────────────────────── */
+#board-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background:
+    radial-gradient(ellipse at center, rgba(10, 21, 9, 0.4) 0%, rgba(0, 0, 0, 0.9) 100%),
+    url('https://www.toptal.com/designers/subtlepatterns/uploads/grass.png');
+  background-color: var(--bg);
+  background-blend-mode: overlay;
+}
+
+#board {
+  display: grid;
+  grid-template-columns: 80px repeat(9, 1fr) 80px;
+  grid-template-rows: 80px repeat(9, 1fr) 80px;
+  width: min(calc(100vh - 24px), calc(100vw - 360px - 24px));
+  height: min(calc(100vh - 24px), calc(100vw - 360px - 24px));
+  background: var(--bg-board);
+  border: 2px solid rgba(255, 255, 255, .08);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Board center (inner 9×9 area) */

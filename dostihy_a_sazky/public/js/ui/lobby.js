@@ -3,6 +3,7 @@ import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { socket } from '../socket.js';
 import { confirmDialog } from './confirm.js';
+import { syncJoinButtonState } from './lobbyState.mjs';
 
 export function renderLobby(gameState, me) {
   dom.lobbyView.classList.remove('hidden');
@@ -11,6 +12,7 @@ export function renderLobby(gameState, me) {
   renderPlayerList(gameState.players);
 
   if (me) {
+    syncJoinButtonState(dom.joinBtn, true);
     dom.joinForm?.classList.add('hidden');
     dom.joinedWait?.classList.remove('hidden');
     renderHostControls(gameState, me);
@@ -20,6 +22,7 @@ export function renderLobby(gameState, me) {
       dom.lobbyNameInput.value = me.name;
     }
   } else {
+    syncJoinButtonState(dom.joinBtn, false);
     dom.joinForm?.classList.remove('hidden');
     dom.joinedWait?.classList.add('hidden');
     dom.hostControls?.classList.add('hidden');

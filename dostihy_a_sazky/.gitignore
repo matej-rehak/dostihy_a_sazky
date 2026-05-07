@@ -2,4 +2,7 @@ node_modules/
 agents/
 prompts/
 *.md
+!AGENTS.md
+!.codex/
+!.codex/*.md
 .claude/*

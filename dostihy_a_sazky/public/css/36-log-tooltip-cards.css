@@ -1,0 +1,201 @@
+#log-section {
+  flex-shrink: 0;
+  height: 160px;
+  /* Sníženo ze 190px */
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+#log-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .08) transparent;
+}
+
+.log-entry {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .03);
+  animation: logIn .2s ease;
+  line-height: 1.4;
+}
+
+.log-entry:first-child {
+  color: var(--text);
+}
+
+@keyframes logIn {
+  from {
+    opacity: 0;
+    transform: translateX(-5px)
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0)
+  }
+}
+
+/* ─── Tooltip Detailed ─── */
+.space-tip {
+  position: fixed;
+  z-index: 20000;
+  width: 240px;
+  pointer-events: none;
+  background: rgba(13, 22, 38, 0.96);
+  border: 1px solid var(--border-hi);
+  border-radius: 12px;
+  padding: 0;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tip-header {
+  padding: 12px;
+  text-align: center;
+  font-family: var(--font-h);
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: #fff;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.tip-body {
+  padding: 12px;
+}
+
+.tip-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.tip-table th {
+  display: none;
+}
+
+.tip-table td {
+  padding: 4px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tip-table tr:last-child td {
+  border-bottom: none;
+}
+
+.tip-table td:last-child {
+  text-align: right;
+  font-weight: 600;
+}
+
+.tip-table tr.active-rent {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--gold);
+}
+
+.tip-table tr.active-rent td {
+  border-bottom: none;
+}
+
+.tip-prices {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-hi);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.price-tag {
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+}
+
+.price-tag b {
+  font-size: 13px;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.tip-owner-info {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.owner-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* ─── Premium Cards ─── */
+.card-display {
+  background: #fff;
+  color: #333;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.card-display::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 2px solid #333;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.card-display .card-header {
+  font-family: var(--font-h);
+  font-size: 24px;
+  color: #000;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #333;
+  padding-bottom: 5px;
+}
+
+.card-display .card-impact {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 10px 0;
+}
+
+.card-display .card-impact.neg {
+  color: #d63031;
+}
+
+.card-display .card-impact.pos {
+  color: #27ae60;
+}
+
+.card-display .card-text {
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 500;
+  padding: 0 10px;
+}
+

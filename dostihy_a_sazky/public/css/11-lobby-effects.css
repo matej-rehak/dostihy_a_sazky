@@ -1,0 +1,49 @@
+/* ─── Vizuální efekty / Animace nákupu ─── */
+.floating-text {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-h);
+  font-size: 36px;
+  letter-spacing: 1px;
+  font-weight: bold;
+  text-shadow: 0 4px 6px rgba(0, 0, 0, 0.9), 0 0 15px currentColor;
+  pointer-events: none;
+  z-index: 9999;
+  animation: floatUpBurst 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes floatUpBurst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.5);
+  }
+
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.15);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -150%) scale(0.9);
+  }
+}
+
+.flash-buy {
+  animation: spaceFlash 1s ease-out;
+}
+
+@keyframes spaceFlash {
+  0% {
+    filter: brightness(1.5);
+  }
+
+  50% {
+    filter: brightness(1.2);
+  }
+
+  100% {
+    filter: brightness(1);
+  }
+}
+

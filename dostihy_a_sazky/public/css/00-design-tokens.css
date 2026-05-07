@@ -1,0 +1,26 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESIGN SYSTEM
+═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --bg: #309127;
+  --bg-card: #121d2d;
+  --bg-card2: #1a2639;
+  --bg-board: #e8d38b;
+  /* Maintain track authenticity */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hi: rgba(255, 255, 255, 0.15);
+  --gold: #ffd700;
+  --gold-dim: #b8960c;
+  --gold-glow: rgba(255, 215, 0, 0.2);
+  --green: #00ff88;
+  --red: #ff4d4d;
+  --blue: #40c4ff;
+  --text: #e2e8f8;
+  --text-dim: rgba(226, 232, 248, 0.6);
+  --text-muted: rgba(226, 232, 248, 0.3);
+  --font-h: 'Bebas Neue', sans-serif;
+  --font: 'Outfit', sans-serif;
+  --radius: 6px;
+  --trans: 0.18s ease;
+}
+

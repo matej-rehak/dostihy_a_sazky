@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dostihy 3D - volitelny rezim</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10151b;
+      --panel: #17212a;
+      --panel-2: #1d2a34;
+      --line: #38505e;
+      --text: #f0efe7;
+      --muted: #b7c3c7;
+      --gold: #d7b46a;
+      --green: #4aa96c;
+      --blue: #5b9bd5;
+      --red: #c65b55;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(215, 180, 106, 0.12), transparent 28rem),
+        linear-gradient(135deg, #0d1217 0%, var(--bg) 55%, #15202a 100%);
+      color: var(--text);
+      padding: 32px;
+    }
+
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0 0 28px;
+      color: var(--muted);
+      max-width: 780px;
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(23, 33, 42, 0.92);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 18px 42px rgba(0,0,0,0.28);
+    }
+
+    .preview {
+      position: relative;
+      height: 300px;
+      padding: 18px;
+      background: linear-gradient(180deg, #25333c 0%, #111820 100%);
+      overflow: hidden;
+      perspective: 780px;
+    }
+
+    .hud {
+      position: absolute;
+      inset: 14px 14px auto auto;
+      width: 96px;
+      display: grid;
+      gap: 7px;
+      z-index: 5;
+    }
+
+    .hud span {
+      height: 18px;
+      border-radius: 4px;
+      background: rgba(240,239,231,0.16);
+      border: 1px solid rgba(240,239,231,0.1);
+    }
+
+    .board3d {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      width: 230px;
+      height: 230px;
+      transform-style: preserve-3d;
+      transform: translate(-50%, -50%) rotateX(58deg) rotateZ(-35deg);
+      background: #20302a;
+      border: 8px solid #d4c08a;
+      box-shadow: 0 24px 40px rgba(0,0,0,0.42);
+    }
+
+    .track {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(11, 1fr);
+      grid-template-rows: repeat(11, 1fr);
+      gap: 2px;
+      padding: 4px;
+    }
+
+    .sq {
+      background: #eadfb9;
+      border-radius: 2px;
+      border: 1px solid rgba(0,0,0,0.18);
+    }
+
+    .center {
+      position: absolute;
+      inset: 52px;
+      background: #182620;
+      border: 1px solid rgba(234,223,185,0.35);
+      display: grid;
+      place-items: center;
+      color: var(--gold);
+      font-weight: 800;
+      text-align: center;
+      font-size: 15px;
+      line-height: 1.1;
+    }
+
+    .pawn {
+      position: absolute;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.18), 0 10px 10px rgba(0,0,0,0.35);
+      transform: translateZ(22px);
+    }
+
+    .p1 { left: 180px; top: 196px; }
+    .p2 { left: 48px; top: 38px; background: var(--blue); }
+    .p3 { left: 86px; top: 184px; background: var(--green); }
+
+    .side-panel {
+      position: absolute;
+      top: 18px;
+      bottom: 18px;
+      right: 18px;
+      width: 88px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(12,18,23,0.72);
+      border-radius: 8px;
+      padding: 10px;
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      z-index: 6;
+    }
+
+    .side-panel div {
+      height: 22px;
+      border-radius: 4px;
+      background: rgba(240,239,231,0.16);
+    }
+
+    .terrain {
+      position: absolute;
+      inset: auto -30px -20px -30px;
+      height: 88px;
+      background: linear-gradient(90deg, #264d32, #5c5230, #2f5b3c);
+      transform: rotateX(68deg);
+      filter: blur(0.2px);
+    }
+
+    .stand {
+      position: absolute;
+      left: 28px;
+      top: 32px;
+      width: 90px;
+      height: 50px;
+      background: linear-gradient(180deg, #936b4c, #50392b);
+      transform: skewX(-18deg);
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+
+    .mode-toggle {
+      position: absolute;
+      left: 18px;
+      top: 18px;
+      display: flex;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 999px;
+      overflow: hidden;
+      z-index: 7;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .mode-toggle span {
+      padding: 7px 10px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .mode-toggle .active {
+      background: var(--gold);
+      color: #20180c;
+    }
+
+    .body {
+      padding: 18px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(215,180,106,0.14);
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .notes {
+      margin-top: 14px;
+      display: grid;
+      gap: 7px;
+      font-size: 13px;
+      color: #d9ddd8;
+    }
+
+    .notes span::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-right: 8px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .recommend {
+      border-color: rgba(215,180,106,0.55);
+    }
+
+    @media (max-width: 980px) {
+      body { padding: 18px; }
+      .grid { grid-template-columns: 1fr; }
+      .preview { height: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Volitelny 3D rezim pro Dostihy a sazky</h1>
+    <p class="subtitle">Tri mozne cesty. Vsechny nechavaji soucasnou 2D desku a pravidla bezpecne zachovane; lisi se tim, kolik 3D sveta stavime hned v prvni iteraci.</p>
+
+    <section class="grid">
+      <article class="card recommend">
+        <div class="preview">
+          <div class="mode-toggle"><span>2D</span><span class="active">3D</span></div>
+          <div class="board3d">
+            <div class="track">
+              <div class="sq" style="grid-row:11;grid-column:11"></div>
+              <div class="sq" style="grid-row:11;grid-column:10"></div>
+              <div class="sq" style="grid-row:11;grid-column:9"></div>
+              <div class="sq" style="grid-row:11;grid-column:8"></div>
+              <div class="sq" style="grid-row:11;grid-column:7"></div>
+              <div class="sq" style="grid-row:11;grid-column:6"></div>
+              <div class="sq" style="grid-row:11;grid-column:5"></div>
+              <div class="sq" style="grid-row:11;grid-column:4"></div>
+              <div class="sq" style="grid-row:11;grid-column:3"></div>
+              <div class="sq" style="grid-row:11;grid-column:2"></div>
+              <div class="sq" style="grid-row:11;grid-column:1"></div>
+              <div class="sq" style="grid-row:10;grid-column:1"></div>
+              <div class="sq" style="grid-row:9;grid-column:1"></div>
+              <div class="sq" style="grid-row:8;grid-column:1"></div>
+              <div class="sq" style="grid-row:7;grid-column:1"></div>
+              <div class="sq" style="grid-row:6;grid-column:1"></div>
+              <div class="sq" style="grid-row:5;grid-column:1"></div>
+              <div class="sq" style="grid-row:4;grid-column:1"></div>
+              <div class="sq" style="grid-row:3;grid-column:1"></div>
+              <div class="sq" style="grid-row:2;grid-column:1"></div>
+              <div class="sq" style="grid-row:1;grid-column:1"></div>
+              <div class="sq" style="grid-row:1;grid-column:2"></div>
+              <div class="sq" style="grid-row:1;grid-column:3"></div>
+              <div class="sq" style="grid-row:1;grid-column:4"></div>
+              <div class="sq" style="grid-row:1;grid-column:5"></div>
+              <div class="sq" style="grid-row:1;grid-column:6"></div>
+              <div class="sq" style="grid-row:1;grid-column:7"></div>
+              <div class="sq" style="grid-row:1;grid-column:8"></div>
+              <div class="sq" style="grid-row:1;grid-column:9"></div>
+              <div class="sq" style="grid-row:1;grid-column:10"></div>
+              <div class="sq" style="grid-row:1;grid-column:11"></div>
+              <div class="sq" style="grid-row:2;grid-column:11"></div>
+              <div class="sq" style="grid-row:3;grid-column:11"></div>
+              <div class="sq" style="grid-row:4;grid-column:11"></div>
+              <div class="sq" style="grid-row:5;grid-column:11"></div>
+              <div class="sq" style="grid-row:6;grid-column:11"></div>
+              <div class="sq" style="grid-row:7;grid-column:11"></div>
+              <div class="sq" style="grid-row:8;grid-column:11"></div>
+              <div class="sq" style="grid-row:9;grid-column:11"></div>
+              <div class="sq" style="grid-row:10;grid-column:11"></div>
+            </div>
+            <div class="center">DOSTIHY<br>A SAZKY</div>
+            <div class="pawn p1"></div>
+            <div class="pawn p2"></div>
+            <div class="pawn p3"></div>
+          </div>
+        </div>
+        <div class="body">
+          <span class="tag">Doporuceno pro prvni verzi</span>
+          <h2>A. 3D deska jako prepinatelna vrstva</h2>
+          <p>Canvas nahradi jen hraci plochu. Pravy panel, akce, log, obchodovani a modalni okna zustanou stejne.</p>
+          <div class="notes">
+            <span>Nejmensi riziko pro multiplayer</span>
+            <span>Rychle hratelny vysledek</span>
+            <span>Pozdeji snadno pridame GLB figurky</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="preview">
+          <div class="mode-toggle"><span>2D</span><span class="active">3D</span></div>
+          <div class="side-panel"><div></div><div></div><div></div><div></div><div></div></div>
+          <div class="board3d" style="left:38%;width:210px;height:210px">
+            <div class="center">BOARD<br>VIEW</div>
+            <div class="pawn p1"></div>
+            <div class="pawn p2"></div>
+          </div>
+        </div>
+        <div class="body">
+          <span class="tag">Vetsi UI zmena</span>
+          <h2>B. 3D scena s integrovanou herni HUD</h2>
+          <p>Akce, kostka a hraci informace se presunou bliz k 3D desce jako overlay. Pusobi vic jako hra, ale zasahuje do rozlozeni.</p>
+          <div class="notes">
+            <span>Silnejsi 3D dojem</span>
+            <span>Vetsi prace s responzivitou</span>
+            <span>Vice regresi v UI toku</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="preview">
+          <div class="terrain"></div>
+          <div class="stand"></div>
+          <div class="board3d" style="top:58%;transform:translate(-50%, -50%) rotateX(64deg) rotateZ(-28deg)">
+            <div class="center">RACE<br>CLUB</div>
+            <div class="pawn p1"></div>
+            <div class="pawn p2"></div>
+            <div class="pawn p3"></div>
+          </div>
+        </div>
+        <div class="body">
+          <span class="tag">Pozdejsi cil</span>
+          <h2>C. Asset-rich 3D svet</h2>
+          <p>Deska sedi v malem dostihovem arealu se stajemi, tribunou, svetly a modely. Nejhezci, ale vyzaduje asset pipeline.</p>
+          <div class="notes">
+            <span>Nejlepsi vizualni efekt</span>
+            <span>GLB/KTX2 pipeline a optimalizace</span>
+            <span>Vhodne az po stabilnim 3D MVP</span>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

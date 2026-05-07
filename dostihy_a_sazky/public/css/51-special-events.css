@@ -1,0 +1,57 @@
+/* --- Special Animations --- */
+@keyframes jail-shake {
+  0% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(4px, 4px) rotate(3deg); }
+  50% { transform: translate(-4px, -4px) rotate(-3deg); }
+  75% { transform: translate(4px, -4px) rotate(3deg); }
+  100% { transform: translate(0, 0) rotate(0); }
+}
+.jail-shake {
+  animation: jail-shake 0.25s ease-in-out infinite;
+  z-index: 100;
+  box-shadow: 0 0 50px rgba(255, 77, 77, 0.7) !important;
+  background: rgba(255, 77, 77, 0.25) !important;
+}
+
+/* --- Special Event Overlay --- */
+.special-event-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.3s ease-out;
+}
+.special-event-overlay.fade-out {
+  opacity: 0;
+  transition: opacity 0.5s ease-in;
+}
+.event-content {
+  text-align: center;
+  animation: winnerReveal 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.event-emoji { font-size: 80px; margin-bottom: 10px; }
+.event-title {
+  font-family: var(--font-h);
+  font-size: 60px;
+  color: var(--red);
+  text-shadow: 0 0 30px rgba(255, 77, 77, 0.5);
+  letter-spacing: 4px;
+}
+.event-name {
+  font-size: 24px;
+  color: var(--text);
+  margin-top: 10px;
+}
+.teleport-out {
+  animation: teleportOutEffect 0.8s ease-out;
+}
+@keyframes teleportOutEffect {
+  0% { filter: brightness(1); transform: scale(1); }
+  30% { filter: brightness(3); transform: scale(1.1); }
+  100% { filter: brightness(1); transform: scale(1); }
+}
+

@@ -1,0 +1,154 @@
+/* Ownership badge and overlay */
+.own-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.15;
+  pointer-events: none;
+  transition: background var(--trans);
+}
+
+.own-badge {
+  position: absolute;
+  z-index: 3;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  transition: background var(--trans);
+}
+
+.side-bottom .own-badge {
+  top: 11px;
+  left: 4px;
+}
+
+.side-left .own-badge {
+  top: 4px;
+  right: 12px;
+}
+
+.side-top .own-badge {
+  bottom: 11px;
+  left: 4px;
+}
+
+.side-right .own-badge {
+  top: 4px;
+  left: 12px;
+}
+
+/* Dostih token dots */
+.token-dots {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+
+.side-bottom .token-dots {
+  top: 11px;
+  right: 2px;
+  max-width: 14px;
+}
+
+.side-left .token-dots {
+  bottom: 2px;
+  right: 12px;
+  max-width: 14px;
+}
+
+.side-top .token-dots {
+  bottom: 11px;
+  right: 2px;
+  max-width: 14px;
+}
+
+.side-right .token-dots {
+  bottom: 2px;
+  left: 12px;
+  max-width: 14px;
+}
+
+.corner .token-dots {
+  bottom: 2px;
+  right: 2px;
+}
+
+.dot-small {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
+.dot-big {
+  width: 6px;
+  height: 4px;
+  border-radius: 2px;
+  background: #e74c3c;
+  box-shadow: 0 0 4px rgba(231, 76, 60, .7);
+}
+
+.space-pawns {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  left: 2px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap-reverse;
+  justify-content: flex-end;
+  align-content: flex-end;
+}
+
+.pawn {
+  width: 22px;
+  height: 32px;
+  margin-left: -10px;
+  margin-top: -12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 10;
+  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+.pawn:first-child {
+  margin-left: 0;
+}
+
+.pawn:hover {
+  transform: translateY(-4px) scale(1.1);
+  z-index: 13;
+}
+
+.pawn.is-active {
+  transform: scale(1.3) translateY(-6px);
+  filter: drop-shadow(0 0 12px rgba(255, 255, 255, 1)) drop-shadow(4px 8px 10px rgba(0, 0, 0, 0.5));
+  z-index: 12;
+}
+
+/* Highlighted (current player) space */
+.space.current-turn {
+  box-shadow: inset 0 0 0 3px rgba(255, 215, 0, 0.8), inset 0 0 15px rgba(255, 215, 0, 0.3);
+  animation: pulse-space 1.5s infinite;
+}
+
+@keyframes pulse-space {
+  0% {
+    box-shadow: inset 0 0 0 3px rgba(255, 215, 0, 0.8), inset 0 0 15px rgba(255, 215, 0, 0.3);
+  }
+
+  50% {
+    box-shadow: inset 0 0 0 2px rgba(255, 215, 0, 0.4), inset 0 0 5px rgba(255, 215, 0, 0.1);
+  }
+
+  100% {
+    box-shadow: inset 0 0 0 3px rgba(255, 215, 0, 0.8), inset 0 0 15px rgba(255, 215, 0, 0.3);
+  }
+}
+

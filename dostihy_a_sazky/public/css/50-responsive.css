@@ -1,0 +1,26 @@
+@media (max-width: 700px) {
+  .trade-columns {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .trade-columns::after {
+    display: none;
+  }
+}
+
+
+.p-avatar {
+  position: relative;
+}
+
+.p-crown {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  z-index: 10;
+  pointer-events: none;
+}

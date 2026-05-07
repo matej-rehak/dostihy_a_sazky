@@ -1,0 +1,88 @@
+.jail-display {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.jail-icon {
+  font-size: 36px;
+}
+
+.jail-text {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* Token manage */
+.token-intro {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.token-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.token-item {
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tok-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tok-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Game over */
+.gameover-display {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.gameover-trophy {
+  font-size: 52px;
+}
+
+.gameover-title {
+  font-family: var(--font-h);
+  font-size: 26px;
+  letter-spacing: 2px;
+  color: var(--gold);
+}
+
+.gameover-balance {
+  font-size: 16px;
+  color: var(--green);
+}
+
+/* Roll button */
+#roll-btn {
+  width: 100%;
+  font-size: 17px;
+  padding: 15px;
+}
+
+#roll-btn:active {
+  transform: scale(.97);
+}
+
+/* Log section */

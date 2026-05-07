@@ -2,6 +2,7 @@ import { state }                                from './state.js';
 import { dom }                                  from './dom.js';
 import { socket }                               from './socket.js';
 import { showToast }                            from './utils.js';
+import { clearStoredIdentity }                  from './identity.mjs';
 import { renderRoomList, renderLobby, buildColorPicker, initLobbyListeners } from './ui/lobby.js';
 import { buildBoard, updateBoard }              from './ui/board.js';
 import { updatePlayers }                        from './ui/players.js';
@@ -46,6 +47,7 @@ function identifyMe(players) {
 // ─── Reset lokálního stavu ────────────────────────────────────────────────────
 
 function resetLocalState() {
+  clearStoredIdentity();
   state.myId              = null;
   state.boardData         = null;
   state.gameState         = null;

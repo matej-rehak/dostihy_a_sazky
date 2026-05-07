@@ -1,0 +1,116 @@
+/* Config Panel */
+.config-panel {
+  background: rgba(255, 255, 255, .03);
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+.config-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.config-row label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.config-row input,
+.config-row select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.config-row select {
+  padding-right: 30px;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+/* Room List */
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+  border-radius: 8px;
+}
+
+.room-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.room-item:hover {
+  background: rgba(255, 215, 0, .08);
+  border-color: var(--gold);
+  transform: translateX(4px);
+}
+
+.room-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.room-name {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.room-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.room-join-btn {
+  font-family: var(--font-h);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.room-status {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.status-lobby {
+  background: rgba(0, 230, 118, .15);
+  color: var(--green);
+}
+
+.status-playing {
+  background: rgba(64, 196, 255, .15);
+  color: var(--blue);
+}
+
