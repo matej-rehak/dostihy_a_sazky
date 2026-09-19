@@ -40,6 +40,7 @@ class GameEngine {
     this.turnTimerEndsAt = null;
     this._turnTimer = null;
     this._timer = null;
+    this._starterTimer = null;
     this._resumeFn = null;
     this.tradeOffers = [];
     this._botTimers = new Map();

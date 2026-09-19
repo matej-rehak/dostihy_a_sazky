@@ -36,6 +36,35 @@ module.exports = {
     this._timer = setTimeout(fn, delay);
   },
 
+  // ─── Teardown ─────────────────────────────────────────────────────────────
+
+  /**
+   * Úplné zastavení enginu — volá server při rušení místnosti.
+   *
+   * `_clearBotTimers()` sám o sobě NESTAČÍ: naplánovaná akce (`_timer`)
+   * po vypršení znovu spustí tah, ten zavolá `_setPendingAction`, a ten
+   * boty znovu probudí. Opuštěná hra s boty by tak běžela v paměti
+   * donekonečna a držela slot místnosti. Proto se tu ruší všechny timery
+   * enginu naráz. Každý nový timer enginu musí přibýt i sem.
+   */
+  destroy() {
+    this.phase = 'ended';
+    if (typeof this._clearBotTimers === 'function') this._clearBotTimers();
+    clearTimeout(this._timer);
+    clearTimeout(this._turnTimer);
+    clearTimeout(this._broadcastTimer);
+    clearTimeout(this._gameTimeLimitTimer);
+    clearTimeout(this._starterTimer);
+    this._timer = null;
+    this._turnTimer = null;
+    this._broadcastTimer = null;
+    this._gameTimeLimitTimer = null;
+    this._starterTimer = null;
+    this.turnTimerEndsAt = null;
+    this._resumeFn = null;
+    this.pendingAction = null;
+  },
+
   // ─── Broadcast ────────────────────────────────────────────────────────────
 
   _broadcast() {

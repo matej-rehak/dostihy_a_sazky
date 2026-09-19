@@ -107,24 +107,35 @@ module.exports = {
 
     const botSocket = { playerId: botId, id: null, emit: () => {} };
 
-    // Snapshot before dispatch: handleRoll no-ops (without consuming
-    // pendingAction) when the caller isn't _currentPlayerId(). Today that
-    // path is unreachable for bots, but it rests on "bots never
-    // initiateTrade" holding true, which is asserted nowhere else. Rather
-    // than argue that invariant, make a no-op dispatch structurally unable
-    // to re-arm: only re-notify if the dispatch provably changed something
-    // (pendingAction identity or the trade queue length). A genuine
-    // no-op — same pendingAction reference, same queue length — must NOT
-    // loop back into _notifyBots, or a stuck bot would retry every
-    // BOT_THINK_MS forever. Do not "simplify" this back to an unconditional
-    // trailing _notifyBots().
+    // Snímek stavu před odesláním akce: `handleRoll` se chová jako no-op
+    // (aniž by spotřeboval `pendingAction`), když volající není
+    // `_currentPlayerId()`. Dnes je ta větev pro boty nedosažitelná, ale stojí
+    // na předpokladu „boti nikdy nevolají initiateTrade", který nikde jinde
+    // hlídaný není. Místo dohadování o tomto invariantu je no-op dispatch
+    // konstrukčně neschopný znovu se naplánovat: probudíme se znovu jen tehdy,
+    // když akce prokazatelně něco změnila (identita `pendingAction` nebo délka
+    // fronty obchodů). Skutečný no-op — stejná reference `pendingAction`,
+    // stejná délka fronty — se do `_notifyBots` vracet NESMÍ, jinak by zaseknutý
+    // bot zkoušel akci znovu každých BOT_THINK_MS donekonečna. Nezjednodušuj to
+    // zpět na bezpodmínečné `_notifyBots()` na konci.
     const pendingBefore = this.pendingAction;
     const offersBefore = this.tradeOffers.length;
 
-    if (action.kind === 'roll') {
-      this.handleRoll(botSocket);
-    } else {
-      this.handleRespond(botSocket, action.data);
+    // Bot běží z holého `setTimeout`, takže výjimka odsud by nebyla nikým
+    // zachycena a shodila by celý proces — tedy i všechny ostatní místnosti.
+    // Timer je v tuto chvíli už smazaný z `_botTimers`, takže chycená chyba
+    // bota trvale nezablokuje: probudí ho nejbližší `_setPendingAction`.
+    // Záměrně se po chybě neprobouzíme sami — deterministická chyba by
+    // znamenala nekonečnou smyčku každých BOT_THINK_MS.
+    try {
+      if (action.kind === 'roll') {
+        this.handleRoll(botSocket);
+      } else {
+        this.handleRespond(botSocket, action.data);
+      }
+    } catch (err) {
+      console.error(`[Bot] Chyba při vykonávání akce bota ${botId}:`, err);
+      return;
     }
 
     if (this.pendingAction !== pendingBefore || this.tradeOffers.length !== offersBefore) {

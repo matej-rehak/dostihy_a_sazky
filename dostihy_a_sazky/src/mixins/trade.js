@@ -82,5 +82,9 @@ module.exports = {
     }
 
     this._broadcast();
+    // Nabídka se do fronty vkládá mimo `_setPendingAction`, které je jediným
+    // dalším místem, odkud se boti probouzejí. Bez tohoto volání by bot na
+    // nabídku neodpověděl, dokud hru nepohne něco jiného.
+    if (typeof this._notifyBots === 'function') this._notifyBots();
   },
 };

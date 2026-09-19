@@ -63,6 +63,9 @@ module.exports = {
         this.tradeOffers = this.tradeOffers.filter(o => !(o.fromId === pid && o.targetId === fromId));
         this.tradeOffers.push(newOffer);
         this._broadcast();
+        // Protinabídka může mířit na bota a fronta nabídek se plní mimo
+        // `_setPendingAction` — bez probuzení by na ni bot nikdy neodpověděl.
+        if (typeof this._notifyBots === 'function') this._notifyBots();
         return;
       }
       decision = 'decline';

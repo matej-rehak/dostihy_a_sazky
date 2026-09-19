@@ -66,7 +66,9 @@ function removePlayerFromRoom(roomId, playerId, socket = null) {
       socket.roomId = null;
     }
     if (!hasHumanPlayers(room.engine.players)) {
-      if (typeof room.engine._clearBotTimers === 'function') room.engine._clearBotTimers();
+      // `destroy()` zastaví CELÝ engine (všechny timery, nejen ty botí) —
+      // jinak by osiřelá hra s boty běžela v paměti dál.
+      if (typeof room.engine.destroy === 'function') room.engine.destroy();
       rooms.delete(roomId);
     }
   }

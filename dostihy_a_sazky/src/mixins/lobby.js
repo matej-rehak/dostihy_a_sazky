@@ -36,7 +36,7 @@ module.exports = {
       bankrupt: false, inJail: false, jailTurns: 0, skipTurns: 0,
       properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: false, disconnected: false,
-      canFly: false,
+      canFly: false, left: false,
     };
     this.players.set(socket.playerId, player);
     this._addLog(`🐎 ${name} se připojil(a) k hře`);
@@ -88,6 +88,14 @@ module.exports = {
     const player = this.players.get(socket.playerId);
     if (!player) return;
 
+    // Hráč místnost definitivně opustil. Ve fázi `playing` se ze `players`
+    // nemaže (jen zbankrotuje), takže bez tohoto příznaku by ho
+    // `hasHumanPlayers` napořád počítal jako přítomného člověka a místnost
+    // s boty by se nikdy neuvolnila.
+    player.left = true;
+    player.disconnected = true;
+    player.socketId = null;
+
     if (this.phase === 'playing') {
       // Zapamatuj si PŘED bankrotem, jestli hra čekala právě na tohoto hráče.
       const wasPending = this.pendingAction?.targetId === socket.playerId;
@@ -105,8 +113,11 @@ module.exports = {
       this._addLog(`${player.name} opustil(a) lobby`);
 
       if (player.isHost && this.players.size > 0) {
-        const nextId = this.players.keys().next().value;
-        const nextPlayer = this.players.get(nextId);
+        // Hostitelem smí být jen člověk — bot nemá socket, takže by hru
+        // nikdy nespustil ani nezměnil nastavení a lobby by zamrzlo.
+        // Když zbyli jen boti, hostitele nikdo nedostane; místnost pak
+        // server zruší (`hasHumanPlayers` === false).
+        const nextPlayer = [...this.players.values()].find(p => !p.isBot);
         if (nextPlayer) {
           nextPlayer.isHost = true;
           this._addLog(`👑 ${nextPlayer.name} je nyní hostitelem`);
@@ -188,7 +199,11 @@ module.exports = {
 
     this._broadcast();
 
-    setTimeout(() => {
+    // Uložený handle, aby ho `destroy()` uměl zrušit — jinak by losování
+    // nastartovalo hru i v místnosti, kterou server už zahodil.
+    this._starterTimer = setTimeout(() => {
+      this._starterTimer = null;
+      if (this.phase !== 'playing') return;
       if (this.pendingAction?.type === 'selecting_starter') {
         this._setPendingAction(null);
         this._startTurn();
