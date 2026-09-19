@@ -144,3 +144,79 @@ test('nákup: Přeprava se kupuje, když bot už má Stáje', () => {
   assert.equal(r.reason, 'service_pair');
   assert.equal(r.buy, true);
 });
+
+// ─── scoreSpace / decideAirport ───────────────────────────────────────────────
+
+test('skóre: Distanc je past, ne jen pole', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').position = 5;
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 10), -Bot.HAZARD_PENALTY);
+});
+
+test('skóre: doping se trestá stejně jako Distanc', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').position = 25;
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 30), -Bot.HAZARD_PENALTY);
+});
+
+test('skóre: veterinární vyšetření se trestá svou částkou', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').position = 35;
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 38), -1000);
+});
+
+test('skóre: soupeřův kůň se trestá odhadem nájmu', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').position = 30;
+  own(ctx, 'opp', 37, 39);
+  ctx.tokens[39] = { small: 0, big: true };
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 39), -40000);
+});
+
+test('skóre: START ani jeho průchod se nezapočítává', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').position = 38;
+  // Bonus za START přinese i obyčejný pohyb — nesmí ospravedlnit placený let.
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 0), 0);
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 2), 0);   // pole 2 = Finance, za STARTem
+});
+
+test('skóre: volný kůň, který kompletuje stáj, má hodnotu své ceny', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  bot.position = 20;
+  bot.balance = 50000;
+  own(ctx, 'bot', 1);
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 3), 1200);
+});
+
+test('skóre: vlastní kůň s monopolem láká na stavbu žetonu', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').position = 20;
+  own(ctx, 'bot', 1, 3);
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 1), 1000);   // tokenCost oranzové
+});
+
+test('letiště: bot letí za koněm, který mu zkompletuje stáj', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  bot.position = 20;
+  bot.balance = 50000;
+  own(ctx, 'bot', 37);              // tm_modra: 37 + 39, Napoli za 8000
+  assert.equal(Bot.decideAirport(ctx, 'bot'), 39);
+});
+
+test('letiště: na prázdném plánu se let nevyplatí', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').position = 20;
+  assert.equal(Bot.decideAirport(ctx, 'bot'), null);
+});
+
+test('letiště: bot bez peněz na poplatek nelétá', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  bot.position = 20;
+  bot.balance = ctx.config.airportFee - 1;
+  own(ctx, 'bot', 37);
+  assert.equal(Bot.decideAirport(ctx, 'bot'), null);
+});

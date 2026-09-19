@@ -146,6 +146,82 @@ function evaluatePurchase(ctx, botId, spaceId) {
   return { buy: left >= reserve * 2, reason: 'default' };
 }
 
+// ─── Skórování polí a letiště ─────────────────────────────────────────────────
+
+/**
+ * Hodnota pole pro bota, v korunách — aby šla přímo porovnat s airportFee.
+ * Kladné = chci tam, záporné = radši ne.
+ */
+function scoreSpace(ctx, botId, spaceId) {
+  const bot = ctx.players.get(botId);
+  const space = BOARD[spaceId];
+  if (!bot || !space) return 0;
+
+  // Bonus za START se záměrně neskóruje: bot ho dostane i obyčejnou chůzí,
+  // let ho jen uspíší. Jinak by z letiště létal pokaždé (viz odchylka od 5.6).
+  let score = 0;
+
+  if (space.type === 'horse' || space.type === 'service') {
+    const ownerId = ctx.ownerships[spaceId];
+
+    if (!ownerId) {
+      const { buy, reason } = evaluatePurchase(ctx, botId, spaceId);
+      if (buy && (reason === 'block' || reason === 'complete')) {
+        score += space.price;
+      } else if (buy && reason === 'progress') {
+        score += Math.floor(space.price / 2);
+      }
+    } else if (ownerId === botId) {
+      // Vlastní kůň s monopolem → příští tah tam jde postavit žeton.
+      if (space.type === 'horse' && ownsFullGroup(ctx, botId, space.group)) {
+        const tok = ctx.tokens[spaceId] || { small: 0, big: false };
+        if (!tok.big) score += space.tokenCost;
+      }
+    } else {
+      score -= estimateRent(ctx, spaceId);
+    }
+
+    return score;
+  }
+
+  // Pole 10 má typ 'jail', ale _evaluateSpace ho řeší jako go_to_jail.
+  if (space.type === 'jail' || space.type === 'go_to_jail') score -= HAZARD_PENALTY;
+  else if (space.type === 'skip_turn') score -= HAZARD_PENALTY;
+  else if (space.type === 'tax') score -= space.amount;
+
+  return score;
+}
+
+/**
+ * Kam letět z letiště — nebo null, když se let nevyplatí.
+ * Porovnává nejlepší dosažitelný cíl s průměrem polí, na která by bot doletěl
+ * obyčejným hodem. Let musí být lepší aspoň o cenu poplatku.
+ */
+function decideAirport(ctx, botId) {
+  const bot = ctx.players.get(botId);
+  const fee = ctx.config.airportFee;
+  if (!bot || bot.balance < fee) return null;
+
+  let best = null;
+  let bestScore = -Infinity;
+  for (let id = 0; id < BOARD.length; id++) {
+    if (id === bot.position) continue;
+    const score = scoreSpace(ctx, botId, id);
+    if (score > bestScore) {
+      bestScore = score;
+      best = id;
+    }
+  }
+
+  let sum = 0;
+  for (let d = 1; d <= 6; d++) {
+    sum += scoreSpace(ctx, botId, (bot.position + d) % BOARD.length);
+  }
+  const expected = sum / 6;
+
+  return bestScore - expected > fee ? best : null;
+}
+
 module.exports = {
   BOT_THINK_MS,
   RESERVE_MIN,
@@ -160,4 +236,6 @@ module.exports = {
   estimateRent,
   calcReserve,
   evaluatePurchase,
+  scoreSpace,
+  decideAirport,
 };
