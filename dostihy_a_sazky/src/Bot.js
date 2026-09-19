@@ -90,6 +90,62 @@ function calcReserve(ctx, botId) {
   return Math.round(reserve);
 }
 
+// ─── Nákup ────────────────────────────────────────────────────────────────────
+
+/**
+ * Má bot koupit volné pole, na kterém stojí?
+ * Pravidla se vyhodnocují shora dolů, první shoda vyhrává.
+ * `reason` používá i scoreSpace při výběru cíle letu.
+ */
+function evaluatePurchase(ctx, botId, spaceId) {
+  const bot = ctx.players.get(botId);
+  const space = BOARD[spaceId];
+  if (!bot || !space) return { buy: false, reason: 'default' };
+
+  const reserve = calcReserve(ctx, botId);
+  const left = bot.balance - space.price;
+
+  if (space.type === 'service') {
+    if (space.serviceType === 'trener') {
+      // Nájem = počet trenérů × 1000, bez podmínky monopolu → bezpečná investice.
+      return { buy: left >= reserve, reason: 'trener' };
+    }
+    // Přeprava a Stáje se vyplatí jen v páru (80×kostka → 200×kostka).
+    const other = space.serviceType === 'preprava' ? 'staje' : 'preprava';
+    const hasOther = bot.properties.some(sid => BOARD[sid].serviceType === other);
+    return { buy: hasOther && left >= reserve, reason: 'service_pair' };
+  }
+
+  if (space.type !== 'horse') return { buy: false, reason: 'default' };
+
+  const peers = groupSpaces(space.group).filter(s => s.id !== spaceId);
+  const mine  = peers.filter(s => ctx.ownerships[s.id] === botId).length;
+  const free  = peers.filter(s => !ctx.ownerships[s.id]).length;
+  const opponentOwned = peers.length - mine - free;
+
+  // Blokace: soupeři drží celý zbytek stáje — koupě jim bere monopol.
+  if (opponentOwned === peers.length) {
+    return { buy: left >= reserve, reason: 'block' };
+  }
+
+  // Kompletace: monopol bez peněz na žeton nevydělává nic (viz _calcRent).
+  if (mine === peers.length) {
+    return { buy: left >= reserve + space.tokenCost, reason: 'complete' };
+  }
+
+  // Postup: bot ve stáji už koně má a zbytek je volný → monopol je na dosah.
+  if (mine > 0 && opponentOwned === 0) {
+    return { buy: left >= reserve + space.tokenCost, reason: 'progress' };
+  }
+
+  // Osamocený kůň ve stáji, kterou rozebírá někdo jiný → zmrazený kapitál.
+  if (mine === 0 && opponentOwned > 0) {
+    return { buy: false, reason: 'isolated' };
+  }
+
+  return { buy: left >= reserve * 2, reason: 'default' };
+}
+
 module.exports = {
   BOT_THINK_MS,
   RESERVE_MIN,
@@ -103,4 +159,5 @@ module.exports = {
   tokenSellValue,
   estimateRent,
   calcReserve,
+  evaluatePurchase,
 };
