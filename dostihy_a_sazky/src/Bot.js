@@ -288,6 +288,95 @@ function pickFromTier(ctx, tier, shortage) {
   return covering !== undefined ? covering : sorted[sorted.length - 1];
 }
 
+// ─── Dispatcher ───────────────────────────────────────────────────────────────
+
+/**
+ * Jediný vstupní bod pro BotsMixin. Vrací akci k provedení, nebo null.
+ * Čte jen stav — nic nemění.
+ */
+function decideAction(ctx, botId) {
+  const bot = ctx.players.get(botId);
+  if (!bot || bot.bankrupt) return null;
+
+  // Fronta obchodů má přednost: nabídka může mířit na bota, který není na tahu.
+  // Veřejné nabídky (targetId === null) se ignorují — _handleTradeResponse
+  // je odstraní z fronty pro všechny hráče, včetně lidí.
+  const offer = (ctx.tradeOffers || []).find(o => o.targetId === botId);
+  if (offer) {
+    return { kind: 'respond', data: { decision: 'decline', tradeOfferId: offer.id } };
+  }
+
+  const pa = ctx.pendingAction;
+  if (!pa || pa.targetId !== botId) return null;
+  const d = pa.data || {};
+
+  switch (pa.type) {
+    case 'wait_roll':
+    case 'service_roll':
+      return { kind: 'roll' };
+
+    case 'card_ack':
+      return { kind: 'respond', data: { decision: 'ack' } };
+
+    case 'buy_offer': {
+      const { buy } = evaluatePurchase(ctx, botId, d.spaceId);
+      return { kind: 'respond', data: { decision: buy ? 'buy' : 'decline', spaceId: d.spaceId } };
+    }
+
+    case 'buyout_offer': {
+      const space = BOARD[d.spaceId];
+      const peers = groupSpaces(space.group).filter(s => s.id !== d.spaceId);
+      const completes = peers.every(s => ctx.ownerships[s.id] === botId);
+      const left = bot.balance - d.buyoutCost;
+      const ok = completes && left >= calcReserve(ctx, botId) + space.tokenCost;
+      return { kind: 'respond', data: { decision: ok ? 'buy' : 'decline', spaceId: d.spaceId } };
+    }
+
+    case 'token_manage': {
+      const spaceId = (d.eligible || [])[0];
+      if (spaceId === undefined) return { kind: 'respond', data: { decision: 'end_turn' } };
+      const space = BOARD[spaceId];
+      const tok = ctx.tokens[spaceId] || { small: 0, big: false };
+      const tokenType = tok.small >= 4 ? 'big' : 'small';
+      const cost = tokenType === 'big' ? space.bigTokenCost : space.tokenCost;
+      if (bot.balance - cost >= calcReserve(ctx, botId)) {
+        return { kind: 'respond', data: { decision: 'add_token', spaceId, tokenType } };
+      }
+      return { kind: 'respond', data: { decision: 'end_turn' } };
+    }
+
+    case 'jail_choice':
+      return {
+        kind: 'respond',
+        data: { decision: bot.jailFreeCards > 0 ? 'use_jail_card' : 'roll_jail' },
+      };
+
+    case 'airport_choice':
+      return {
+        kind: 'respond',
+        data: { decision: decideAirport(ctx, botId) === null ? 'roll' : 'fly' },
+      };
+
+    case 'airport_select_target': {
+      const target = decideAirport(ctx, botId);
+      if (target === null) return { kind: 'respond', data: { decision: 'cancel' } };
+      return { kind: 'respond', data: { decision: 'fly', spaceId: target } };
+    }
+
+    case 'debt_manage': {
+      const action = pickDebtAction(ctx, botId);
+      return action ? { kind: 'respond', data: action } : null;
+    }
+
+    case 'trade_offer':
+      return { kind: 'respond', data: { decision: 'decline' } };
+
+    default:
+      // insufficient_funds, selecting_starter, game_over — engine si poradí sám
+      return null;
+  }
+}
+
 module.exports = {
   BOT_THINK_MS,
   RESERVE_MIN,
@@ -305,4 +394,5 @@ module.exports = {
   scoreSpace,
   decideAirport,
   pickDebtAction,
+  decideAction,
 };

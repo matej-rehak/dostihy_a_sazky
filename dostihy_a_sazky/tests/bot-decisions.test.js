@@ -286,3 +286,135 @@ test('dluh: bez majetku zbývá jen bankrot', () => {
   ctx.players.get('bot').balance = -400;
   assert.deepEqual(Bot.pickDebtAction(ctx, 'bot'), { decision: 'declare_bankrupt' });
 });
+
+// ─── decideAction ─────────────────────────────────────────────────────────────
+
+test('dispatch: cizí pendingAction bota nezajímá', () => {
+  const ctx = twoPlayerCtx();
+  ctx.pendingAction = { type: 'wait_roll', targetId: 'opp' };
+  assert.equal(Bot.decideAction(ctx, 'bot'), null);
+});
+
+test('dispatch: wait_roll → hod', () => {
+  const ctx = twoPlayerCtx();
+  ctx.pendingAction = { type: 'wait_roll', targetId: 'bot' };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'), { kind: 'roll' });
+});
+
+test('dispatch: service_roll → hod', () => {
+  const ctx = twoPlayerCtx();
+  ctx.pendingAction = { type: 'service_roll', targetId: 'bot', data: { spaceId: 12 } };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'), { kind: 'roll' });
+});
+
+test('dispatch: card_ack se jen potvrdí', () => {
+  const ctx = twoPlayerCtx();
+  ctx.pendingAction = { type: 'card_ack', targetId: 'bot', data: { card: {} } };
+  assert.equal(Bot.decideAction(ctx, 'bot').kind, 'respond');
+});
+
+test('dispatch: buy_offer respektuje evaluatePurchase', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').balance = 100;
+  ctx.pendingAction = { type: 'buy_offer', targetId: 'bot', data: { spaceId: 6 } };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'decline', spaceId: 6 } });
+});
+
+test('dispatch: token_manage staví, když zbyde rezerva', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 1, 3);
+  bot.position = 1;
+  bot.balance = 1000 + 2000;
+  ctx.pendingAction = { type: 'token_manage', targetId: 'bot', data: { eligible: [1] } };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'add_token', spaceId: 1, tokenType: 'small' } });
+});
+
+test('dispatch: token_manage ukončí tah, když by rezerva nezbyla', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 1, 3);
+  bot.position = 1;
+  bot.balance = 1000 + 1999;
+  ctx.pendingAction = { type: 'token_manage', targetId: 'bot', data: { eligible: [1] } };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'end_turn' } });
+});
+
+test('dispatch: token_manage staví velký dostih po čtyřech malých', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 1, 3);
+  bot.position = 1;
+  bot.balance = 50000;
+  ctx.tokens[1] = { small: 4, big: false };
+  ctx.pendingAction = { type: 'token_manage', targetId: 'bot', data: { eligible: [1] } };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'add_token', spaceId: 1, tokenType: 'big' } });
+});
+
+test('dispatch: ve vězení použije kartu, když ji má', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').jailFreeCards = 1;
+  ctx.pendingAction = { type: 'jail_choice', targetId: 'bot' };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'use_jail_card' } });
+});
+
+test('dispatch: ve vězení bez karty hází', () => {
+  const ctx = twoPlayerCtx();
+  ctx.pendingAction = { type: 'jail_choice', targetId: 'bot' };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'roll_jail' } });
+});
+
+test('dispatch: airport_choice odmítne let, když se nevyplatí', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').position = 20;
+  ctx.pendingAction = { type: 'airport_choice', targetId: 'bot', data: { fee: 2000 } };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'roll' } });
+});
+
+test('dispatch: airport_select_target pošle konkrétní cíl', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  bot.position = 20;
+  bot.balance = 50000;
+  own(ctx, 'bot', 37);
+  ctx.pendingAction = { type: 'airport_select_target', targetId: 'bot', data: { fee: 2000 } };
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'fly', spaceId: 39 } });
+});
+
+test('dispatch: cílená nabídka obchodu se odmítne i mimo tah bota', () => {
+  const ctx = twoPlayerCtx();
+  ctx.pendingAction = { type: 'wait_roll', targetId: 'opp' };
+  ctx.tradeOffers = [{ id: 'o1', fromId: 'opp', targetId: 'bot', offer: {}, request: {} }];
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'decline', tradeOfferId: 'o1' } });
+});
+
+test('dispatch: veřejná nabídka se ignoruje — smazala by ji i lidem', () => {
+  const ctx = twoPlayerCtx();
+  ctx.pendingAction = { type: 'wait_roll', targetId: 'opp' };
+  ctx.tradeOffers = [{ id: 'o1', fromId: 'opp', targetId: null, offer: {}, request: {} }];
+  assert.equal(Bot.decideAction(ctx, 'bot'), null);
+});
+
+test('dispatch: insufficient_funds a selecting_starter se neřeší', () => {
+  const ctx = twoPlayerCtx();
+  ctx.pendingAction = { type: 'insufficient_funds', targetId: 'bot', data: {} };
+  assert.equal(Bot.decideAction(ctx, 'bot'), null);
+  ctx.pendingAction = { type: 'selecting_starter', targetId: 'bot', data: {} };
+  assert.equal(Bot.decideAction(ctx, 'bot'), null);
+});
+
+test('dispatch: bankrotující bot nic nedělá', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').bankrupt = true;
+  ctx.pendingAction = { type: 'wait_roll', targetId: 'bot' };
+  assert.equal(Bot.decideAction(ctx, 'bot'), null);
+});
