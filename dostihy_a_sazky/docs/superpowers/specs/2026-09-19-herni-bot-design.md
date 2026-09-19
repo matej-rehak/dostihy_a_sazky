@@ -131,6 +131,15 @@ Tři guardy proti třem konkrétním rizikům:
 
 Timery se ruší v `_endGame` a `removeBot`.
 
+> **Revize při psaní plánu (2026-09-19):** tenhle hook má dva deadlocky.
+> (1) Obchodní nabídka na bota, který není na tahu, ho nikdy neprobudí, protože
+> `pendingAction.targetId` patří někomu jinému. (2) `_handleTradeResponse` nevolá
+> `_setPendingAction`, takže po odmítnutí nabídky se bot znovu neprobudí a
+> nedokončí vlastní tah. Plán proto `_notifyBots()` pouští přes **všechny boty**,
+> rozhodnutí počítá až ve chvíli, kdy timer vystřelí (zastaralé rozhodnutí tím
+> nemůže vzniknout a identity check odpadá), a `_botAct` na konci volá
+> `_notifyBots()` znovu. Detaily v sekci „Odchylka od specu 3.4" v plánu.
+
 ### 3.5 Socket.IO API
 
 Dvě nové události, obě klient → server, obě jen pro hostitele v lobby.
@@ -231,11 +240,17 @@ porovnat s `airportFee`:
 | Volný kůň, kterého by bot podle 5.3 nekoupil | `0` |
 | Vlastní kůň s monopolem, kde jde postavit žeton | `+ tokenCost` |
 | Soupeřův kůň / služba | `− estimateRent()` |
-| `go_to_jail`, `skip_turn` | `− 8000` |
+| `jail` (pole 10 — `_evaluateSpace` ho řeší jako `go_to_jail`), `skip_turn` | `− 8000` |
 | `tax` | `− amount` |
-| START | `+ startBonus` |
-| průchod STARTem po cestě (`(cíl − pozice + 40) % 40` přeteče) | `+ startBonus` |
+| START a jeho průchod po cestě | `0` — viz poznámka níže |
 | ostatní | `0` |
+
+> **Revize při psaní plánu (2026-09-19):** původní návrh dával za START a jeho
+> průchod `+ startBonus`. To bota degeneruje — z pole 20 obyčejný hod STARTem
+> nikdy neprojde, takže jakýkoli let přes START vychází na `+4000 − 2000` a bot
+> by létal pokaždé, i na prázdném plánu. Průchod STARTem ale není zásluha letu;
+> bot ho dostane i obyčejnou chůzí, let ho jen uspíší. Bonus se proto neskóruje
+> a let musí obhájit sám cíl.
 
 Rozhodnutí:
 
