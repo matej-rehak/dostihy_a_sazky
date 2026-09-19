@@ -159,6 +159,31 @@ io.on('connection', socket => {
     const engine = rooms.get(socket.roomId)?.engine;
     if (engine) { engine.startGame(socket); io.emit('room:list', getRoomList()); }
   });
+  socket.on('game:add_bot', () => {
+    const engine = rooms.get(socket.roomId)?.engine;
+    if (!engine) return;
+    const host = engine.players.get(socket.playerId);
+    if (!host?.isHost) {
+      return socket.emit('game:error', { message: 'Bota může přidat jen hostitel.' });
+    }
+    if (!engine.addBot()) {
+      return socket.emit('game:error', { message: 'Bota teď nelze přidat (plno nebo hra už běží).' });
+    }
+    io.emit('room:list', getRoomList());
+  });
+
+  socket.on('game:remove_bot', ({ botId } = {}) => {
+    const engine = rooms.get(socket.roomId)?.engine;
+    if (!engine) return;
+    const host = engine.players.get(socket.playerId);
+    if (!host?.isHost) {
+      return socket.emit('game:error', { message: 'Bota může odebrat jen hostitel.' });
+    }
+    if (!engine.removeBot(botId)) {
+      return socket.emit('game:error', { message: 'Tohoto hráče nelze odebrat.' });
+    }
+    io.emit('room:list', getRoomList());
+  });
   socket.on('game:update_config', d => rooms.get(socket.roomId)?.engine.updateConfig(socket, d));
   socket.on('game:ready', () => rooms.get(socket.roomId)?.engine.toggleReady(socket.playerId));
   socket.on('game:change_color', ({ color }) => rooms.get(socket.roomId)?.engine.changeColor(socket.playerId, color));
