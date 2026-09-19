@@ -33,6 +33,7 @@ Frontend se servíruje jako statické soubory z `public/` — žádný build kro
 server.js                   ← HTTP + Socket.IO server, správa místností, reconnect
 ├── src/
 │   ├── GameEngine.js       ← Hlavní třída hry (složena z mixinů přes Object.assign)
+│   ├── Bot.js              ← Čistá rozhodovací logika bota (bez vedlejších efektů)
 │   ├── Cards.js            ← Balíčky karet Finance a Náhoda
 │   ├── auth.js             ← JWT generování / ověřování (playerId persistence)
 │   ├── constants.js        ← BOARD_SIZE, JAIL_*, ACTION_DELAY_MS, PLAYER_COLORS, roll(), fmt()
@@ -48,6 +49,7 @@ server.js                   ← HTTP + Socket.IO server, správa místností, re
 │       ├── economy.js      ← _buyProperty, _sellProperty, _calcRent, _transfer, _calcAssetsValue, bankrot
 │       ├── tokens.js       ← _addToken, _eligibleTokenSpaces, _offerTokensOrEnd
 │       ├── trade.js        ← initiateTrade (nabídka obchodu mezi hráči)
+│       ├── bots.js         ← Řidič: kdy bot jedná a jak se jeho rozhodnutí dostane do enginu
 │       └── debug.js        ← handleDebugSetState (rychlé nastavení stavu v dev módu)
 ├── public/
 │   ├── index.html          ← Shell stránka (jen head + #app-root + scripty — žádné views)
@@ -85,7 +87,11 @@ server.js                   ← HTTP + Socket.IO server, správa místností, re
 ├── prompts/                ← Systémové prompty pro jednotlivé agenty
 └── tests/                  ← Node test runner soubory (*.test.js, npm test)
     ├── movement-insufficient-funds.test.js  ← _evaluateSpace + _offerTokensOrEnd insufficient funds
-    └── trade-debt-resume.test.js            ← non-debt trade návrat nesmí přepsat debt_manage / card_ack
+    ├── trade-debt-resume.test.js            ← non-debt trade návrat nesmí přepsat debt_manage / card_ack
+    ├── bot-decisions.test.js                ← Jednotkové testy čistých rozhodovacích funkcí bota
+    ├── bot-rent-estimate.test.js            ← Srovnění Bot.estimateRent s engine._calcRent
+    ├── bot-integration.test.js              ← Bot řídí GameEngine
+    └── room-lifecycle.test.js               ← Kdy se místnost může osvobodit
 ```
 
 ### Partials systém (jak funguje)
@@ -129,6 +135,8 @@ HTML views jsou rozděleny do `public/partials/*.html`. Soubory jsou čisté HTM
 | `game:ready` | Přepnutí ready stavu |
 | `game:update_config` | Změna konfigurace (`startBalance`, `startBonus`, atd.) |
 | `game:start` | Spuštění hry |
+| `game:add_bot` | Hostitel přidá bota do lobby |
+| `game:remove_bot` | Hostitel odebere bota (`{ botId }`) |
 | `game:roll` | Hod kostkou |
 | `game:respond` | Odpověď na prompt (`{ action, payload }`) |
 | `game:trade_init` | Zahájení obchodu |
@@ -220,12 +228,10 @@ Složka `agents/` implementuje orchestrátor pattern pro AI-asistovaný vývoj:
 
 ---
 
-## Poslední fix (2026-04-30)
+## Poslední fix (2026-09-19)
 
-**Bug:** Po vyřešení dluhové situace (`debt_manage`) hráč občas znovu hodil kostkou místo aby tah řádně skončil.
+**Přidáno:** Počítačem řízený hráč — bot hry. Hostitel může v lobby přidat / odebrat boty (`game:add_bot` / `game:remove_bot`). Boti se automaticky rozhodují na základě aktuálního stavu hry.
 
-**Příčina:** `_handleTradeOffer` v non-debt větvi (`src/mixins/actions.js`) bezpodmínečně obnovoval `wait_roll`/`jail_choice` pro `turnPlayerId` podle stale `fromContext` zachyceného při vystavení obchodu. Frontovaný systém nabídek znamená, že iniciátor mezitím mohl pokročit do jiného stavu (typicky `debt_manage` po hodu) — restorer pak přepsal aktuální `pendingAction` (a přes `_scheduleAction` i `_resumeFn`).
+**Návrh:** Rozhodovací logika bota je čistá a oddělená — žije v `src/Bot.js` bez vedlejších efektů. Řidič (`src/mixins/bots.js`) pouze řídí načasování (_notifyBots, _botAct) a předává rozhodnutí enginu přes falešný socket. Rozhodnutí se počítá až když timer vybouchne — z živého stavu hry. Tím se nikdy nemůže stát, že by bot jednal na zastaralé informaci.
 
-**Fix:** Restorer nyní respektuje aktuální `pendingAction`. Když je hra mid-flow, jen broadcastne; když je `pendingAction` null, naplánuje obnovení s guardem.
-
-**Test:** `tests/trade-debt-resume.test.js` (5 testů — hlavní: „akceptace frontovaného obchodu nepřepíše debt_manage iniciátora").
+**Testy:** Čtyři nové test suite — jednotkové testy (`bot-decisions.test.js`), srovnění odhadů nájmu s engine funkcí (`bot-rent-estimate.test.js`), integrační test bota s GameEngine (`bot-integration.test.js`), a testy cyklu místnosti (`room-lifecycle.test.js`).
