@@ -69,6 +69,27 @@ function estimateRent(ctx, spaceId, dice = AVG_DICE) {
   return tok.big ? space.rents[5] : space.rents[tok.small];
 }
 
+// ─── Rezerva ──────────────────────────────────────────────────────────────────
+
+/**
+ * Kolik hotovosti chce bot držet. Vychází z nejdražšího nájmu, který mu na
+ * plánu hrozí od soupeřů, oříznutého do [RESERVE_MIN, RESERVE_MAX].
+ * V prvních kolech je plán prázdný a expanze je důležitější než polštář.
+ */
+function calcReserve(ctx, botId) {
+  let threat = 0;
+  for (const space of BOARD) {
+    const ownerId = ctx.ownerships[space.id];
+    if (!ownerId || ownerId === botId) continue;
+    const rent = estimateRent(ctx, space.id);
+    if (rent > threat) threat = rent;
+  }
+
+  let reserve = Math.min(Math.max(threat, RESERVE_MIN), RESERVE_MAX);
+  if (ctx.round <= EARLY_ROUND_MAX) reserve *= EARLY_ROUND_FACTOR;
+  return Math.round(reserve);
+}
+
 module.exports = {
   BOT_THINK_MS,
   RESERVE_MIN,
@@ -81,4 +102,5 @@ module.exports = {
   ownsFullGroup,
   tokenSellValue,
   estimateRent,
+  calcReserve,
 };
