@@ -13,6 +13,7 @@ const EconomyMixin  = require('./mixins/economy');
 const TokensMixin   = require('./mixins/tokens');
 const StateMixin    = require('./mixins/state');
 const TradeMixin    = require('./mixins/trade');
+const BotsMixin     = require('./mixins/bots');
 
 class GameEngine {
   constructor(io, roomId) {
@@ -41,6 +42,7 @@ class GameEngine {
     this._timer = null;
     this._resumeFn = null;
     this.tradeOffers = [];
+    this._botTimers = new Map();
   }
 
   _setPendingAction(action) {
@@ -61,6 +63,7 @@ class GameEngine {
         }
       }, delayMs);
     }
+    if (typeof this._notifyBots === 'function') this._notifyBots();
   }
 }
 
@@ -74,6 +77,7 @@ Object.assign(GameEngine.prototype,
   EconomyMixin,  // _buyProperty, _sellProperty, _calcRent, _transfer, _calcAssetsValue, bankrot
   TokensMixin,   // _addToken, _eligibleTokenSpaces, _offerTokensOrEnd
   TradeMixin,    // initiateTrade
+  BotsMixin,     // addBot, removeBot, _notifyBots, _botAct
   DebugMixin,    // handleDebugSetState
 );
 

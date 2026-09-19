@@ -252,6 +252,7 @@ module.exports = {
       clearTimeout(this._gameTimeLimitTimer);
       this._gameTimeLimitTimer = null;
     }
+    if (typeof this._clearBotTimers === 'function') this._clearBotTimers();
     this.timeLimitEndsAt = null;
     const winner = winnerId ? this.players.get(winnerId) : null;
     const winnerAssets = winner ? winner.balance + this._calcAssetsValue(winnerId) : 0;
