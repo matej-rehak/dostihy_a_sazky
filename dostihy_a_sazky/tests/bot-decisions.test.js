@@ -220,3 +220,69 @@ test('letiště: bot bez peněz na poplatek nelétá', () => {
   own(ctx, 'bot', 37);
   assert.equal(Bot.decideAirport(ctx, 'bot'), null);
 });
+
+// ─── pickDebtAction ───────────────────────────────────────────────────────────
+
+test('dluh: bez dluhu se nic neprodává', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 1);
+  assert.equal(Bot.pickDebtAction(ctx, 'bot'), null);
+});
+
+test('dluh: přednost má kůň mimo monopol a bez žetonů', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 1, 3, 6);          // 1+3 = monopol oranzova, 6 = osamocený
+  bot.balance = -500;
+  assert.deepEqual(Bot.pickDebtAction(ctx, 'bot'), { decision: 'sell_property', spaceId: 6 });
+});
+
+test('dluh: z postradatelných se bere nejlevnější, který dluh pokryje', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 6, 16, 31);        // prodejní hodnoty 1000, 1800, 3000
+  bot.balance = -1500;
+  // 6 (1000) nestačí, 16 (1800) ano → 16
+  assert.deepEqual(Bot.pickDebtAction(ctx, 'bot'), { decision: 'sell_property', spaceId: 16 });
+});
+
+test('dluh: když nic nestačí, prodá se nejdražší (nejmíň prodejů)', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 6, 16, 31);
+  bot.balance = -50000;
+  assert.deepEqual(Bot.pickDebtAction(ctx, 'bot'), { decision: 'sell_property', spaceId: 31 });
+});
+
+test('dluh: služby se obětují až po osamocených koních', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 5, 6);             // 5 = trenér, 6 = osamocený kůň
+  bot.balance = -500;
+  assert.deepEqual(Bot.pickDebtAction(ctx, 'bot'), { decision: 'sell_property', spaceId: 6 });
+});
+
+test('dluh: žeton se prodá dřív než se rozebere monopol', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 1, 3);             // kompletní oranzova
+  ctx.tokens[1] = { small: 2, big: false };
+  bot.balance = -400;
+  assert.deepEqual(Bot.pickDebtAction(ctx, 'bot'), { decision: 'sell_token', spaceId: 1 });
+});
+
+test('dluh: monopolní kůň padne až úplně nakonec', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  own(ctx, 'bot', 1, 3);             // monopol bez žetonů
+  bot.balance = -400;
+  const r = Bot.pickDebtAction(ctx, 'bot');
+  assert.equal(r.decision, 'sell_property');
+  assert.ok([1, 3].includes(r.spaceId));
+});
+
+test('dluh: bez majetku zbývá jen bankrot', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').balance = -400;
+  assert.deepEqual(Bot.pickDebtAction(ctx, 'bot'), { decision: 'declare_bankrupt' });
+});

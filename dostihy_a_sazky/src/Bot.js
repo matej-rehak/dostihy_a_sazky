@@ -222,6 +222,72 @@ function decideAirport(ctx, botId) {
   return bestScore - expected > fee ? best : null;
 }
 
+// ─── Dluhy ────────────────────────────────────────────────────────────────────
+
+/** Kolik dá prodej pole — zrcadlí EconomyMixin._sellProperty. */
+function propertySellValue(ctx, spaceId) {
+  return Math.floor(BOARD[spaceId].price / 2) + tokenSellValue(ctx, spaceId);
+}
+
+/**
+ * Jednu akci na jeden prompt debt_manage — engine se po každém prodeji doptá znovu.
+ * Prodej je za 50 %, takže cílem je prodat co nejmíň a to nejpostradatelnější.
+ */
+function pickDebtAction(ctx, botId) {
+  const bot = ctx.players.get(botId);
+  if (!bot) return null;
+
+  const shortage = -bot.balance;
+  if (shortage <= 0) return null;
+
+  const loneHorses = [];      // kůň mimo monopol, bez žetonů
+  const tokenHorses = [];     // kůň mimo monopol, ale se žetony (vzácné)
+  const services = [];
+  const monopolyHorses = [];
+  const withTokens = [];
+
+  for (const sid of bot.properties) {
+    const space = BOARD[sid];
+    const tok = ctx.tokens[sid];
+    const hasTokens = !!tok && (tok.big || tok.small > 0);
+    if (hasTokens) withTokens.push(sid);
+
+    if (space.type === 'service') {
+      services.push(sid);
+    } else if (ownsFullGroup(ctx, botId, space.group)) {
+      monopolyHorses.push(sid);
+    } else if (hasTokens) {
+      tokenHorses.push(sid);
+    } else {
+      loneHorses.push(sid);
+    }
+  }
+
+  // Žetony až za službami, ale před rozebráním monopolu — jeden žeton bolí
+  // míň než ztráta celé stáje.
+  for (const tier of [loneHorses, tokenHorses, services]) {
+    const pick = pickFromTier(ctx, tier, shortage);
+    if (pick !== null) return { decision: 'sell_property', spaceId: pick };
+  }
+
+  if (withTokens.length > 0) {
+    return { decision: 'sell_token', spaceId: withTokens[0] };
+  }
+
+  const lastResort = pickFromTier(ctx, monopolyHorses, shortage);
+  if (lastResort !== null) return { decision: 'sell_property', spaceId: lastResort };
+
+  return { decision: 'declare_bankrupt' };
+}
+
+/** Nejlevnější pole, které dluh pokryje samo; jinak nejdražší (nejmíň prodejů). */
+function pickFromTier(ctx, tier, shortage) {
+  if (tier.length === 0) return null;
+  const sorted = [...tier].sort((a, b) => propertySellValue(ctx, a) - propertySellValue(ctx, b));
+  const covering = sorted.find(sid => propertySellValue(ctx, sid) >= shortage);
+  return covering !== undefined ? covering : sorted[sorted.length - 1];
+}
+
 module.exports = {
   BOT_THINK_MS,
   RESERVE_MIN,
@@ -238,4 +304,5 @@ module.exports = {
   evaluatePurchase,
   scoreSpace,
   decideAirport,
+  pickDebtAction,
 };
