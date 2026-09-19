@@ -8,7 +8,7 @@ export function renderLobby(gameState, me) {
   dom.lobbyView.classList.remove('hidden');
   dom.gameView.classList.add('hidden');
 
-  renderPlayerList(gameState.players);
+  renderPlayerList(gameState.players, me);
 
   if (me) {
     dom.joinForm?.classList.add('hidden');
@@ -33,7 +33,7 @@ export function renderLobby(gameState, me) {
   }
 }
 
-function renderPlayerList(players) {
+function renderPlayerList(players, me) {
   const lp = dom.lobbyPlayers;
   if (!lp) return;
   lp.innerHTML = '';
@@ -45,12 +45,21 @@ function renderPlayerList(players) {
     const row    = makeEl('div', 'lp-row');
     const avatar = makeEl('div', 'lp-avatar');
     avatar.style.background = safeColor(p.color);
-    avatar.textContent = p.name[0].toUpperCase();
+    avatar.textContent = p.isBot ? '🤖' : p.name[0].toUpperCase();
     row.appendChild(avatar);
     row.appendChild(makeEl('span', 'lp-name', p.name));
     if (p.isHost) row.appendChild(makeEl('span', 'lp-host', 'HOST'));
+    if (p.isBot)  row.appendChild(makeEl('span', 'lp-host', 'BOT'));
     if (p.ready)  row.appendChild(makeEl('span', 'lp-ready-text', 'PŘIPRAVEN'));
     row.appendChild(makeEl('div', `lp-ready-dot${p.ready ? ' is-ready' : ''}`));
+
+    if (p.isBot && me?.isHost) {
+      const remove = makeEl('button', 'btn btn-outline btn-xs', '✖');
+      remove.title = `Odebrat ${p.name}`;
+      remove.addEventListener('click', () => socket.emit('game:remove_bot', { botId: p.id }));
+      row.appendChild(remove);
+    }
+
     lp.appendChild(row);
   });
 }
@@ -239,6 +248,7 @@ export function initLobbyListeners(onLeave) {
 
   // Start + ready
   dom.startBtn?.addEventListener('click', () => { dom.startBtn.disabled = true; socket.emit('game:start'); });
+  dom.addBotBtn?.addEventListener('click', () => socket.emit('game:add_bot'));
   document.getElementById('toggle-ready-btn')?.addEventListener('click', function () {
     this.disabled = true;
     socket.emit('game:ready');

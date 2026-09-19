@@ -15,6 +15,7 @@ const IDS = {
   lobbyPlayers:  'lobby-players',
   hostControls:  'host-controls',
   startBtn:      'start-btn',
+  addBotBtn:     'add-bot-btn',
   board:         'board',
   playersList:   'players-list',
   actionTitle:   'action-title',
