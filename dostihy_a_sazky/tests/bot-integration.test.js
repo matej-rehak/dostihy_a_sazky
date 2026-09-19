@@ -66,7 +66,7 @@ test('removeBot odebere jen boty', (t) => {
   assert.equal(engine.players.size, 1);
 });
 
-test('bot odehraje svůj tah, jakmile timer vystřelí', (t) => {
+test('_botAct hodí kostkou, když je bot na tahu (přímé volání, bez reálného timeru)', (t) => {
   const engine = makeEngine(t);
   engine.addPlayer(humanSocket('h1'), 'Matej', null);
   engine.addBot();
@@ -141,6 +141,53 @@ test('bot odmítne cílenou nabídku, ale veřejnou nechá být', (t) => {
 
   const ids = engine.tradeOffers.map(o => o.id);
   assert.deepEqual(ids, ['pub'], 'veřejná nabídka musí zůstat ve frontě');
+});
+
+test('bot odmítne cílenou nabídku přes reálný timer a řetěz pokračuje dál', async (t) => {
+  const engine = makeEngine(t);
+  engine.addPlayer(humanSocket('h1'), 'Matej', null);
+  engine.addBot();
+  const bot = [...engine.players.values()].find(p => p.isBot);
+
+  engine.phase = 'playing';
+  engine.turnOrder = ['h1', bot.id];
+  engine.currentTurnIdx = 0;
+  engine._scheduleAction = () => {};
+
+  const emptyTrade = { horses: [], money: 0 };
+  engine.tradeOffers = [
+    { id: 'pub',  fromId: 'h1', targetId: null,   offer: emptyTrade, request: emptyTrade,
+      fromContext: 'wait_roll', turnPlayerId: 'h1' },
+    { id: 'mine', fromId: 'h1', targetId: bot.id, offer: emptyTrade, request: emptyTrade,
+      fromContext: 'wait_roll', turnPlayerId: 'h1' },
+  ];
+
+  // Jako v produkci: pendingAction patří jinému hráči (bot není na tahu),
+  // _setPendingAction sama vyzbrojí reálný setTimeout přes _notifyBots.
+  engine._setPendingAction({ type: 'wait_roll', targetId: 'h1' });
+  assert.equal(engine._botTimers.has(bot.id), true, 'timer musí být vyzbrojen produkční cestou');
+
+  await new Promise((resolve) => setTimeout(resolve, Bot.BOT_THINK_MS + 100));
+
+  const ids = engine.tradeOffers.map(o => o.id);
+  assert.deepEqual(ids, ['pub'], 'bot odmítl cílenou nabídku, veřejná zůstala ve frontě');
+
+  // Odmítnutí zmenšilo frontu obchodů → _botAct musel na konci zavolat
+  // _notifyBots() znovu, což je přesně řetězení z odchylky od specu 3.4.
+  assert.equal(engine._botTimers.has(bot.id), true,
+    'po zpracované nabídce musí být naplánován navazující _botAct (řetězení)');
+});
+
+test('_notifyBots přeskočí zbankrotovaného bota', (t) => {
+  const engine = makeEngine(t);
+  engine.addPlayer(humanSocket('h1'), 'Matej', null);
+  engine.addBot();
+  const bot = [...engine.players.values()].find(p => p.isBot);
+  bot.bankrupt = true;
+
+  engine.phase = 'playing';
+  engine._notifyBots();
+  assert.equal(engine._botTimers.has(bot.id), false, 'zbankrotovaný bot nesmí dostat timer');
 });
 
 test('_notifyBots neplánuje, když hra neběží', (t) => {

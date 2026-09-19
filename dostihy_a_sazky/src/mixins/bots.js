@@ -107,13 +107,29 @@ module.exports = {
 
     const botSocket = { playerId: botId, id: null, emit: () => {} };
 
+    // Snapshot before dispatch: handleRoll no-ops (without consuming
+    // pendingAction) when the caller isn't _currentPlayerId(). Today that
+    // path is unreachable for bots, but it rests on "bots never
+    // initiateTrade" holding true, which is asserted nowhere else. Rather
+    // than argue that invariant, make a no-op dispatch structurally unable
+    // to re-arm: only re-notify if the dispatch provably changed something
+    // (pendingAction identity or the trade queue length). A genuine
+    // no-op — same pendingAction reference, same queue length — must NOT
+    // loop back into _notifyBots, or a stuck bot would retry every
+    // BOT_THINK_MS forever. Do not "simplify" this back to an unconditional
+    // trailing _notifyBots().
+    const pendingBefore = this.pendingAction;
+    const offersBefore = this.tradeOffers.length;
+
     if (action.kind === 'roll') {
       this.handleRoll(botSocket);
     } else {
       this.handleRespond(botSocket, action.data);
     }
 
-    this._notifyBots();
+    if (this.pendingAction !== pendingBefore || this.tradeOffers.length !== offersBefore) {
+      this._notifyBots();
+    }
   },
 
   _clearBotTimers() {
