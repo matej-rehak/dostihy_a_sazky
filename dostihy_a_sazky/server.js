@@ -8,6 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const GameEngine = require('./src/GameEngine');
 const { generateToken, verifyToken } = require('./src/auth');
 const { PLAYER_COLORS } = require('./src/constants');
+const { hasHumanPlayers } = require('./src/roomLifecycle');
 
 // ─── HTTP + Socket.IO setup ──────────────────────────────────────────────────
 
@@ -64,7 +65,10 @@ function removePlayerFromRoom(roomId, playerId, socket = null) {
       socket.leave(roomId);
       socket.roomId = null;
     }
-    if (room.engine.players.size === 0) rooms.delete(roomId);
+    if (!hasHumanPlayers(room.engine.players)) {
+      if (typeof room.engine._clearBotTimers === 'function') room.engine._clearBotTimers();
+      rooms.delete(roomId);
+    }
   }
 }
 
