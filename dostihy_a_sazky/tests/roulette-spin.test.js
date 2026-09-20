@@ -94,6 +94,67 @@ test('doping na ruletě zachová původní efekt', () => {
   assert.equal(engine.players.get('A').skipTurns, 1);
 });
 
+/**
+ * Vypršení časového limitu odehraje prompt za hráče. Kliknutí, které dorazí
+ * těsně po něm, už nesmí stejný efekt aplikovat podruhé — `_handleTurnTimeout`
+ * proto musí `pendingAction` spotřebovat stejně jako `handleRespond`.
+ */
+test('vypršelý limit a opožděné kliknutí aplikují sázku právě jednou', () => {
+  const engine = makeEngine();
+  forceOutcome(engine, 'bet');
+  // Pokračování tahu se jen zaznamená: v reálném provozu ještě visí ve
+  // frontě, když opožděné kliknutí dorazí.
+  const scheduled = [];
+  engine._scheduleAction = (delay, fn) => scheduled.push(fn);
+
+  engine.players.get('A').position = 30;
+  engine._evaluateSpace('A');
+  assert.equal(engine.pendingAction.type, 'roulette_ack');
+
+  const before = engine.players.get('A').balance;
+  engine._handleTurnTimeout();
+  const afterTimeout = engine.players.get('A').balance;
+  assert.ok(afterTimeout < before, 'vypršelý limit musí sázku strhnout');
+  const scheduledAfterTimeout = scheduled.length;
+
+  // Opožděné kliknutí hráče, které dorazilo až po vypršení limitu.
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
+
+  assert.equal(
+    engine.players.get('A').balance, afterTimeout,
+    'sázka se nesmí strhnout podruhé'
+  );
+  assert.equal(
+    scheduled.length, scheduledAfterTimeout,
+    'opožděné kliknutí nesmí naplánovat druhé pokračování tahu — hráč by tiše přišel o tah'
+  );
+});
+
+test('vypršelý limit spotřebuje pendingAction u všech promptů Totalizátoru', () => {
+  const prompts = [
+    { type: 'roulette_ack', data: { result: { id: 'immunity' } } },
+    { type: 'roulette_pick_player', data: { outcomeId: 'strike', candidates: ['B'] } },
+    { type: 'roulette_pick_horse', data: { outcomeId: 'auction', options: [] } },
+  ];
+
+  for (const prompt of prompts) {
+    const engine = makeEngine();
+    const scheduled = [];
+    engine._scheduleAction = (delay, fn) => scheduled.push(fn);
+    engine.pendingAction = { ...prompt, targetId: 'A' };
+
+    engine._handleTurnTimeout();
+    assert.equal(engine.pendingAction, null, `${prompt.type} zůstal po timeoutu viset`);
+
+    const scheduledAfterTimeout = scheduled.length;
+    engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
+    assert.equal(
+      scheduled.length, scheduledAfterTimeout,
+      `opožděné kliknutí znovu odbavilo ${prompt.type}`
+    );
+  }
+});
+
 test('nový hráč má všechny příznaky vynulované', () => {
   const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
   engine._broadcast = () => {};

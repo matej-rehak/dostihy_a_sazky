@@ -131,13 +131,22 @@ module.exports = {
         this._broadcast();
         break;
       }
+      // Prompty Totalizátoru spotřebují `pendingAction` JEŠTĚ PŘED voláním
+      // handleru — stejně jako to dělá `handleRespond`. Bez toho by kliknutí,
+      // které dorazí v okně mezi vypršením limitu a dohráním handleru, prošlo
+      // guardem v `handleRespond` a efekt by se aplikoval podruhé (sázka
+      // stržená dvakrát, dva žetony zdarma) a navíc by druhý `_scheduleAction`
+      // přepsal `this._timer` a hráč by tiše přišel o tah.
       case 'roulette_ack':
+        this._setPendingAction(null);
         this._handleRouletteAck(targetId, data);
         break;
       case 'roulette_pick_player':
+        this._setPendingAction(null);
         this._handleRoulettePickPlayer(targetId, data?.candidates?.[0], data);
         break;
       case 'roulette_pick_horse':
+        this._setPendingAction(null);
         this._handleRoulettePickHorse(targetId, 'decline', data);
         break;
     }
