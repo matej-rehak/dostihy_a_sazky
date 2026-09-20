@@ -1,7 +1,10 @@
+import { createPool } from './audioPool.mjs';
+
 export const audioManager = {
   sfxVolume: 1,
   musicVolume: 0.5,
   sounds: {},
+  _pools: {},
   musicAudio: null,
   _musicFadeTimer: null,
   _wantsMusic: false,
@@ -94,12 +97,19 @@ export const audioManager = {
     const a = this.sounds[name];
     if (!a) return;
 
-    // Klonování Node umožňuje přehrávat stejný zvuk vícekrát přes sebe
-    const clone = a.cloneNode();
-    clone.volume = this._clamp01(volume * this.sfxVolume);
-    if (clone.volume <= 0) return;
+    const vol = this._clamp01(volume * this.sfxVolume);
+    if (vol <= 0) return;
 
-    clone.play().catch(err => { });
+    // Kruhový pool místo klonování na každé přehrání. Zvuky, které jdou hustě
+    // za sebou (tik losování, kroky figurky), tak nevyrábí desítky mediálních
+    // elementů — pool jich drží nejvýš POOL_SIZE a točí se dokola, takže se
+    // pořád můžou překrývat.
+    if (!this._pools[name]) this._pools[name] = createPool(() => a.cloneNode());
+    const node = this._pools[name].acquire();
+
+    node.volume = vol;
+    try { node.currentTime = 0; } catch (err) { /* uzel se ještě nenačetl */ }
+    node.play().catch(err => { });
   },
 
   _clamp01(v) {
