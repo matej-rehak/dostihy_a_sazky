@@ -45,6 +45,42 @@
         </div>
 
         <div class="settings-group">
+          <h3>Animace</h3>
+          <div class="setting-row">
+            <label for="set-pawnAnimation">Pohyb figurky po plánu</label>
+            <input id="set-pawnAnimation" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('pawnAnimation', this.checked)">
+          </div>
+          <div class="setting-row">
+            <label for="set-cardFlip">Otáčení karty</label>
+            <input id="set-cardFlip" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('cardFlip', this.checked)">
+          </div>
+          <div class="setting-row">
+            <label for="set-particles">Částice na pozadí</label>
+            <input id="set-particles" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('particles', this.checked)">
+          </div>
+          <div class="setting-row">
+            <label for="set-sixSparks">Jiskry u šestky</label>
+            <input id="set-sixSparks" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('sixSparks', this.checked)">
+          </div>
+          <div class="setting-row">
+            <label for="set-starterDraw">Losování prvního hráče</label>
+            <input id="set-starterDraw" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('starterDraw', this.checked)">
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>Oznámení</h3>
+          <div class="setting-row">
+            <label for="set-celebrationOverlays">Oslavné obrazovky</label>
+            <input id="set-celebrationOverlays" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('celebrationOverlays', this.checked)">
+          </div>
+          <div class="setting-row">
+            <label for="set-toasts">Vyskakovací hlášky</label>
+            <input id="set-toasts" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('toasts', this.checked)">
+          </div>
+        </div>
+
+        <div class="settings-group">
           <h3>Zobrazení</h3>
           <div class="setting-row">
             <label>Režim celé obrazovky</label>
