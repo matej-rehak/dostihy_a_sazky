@@ -7,7 +7,13 @@ export function showTip(space, gameState, ev) {
   const owner = ownerId ? gameState.players.find(p => p.id === ownerId) : null;
   const tok = gameState.tokens?.[space.id] || { small: 0, big: false };
 
-  let html = `<div class="tip-header" style="background:${safeColor(space.groupColor ?? '', 'var(--bg-card2)').replace('var(--bg-card2)', '')}">${esc(space.name)}</div>`;
+  // Pole 30 může hostitel přepnout na Totalizátor (`field30Mode`). Popisek musí
+  // jít za tím, stejně jako jméno políčka v ui/board.js — jinak by tooltip
+  // v režimu rulety aktivně lhal o pravidlech.
+  const isRoulette30 = space.id === 30 && (gameState.config?.field30Mode ?? 'doping') === 'roulette';
+  const title = isRoulette30 ? 'Totalizátor' : space.name;
+
+  let html = `<div class="tip-header" style="background:${safeColor(space.groupColor ?? '', 'var(--bg-card2)').replace('var(--bg-card2)', '')}">${esc(title)}</div>`;
   html += `<div class="tip-body">`;
 
   if (space.type === 'horse') {
@@ -60,10 +66,19 @@ export function showTip(space, gameState, ev) {
                Bezpečné pole bez postihu i odměny.
              </div>`;
   } else if (space.type === 'skip_turn') {
-    html += `<div class="tip-group" style="color:var(--red)">Podezření z dopingu</div>
-             <div style="font-size:12px;margin-top:10px;line-height:1.5">
-               Hráč vynechá ${Number(space.turns ?? 1)} ${Number(space.turns ?? 1) === 1 ? 'kolo' : 'kola'}.
-             </div>`;
+    if (isRoulette30) {
+      html += `<div class="tip-group" style="color:var(--gold)">Totalizátor</div>
+               <div style="font-size:12px;margin-top:10px;line-height:1.5">
+                 Roztočí se ruleta o devíti výsečích se stejnou šancí — sázka,
+                 dražba, dvojitý nájem, imunita, stávka u soupeře a další.
+                 Výsledek určuje server.
+               </div>`;
+    } else {
+      html += `<div class="tip-group" style="color:var(--red)">Podezření z dopingu</div>
+               <div style="font-size:12px;margin-top:10px;line-height:1.5">
+                 Hráč vynechá ${Number(space.turns ?? 1)} ${Number(space.turns ?? 1) === 1 ? 'kolo' : 'kola'}.
+               </div>`;
+    }
   }
   html += `</div>`;
 

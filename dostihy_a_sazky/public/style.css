@@ -4380,13 +4380,6 @@ input:checked+.slider:before {
 /* Vypnutá animace z nastavení: kolo skočí rovnou na výsledek. */
 .roulette-wheel.no-spin { transition: none; }
 
-.roulette-segment-label {
-  position: absolute;
-  font-size: 18px;
-  transform-origin: center;
-  pointer-events: none;
-}
-
 .roulette-result {
   display: flex;
   flex-direction: column;
@@ -4412,10 +4405,6 @@ input:checked+.slider:before {
   color: var(--text-dim);
   line-height: 1.45;
 }
-
-/* Semantiku nese jen jméno výsledku, ne výplň kola. */
-.roulette-result-name.is-good { color: var(--green); }
-.roulette-result-name.is-bad  { color: var(--red); }
 
 @media (max-width: 768px) {
   .roulette-scene       { padding: 18px; gap: 12px; width: 92%; }
