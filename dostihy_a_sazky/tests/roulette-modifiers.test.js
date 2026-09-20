@@ -113,6 +113,33 @@ test('přednostní právo půlí cenu a spotřebuje se až nákupem', () => {
   assert.equal(engine._effectiveBuyPrice('A', GAVORA), BOARD[GAVORA].price);
 });
 
+test('insufficient_funds hlásí sníženou cenu a nedoplatek podle přednostního práva', () => {
+  const engine = makeEngine();
+  const player = engine.players.get('A');
+  const price = BOARD[FANTOME].price;
+  const halfPrice = Math.floor(price / 2);
+
+  player.position = FANTOME;
+  player.halfPriceNext = true;
+  // O 1000 méně, než kolik by hráč skutečně platil (poloviční cena) —
+  // bez opravy by log/payload hlásily plnou cenu a nedoplatek by vycházel
+  // vůči ní, ne vůči skutečně placené poloviční ceně.
+  player.balance = halfPrice - 1000;
+
+  let scheduled = null;
+  engine._scheduleAction = (delay, fn) => { scheduled = fn; };
+
+  engine._evaluateSpace('A');
+
+  assert.equal(engine.pendingAction.type, 'insufficient_funds');
+  assert.equal(engine.pendingAction.data.price, halfPrice, 'price v payloadu musí být zlevněná, ne plná');
+  assert.equal(engine.pendingAction.data.balance, halfPrice - 1000);
+  assert.equal(engine.pendingAction.data.shortage, 1000, 'shortage se musí počítat proti zlevněné ceně');
+  // příznak zůstává nabitý — dotaz na cenu ho nespotřebovává
+  assert.equal(player.halfPriceNext, true);
+  assert.equal(typeof scheduled, 'function');
+});
+
 test('stávka se snižuje na začátku tahu cílového hráče', () => {
   const engine = makeEngine();
   engine.players.get('A').tokenStrike = 1;

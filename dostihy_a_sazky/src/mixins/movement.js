@@ -90,20 +90,21 @@ module.exports = {
       case 'service': {
         const owner = this.ownerships[space.id];
         if (!owner) {
-          if (player.balance >= this._effectiveBuyPrice(pid, space.id)) {
+          const buyPrice = this._effectiveBuyPrice(pid, space.id);
+          if (player.balance >= buyPrice) {
             this._setPendingAction({ type: 'buy_offer', targetId: pid, data: { spaceId: space.id } });
             this._broadcast();
           } else {
-            this._addLog(`${player.name} nemá dostatek prostředků ke koupi ${space.name} (${fmt(space.price)} Kč)`);
+            this._addLog(`${player.name} nemá dostatek prostředků ke koupi ${space.name} (${fmt(buyPrice)} Kč)`);
             this._setPendingAction({
               type: 'insufficient_funds',
               targetId: pid,
               data: {
                 spaceId: space.id,
                 kind: 'property',
-                price: space.price,
+                price: buyPrice,
                 balance: player.balance,
-                shortage: Math.max(0, space.price - player.balance),
+                shortage: Math.max(0, buyPrice - player.balance),
               },
             });
             this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
