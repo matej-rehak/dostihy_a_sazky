@@ -14,6 +14,7 @@ const TokensMixin   = require('./mixins/tokens');
 const StateMixin    = require('./mixins/state');
 const TradeMixin    = require('./mixins/trade');
 const BotsMixin     = require('./mixins/bots');
+const RouletteMixin = require('./mixins/roulette');
 
 class GameEngine {
   constructor(io, roomId) {
@@ -77,6 +78,7 @@ Object.assign(GameEngine.prototype,
   CardsMixin,    // _applyCard
   EconomyMixin,  // _buyProperty, _sellProperty, _calcRent, _transfer, _calcAssetsValue, bankrot
   TokensMixin,   // _addToken, _eligibleTokenSpaces, _offerTokensOrEnd
+  RouletteMixin, // _spinRoulette, _handleRouletteAck, modifikátory nájmu
   TradeMixin,    // initiateTrade
   BotsMixin,     // addBot, removeBot, _notifyBots, _botAct
   DebugMixin,    // handleDebugSetState

@@ -2,6 +2,7 @@
 export const state = {
   myId:              null,
   boardData:         null,
+  rouletteOutcomes:  [],
   gameState:         null,
   boardBuilt:        false,
   clientVisualPos:   {},

@@ -51,6 +51,7 @@ module.exports = {
       case 'trade_offer': return this._handleTradeOffer(pid, decision, actionData, clientOffer, clientRequest);
       case 'airport_choice': return this._handleAirportChoice(pid, decision);
       case 'airport_select_target': return this._handleAirportSelectTarget(pid, decision, spaceId);
+      case 'roulette_ack': return this._handleRouletteAck(pid, actionData);
     }
   },
 
@@ -128,6 +129,9 @@ module.exports = {
         this._broadcast();
         break;
       }
+      case 'roulette_ack':
+        this._handleRouletteAck(targetId, data);
+        break;
     }
   },
 

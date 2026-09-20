@@ -37,6 +37,8 @@ module.exports = {
       properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: false, disconnected: false,
       canFly: false, left: false,
+      // Totalizátor — příznaky visící na hráči přes tahy (vzor `canFly`).
+      pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
     };
     this.players.set(socket.playerId, player);
     this._addLog(`🐎 ${name} se připojil(a) k hře`);

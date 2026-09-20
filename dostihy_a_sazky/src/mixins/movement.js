@@ -63,6 +63,10 @@ module.exports = {
         break;
 
       case 'skip_turn':
+        if (this.config.field30Mode === 'roulette') {
+          this._spinRoulette(pid);
+          break;
+        }
         player.skipTurns = space.turns;
         this._addLog(`🚫 ${player.name} zastavil(a) na poli ${space.name} — vynechává příští tah.`);
         this._scheduleAction(ACTION_DELAY_MS, () => this._advanceTurn());

@@ -324,9 +324,10 @@ function processState(gameState) {
     showIntroSelection();
   });
 
-  socket.on('game:init', ({ roomId, board, colors, state: gameState }) => {
+  socket.on('game:init', ({ roomId, board, colors, roulette, state: gameState }) => {
     state.boardData = board;
     window.__boardData = board;
+    state.rouletteOutcomes = roulette || [];
     state.allColors = colors;
     buildColorPicker(colors, gameState.players.map(p => p.color));
     dom.introView.classList.add('hidden');

@@ -2,6 +2,7 @@
 
 const BOARD = require('../data/boardData');
 const { JAIL_SPACE, JAIL_TURNS_MAX, PLAYER_COLORS } = require('../constants');
+const { OUTCOMES } = require('../Roulette');
 
 const LOG_MAX = 30;
 const LOG_BROADCAST_MAX = 20;
@@ -101,6 +102,8 @@ module.exports = {
       roomId: this.roomId,
       board: BOARD,
       colors: PLAYER_COLORS,
+      // Statický seznam výsečí Totalizátoru — klient z něj kreslí kolo.
+      roulette: OUTCOMES,
       state: this._buildState(),
     });
   },
