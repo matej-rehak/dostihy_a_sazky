@@ -1,5 +1,7 @@
 'use strict';
 
+const BOARD = require('../../src/data/boardData');
+
 function makePlayer(id, overrides = {}) {
   return {
     id,
@@ -17,8 +19,18 @@ function makePlayer(id, overrides = {}) {
   };
 }
 
+/** Zrcadlí EconomyMixin._calcTokenValue ze state.js. */
+function calcTokenValue(ctx, spaceId) {
+  const space = BOARD[spaceId];
+  const tok = ctx.tokens[spaceId];
+  if (!tok) return 0;
+  if (tok.big) return space.bigTokenCost + space.tokenCost * 4;
+  if (tok.small > 0) return space.tokenCost * tok.small;
+  return 0;
+}
+
 function makeCtx(overrides = {}) {
-  return {
+  const ctx = {
     players: new Map(),
     ownerships: {},
     tokens: {},
@@ -33,8 +45,15 @@ function makeCtx(overrides = {}) {
     pendingAction: null,
     tradeOffers: [],
     lastDice: null,
+    // Zrcadlí EconomyMixin._calcAssetsValue z economy.js — bot ji čte přes ctx.
+    _calcAssetsValue(pid) {
+      const p = this.players.get(pid);
+      if (!p) return 0;
+      return p.properties.reduce((sum, spId) => sum + BOARD[spId].price + calcTokenValue(this, spId), 0);
+    },
     ...overrides,
   };
+  return ctx;
 }
 
 function addPlayer(ctx, player) {

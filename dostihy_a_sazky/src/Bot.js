@@ -363,6 +363,52 @@ function decideAction(ctx, botId) {
       return { kind: 'respond', data: { decision: 'fly', spaceId: target } };
     }
 
+    case 'roulette_ack':
+      // Výsledek je daný, není co rozhodovat — jen potvrdit, jako u karty.
+      return { kind: 'respond', data: { decision: 'ack' } };
+
+    case 'roulette_pick_player': {
+      const candidates = d.candidates || [];
+      if (candidates.length === 0) return { kind: 'respond', data: { decision: null } };
+      // Vedoucí soupeř = ten s největším majetkem. Stávku i udání má smysl
+      // mířit na něj, ne na hráče, který stejně dohrává.
+      const leader = candidates
+        .map(id => ({ id, worth: (ctx.players.get(id)?.balance || 0) + ctx._calcAssetsValue(id) }))
+        .sort((a, b) => b.worth - a.worth)[0];
+      return { kind: 'respond', data: { decision: leader.id } };
+    }
+
+    case 'roulette_pick_horse': {
+      const options = d.options || [];
+      if (options.length === 0) return { kind: 'respond', data: { decision: 'decline' } };
+
+      if (d.outcomeId === 'free_token') {
+        // Žeton zdarma se vyplatí vždy — ber toho koně, kde zvedne nájem nejvíc.
+        const best = options
+          .map(o => ({ ...o, gain: estimateRent(ctx, o.spaceId) }))
+          .sort((a, b) => b.gain - a.gain)[0];
+        return { kind: 'respond', data: { decision: best.spaceId } };
+      }
+
+      // Dražba. `evaluatePurchase` vrací { buy, reason } a počítá s BĚŽNOU
+      // cenou, ne s přirážkou — proto se k jeho verdiktu přidává vlastní
+      // kontrola, že po zaplacení dražební ceny zbude rezerva.
+      const reserve = calcReserve(ctx, botId);
+      const balance = bot.balance;
+      const viable = options.filter(o =>
+        o.price <= balance &&
+        balance - o.price >= reserve &&
+        evaluatePurchase(ctx, botId, o.spaceId).buy
+      );
+      if (viable.length === 0) return { kind: 'respond', data: { decision: 'decline' } };
+
+      // Z použitelných ber toho, kde je odhadovaný nájem nejvyšší.
+      const best = viable
+        .map(o => ({ ...o, gain: estimateRent(ctx, o.spaceId) }))
+        .sort((a, b) => b.gain - a.gain)[0];
+      return { kind: 'respond', data: { decision: best.spaceId } };
+    }
+
     case 'debt_manage': {
       const action = pickDebtAction(ctx, botId);
       return action ? { kind: 'respond', data: action } : null;
