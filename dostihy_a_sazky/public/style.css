@@ -22,6 +22,8 @@
   --font: 'Outfit', sans-serif;
   --radius: 6px;
   --trans: 0.18s ease;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 /* ─── Reconnect Overlay ─── */
@@ -186,7 +188,6 @@
   letter-spacing: 2px;
   padding: 0 40px;
   border-radius: 12px;
-  transition: all 0.05s ease-out;
   text-transform: uppercase;
   color: #fff;
 }
@@ -960,6 +961,8 @@ select.text-input option {
 #board-wrap {
   flex: 1;
   min-width: 0;
+  position: relative;
+  /* kotva pro #pawn-fx */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1254,20 +1257,38 @@ select.text-input option {
   animation: diceSixPulse 0.7s ease-out;
 }
 
-@keyframes diceSixPulse {
+/* Zvětšení na obalu, aby kostka uvnitř nepřišla o svoji inline rotaci. */
+.dice-scene.dice-six-hit {
+  animation: diceSixPop 0.7s ease-out;
+}
+
+@keyframes diceSixPop {
   0% {
-    filter: drop-shadow(0 0 0 rgba(255, 215, 0, 0));
     transform: scale(1);
   }
 
   35% {
-    filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.8));
     transform: scale(1.12);
   }
 
   100% {
-    filter: drop-shadow(0 0 0 rgba(255, 215, 0, 0));
     transform: scale(1);
+  }
+}
+
+/* Jen světlo. Zvětšení patří na .dice-scene — kostka si tady drží hodnotu
+   v inline transformu a keyframe s transformem by ji přebil (skočila by na 1). */
+@keyframes diceSixPulse {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(255, 215, 0, 0));
+  }
+
+  35% {
+    filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.8));
+  }
+
+  100% {
+    filter: drop-shadow(0 0 0 rgba(255, 215, 0, 0));
   }
 }
 
@@ -1417,7 +1438,7 @@ select.text-input option {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background var(--trans);
+  transition: background var(--trans), transform 150ms var(--ease-out);
   min-width: 0;
   min-height: 0;
 }
@@ -1557,44 +1578,21 @@ select.text-input option {
 }
 
 /* Ownership badge and overlay */
+/* Vlastnictví nese celé políčko — závoj v barvě majitele plus vnitřní rám.
+   Barva i rám se nastavují inline z board.js, protože závisí na hráči.
+   Žádná `opacity` tady: ztlumila by i rám, proto je závoj rgba v pozadí. */
 .own-overlay {
   position: absolute;
   inset: 0;
   z-index: 1;
-  opacity: 0.15;
   pointer-events: none;
-  transition: background var(--trans);
+  box-shadow: inset 0 0 0 var(--own-ring, 3px) var(--own-color, transparent);
+  transition: background var(--trans), box-shadow var(--trans);
 }
 
-.own-badge {
-  position: absolute;
-  z-index: 3;
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  border: 1.5px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
-  transition: background var(--trans);
-}
-
-.side-bottom .own-badge {
-  top: 11px;
-  left: 4px;
-}
-
-.side-left .own-badge {
-  top: 4px;
-  right: 12px;
-}
-
-.side-top .own-badge {
-  bottom: 11px;
-  left: 4px;
-}
-
-.side-right .own-badge {
-  top: 4px;
-  left: 12px;
+/* Na vlastněném políčku je pod závojem méně kontrastu, název se zesvětlí. */
+.space.is-owned .space-name {
+  color: #ffffff;
 }
 
 /* Dostih token dots */
@@ -1663,10 +1661,10 @@ select.text-input option {
 }
 
 .pawn {
-  width: 22px;
-  height: 32px;
-  margin-left: -10px;
-  margin-top: -12px;
+  width: 32px;
+  height: 48px;
+  margin-left: -16px;
+  margin-top: -18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1688,6 +1686,36 @@ select.text-input option {
   transform: scale(1.3) translateY(-6px);
   filter: drop-shadow(0 0 12px rgba(255, 255, 255, 1)) drop-shadow(4px 8px 10px rgba(0, 0, 0, 0.5));
   z-index: 12;
+}
+
+
+/* Vrstva pro let figurky nad celým plánem.
+   Políčka mají `overflow: hidden` a každé tvoří vlastní vrstvu, takže skok
+   uvnitř nich se ořízne a figurka se kreslí pod sousedním políčkem. Let proto
+   probíhá tady, mimo jejich dosah. Viz public/js/animations/pawns.js. */
+#pawn-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 60;
+}
+
+.pawn-ghost {
+  position: absolute;
+  filter: drop-shadow(2px 2px 6px rgba(0, 0, 0, 0.5));
+  will-change: transform;
+}
+
+.pawn-ghost canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Žduchnutí políčka, na které figurka dosedla. */
+.space.space-bump {
+  transform: translateY(-4px);
 }
 
 /* Highlighted (current player) space */
@@ -2091,6 +2119,12 @@ select.text-input option {
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+
+.card-3d-overlay.is-open {
+  opacity: 1;
 }
 
 .broke-overlay {
@@ -2167,6 +2201,12 @@ select.text-input option {
   width: 280px;
   height: 400px;
   perspective: 1200px;
+  transform: translateY(12px) scale(0.96);
+  transition: transform 260ms var(--ease-out);
+}
+
+.card-3d-overlay.is-open .card-3d-scene {
+  transform: translateY(0) scale(1);
 }
 
 .card-3d {
@@ -2174,7 +2214,10 @@ select.text-input option {
   height: 100%;
   position: relative;
   transform-style: preserve-3d;
-  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  /* Symetrická křivka: otočka se „odehraje" v půlce dráhy, kde se prohodí rub
+     za líc. Předsazená křivka tenhle bod přejede v prvních ~12 % času a otočka
+     není vidět. Hlídá to tests/card-flip-css.test.mjs. */
+  transition: transform 700ms var(--ease-in-out);
   transform: rotateY(180deg);
   /* hidden back face first */
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 215, 0, 0.4);
@@ -2183,6 +2226,19 @@ select.text-input option {
 
 .card-3d.flipped {
   transform: rotateY(0deg);
+}
+
+/* Vypnutá otočka z nastavení: karta rovnou lícem, bez přechodu. */
+.card-3d.no-flip {
+  transition: none;
+  transform: rotateY(0deg);
+}
+
+/* Karta se otáčí až potom, co se overlay prolne — jinak by první část otočky
+   proběhla pod ještě průhledným pozadím. Při zavírání se `is-open` sundá,
+   prodleva zmizí a karta se odklápí okamžitě. */
+.card-3d-overlay.is-open .card-3d {
+  transition-delay: 180ms;
 }
 
 /* shows front */
@@ -2388,6 +2444,11 @@ select.text-input option {
 /* ─── Tooltip Detailed ─── */
 .space-tip {
   position: fixed;
+  /* Polohu řídí transform, ne left/top — posun po kompozitoru místo přepočtu
+     layoutu při každém pohybu myši. Viz moveTip v public/js/ui/tooltip.js. */
+  left: 0;
+  top: 0;
+  will-change: transform;
   z-index: 20000;
   width: 240px;
   pointer-events: none;
@@ -3619,4 +3680,621 @@ input:checked+.slider:before {
 }
 .pawn-teleport-in {
   animation: pawn-teleport-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Tab bar: desktop skryje, mobile zobrazí */
+.mobile-tabs { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE  (≤ 768 px)
+═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Base ─────────────────────────────────────────────────────────────── */
+  html, body {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
+  /* ── Lobby & Intro ────────────────────────────────────────────────────── */
+  #intro-view,
+  #lobby-view {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding: 16px 0 24px;
+  }
+
+  .lobby-card       { padding: 24px 16px; }
+  .lobby-title      { font-size: clamp(28px, 9vw, 52px); }
+  .lobby-main,
+  .lobby-side       { min-width: 0; max-width: 100%; }
+  .config-grid      { grid-template-columns: 1fr; }
+
+  /* ── Herní layout ─────────────────────────────────────────────────────── */
+  #game-view {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  #board-wrap { flex: none; padding: 8px; }
+
+  #board {
+    width: calc(100vw - 16px);
+    height: calc(100vw - 16px);
+    grid-template-columns: 4fr repeat(9, 3fr) 4fr;
+    grid-template-rows:    4fr repeat(9, 3fr) 4fr;
+  }
+
+  /* ── Nastavení (gear button) ──────────────────────────────────────────── */
+  .top-right-controls {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    left: auto;
+    z-index: 5001;
+  }
+
+  .header-btn { width: 34px; height: 34px; font-size: 16px; }
+
+  /* ── Časovač ──────────────────────────────────────────────────────────── */
+  .game-timer            { padding: 5px 12px; margin: 6px 8px; border-radius: 8px; gap: 6px; }
+  .game-timer .timer-icon { font-size: 1rem; }
+  #timer-value           { font-size: 1.1rem; letter-spacing: 1px; }
+
+  /* ── Pravý panel ──────────────────────────────────────────────────────── */
+  #right-panel {
+    width: 100%;
+    flex-shrink: 0;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    overflow: visible;
+  }
+
+  /* ── Tab bar ──────────────────────────────────────────────────────────── */
+  .mobile-tabs {
+    display: flex;
+    flex-shrink: 0;
+    background: rgba(12, 20, 34, 0.95);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mobile-tab {
+    flex: 1;
+    padding: 10px 4px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color var(--trans), border-color var(--trans);
+  }
+
+  .mobile-tab.active {
+    color: var(--gold);
+    border-bottom-color: var(--gold);
+  }
+
+  /* ── Tab sekce ────────────────────────────────────────────────────────── */
+  /* Výchozí stav: skryté; JS přidá .tab-visible na aktivní */
+  #players-section,
+  #action-section,
+  #log-section { display: none; }
+
+  #players-section.tab-visible,
+  #action-section.tab-visible  { display: flex; flex-direction: column; }
+  #action-content               { overflow: visible; }
+
+  #log-section.tab-visible {
+    display: flex;
+    flex-direction: column;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  /* ── Políčka boardu ───────────────────────────────────────────────────── */
+  .space-name,
+  .space-price        { font-size: 5px; line-height: 1.1; }
+  .space-icon         { font-size: 10px; margin-bottom: 1px; }
+  .space-inner        { padding: 1px 0; }
+  .corner-icon        { font-size: clamp(12px, 3vw, 20px); }
+  .corner-name,
+  .corner-sub         { font-size: 5px; }
+
+  .side-bottom .stripe,
+  .side-top .stripe   { height: 6px; }
+  .side-left .stripe,
+  .side-right .stripe { width: 6px; }
+
+  /* Menší políčka snesou jen tenčí rám vlastnictví. */
+  .own-overlay { --own-ring: 2px; }
+
+  .dot-small { width: 3px; height: 3px; }
+  .dot-big   { width: 4px; height: 3px; }
+
+  .pawn { width: 24px; height: 36px; margin-left: -12px; margin-top: -14px; }
+
+  /* ── Animace ──────────────────────────────────────────────────────────── */
+  .starter-winner { font-size: clamp(32px, 11vw, 100px); letter-spacing: 2px; }
+  .flicker-item   { font-size: clamp(32px, 11vw, 80px);  padding: 0 10px; }
+  .card-3d-scene  {
+    width: min(280px, 72vw);
+    height: min(400px, calc(72vw * 1.43));
+  }
+
+  /* ── Modaly (obecné) ──────────────────────────────────────────────────── */
+  .modal-card { width: 95%; padding: 16px; }
+
+  /* Nastavení */
+  .setting-row        { flex-wrap: wrap; gap: 8px; }
+  .setting-row label  { width: 100%; }
+  .volume-slider-wrap { width: 100%; }
+  .audio-settings-panel { min-width: 170px; }
+
+  /* Obchod — modal */
+  .trade-modal {
+    max-height: 90svh;
+    width: 96%;
+    padding: 14px 14px 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .trade-modal .modal-header {
+    flex-shrink: 0;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Scrollovatelný obsah — padding dá prostor abs. prvkům co vyčnívají z karet */
+  #trade-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 8px 8px 4px;
+  }
+
+  /* Footer přilepený dole — uživatel vždy vidí tlačítka */
+  .trade-footer {
+    flex-direction: column;
+    gap: 8px;
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-card);
+    padding: 10px 0 14px;
+    margin-top: 8px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .trade-footer .btn { width: 100%; justify-content: center; }
+
+  /* Sloupce nad sebou */
+  .trade-columns        { grid-template-columns: 1fr; gap: 12px; }
+  .trade-columns::after { display: none; }
+
+  .trade-col-title        { flex-wrap: wrap; gap: 6px; font-size: 1rem; }
+  .trade-col-title select { min-width: unset; width: 100%; }
+
+  /* Mřížka karet — 3 na řádek */
+  .trade-grid {
+    grid-template-columns: repeat(3, 1fr);
+    max-height: none;
+    gap: 6px;
+    padding: 8px 2px 4px;
+    overflow: visible;
+  }
+
+  /* Karty koní — kompaktní */
+  .trade-card            { padding: 6px 4px; gap: 4px; }
+  .trade-card-strip      { height: 5px; border-radius: 3px; }
+  .trade-card-name       { font-size: 11px; }
+  .trade-card-tokens     { gap: 2px; }
+  .trade-info-btn        { width: 16px; height: 16px; font-size: 10px; top: -6px; right: -6px; }
+  .trade-card-check      { width: 16px; height: 16px; font-size: 10px; top: -6px; left: -6px; }
+
+  /* Peněžní box — label nad inputem, input plná šířka */
+  .trade-money-box {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px 12px;
+  }
+
+  .trade-money-label      { font-size: 11px; color: var(--text-dim); }
+  .trade-money-input-wrap { width: 100%; }
+  .trade-money-input      { min-width: unset; width: 100%; font-size: 1.3rem !important; padding: 10px 40px 10px 52px !important; }
+
+  .trade-public-offer { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  /* ── Tooltip ─────────────────────────────────────────────────────────── */
+  .space-tip {
+    max-width: calc(100vw - 24px);
+    width: min(240px, calc(100vw - 24px));
+  }
+
+  /* ── Utility ──────────────────────────────────────────────────────────── */
+  .toast {
+    max-width: 90vw;
+    white-space: normal;
+    word-break: break-word;
+    text-align: center;
+  }
+}
+
+/* ─── Space Inspect Overlay ─── */
+.space-inspect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.space-inspect-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+}
+
+.space-inspect-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10110;
+  max-width: 90vw;
+}
+
+.space-inspect-close {
+  position: absolute;
+  top: -45px;
+  right: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 28px;
+  cursor: pointer;
+  transition: var(--trans);
+}
+
+.space-inspect-close:hover {
+  color: var(--red);
+  transform: scale(1.1);
+}
+
+.space-inspect-scene {
+  width: 320px;
+  height: 480px;
+  perspective: 1000px;
+}
+
+.space-inspect-card {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  border-radius: 16px;
+}
+
+.space-inspect-card.flipped {
+  transform: rotateY(180deg);
+}
+
+.space-inspect-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- FRONT FACE --- */
+.space-inspect-front {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.02);
+}
+
+.space-inspect-header {
+  padding: 16px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.space-inspect-name {
+  font-family: var(--font-h);
+  font-size: 26px;
+  letter-spacing: 2px;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.space-inspect-badge {
+  position: absolute;
+  top: -6px;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.25);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.space-inspect-body {
+  padding: 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.space-inspect-icon {
+  font-size: 36px;
+  text-align: center;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+.inspect-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: auto;
+}
+
+.inspect-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.inspect-table tr:last-child td {
+  border-bottom: none;
+}
+
+.inspect-table tr.active-rent {
+  background: rgba(255, 215, 0, 0.1);
+  font-weight: 800;
+  color: var(--gold);
+}
+
+.inspect-table tr.active-rent td {
+  color: var(--gold);
+}
+
+.inspect-table tr.active-rent td:first-child::before {
+  content: '▶ ';
+  color: var(--gold);
+  text-shadow: 0 0 4px rgba(255, 215, 0, 0.4);
+}
+
+.rent-val {
+  text-align: right;
+  font-weight: 600;
+}
+
+.inspect-prices {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+  font-size: 12px;
+}
+
+.inspect-price-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+}
+
+.inspect-price-row b {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.inspect-service-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  text-align: center;
+  margin: auto 0;
+}
+
+.inspect-service-desc table {
+  margin-top: 8px;
+}
+
+/* --- BACK FACE --- */
+.space-inspect-back {
+  background: var(--bg-card);
+  color: var(--gold);
+  transform: rotateY(180deg);
+  border: 2px solid rgba(255, 215, 0, 0.2);
+}
+
+.space-inspect-back-inner {
+  flex: 1;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+}
+
+.space-inspect-back-pattern {
+  font-size: 48px;
+  margin-top: 10px;
+  filter: drop-shadow(0 0 8px var(--gold-glow));
+}
+
+.space-inspect-back-title {
+  font-family: var(--font-h);
+  font-size: 28px;
+  letter-spacing: 3px;
+  color: var(--gold);
+}
+
+.space-inspect-back-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--text-dim);
+  padding: 0 10px;
+  margin: auto 0;
+}
+
+.space-inspect-back-vintage {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  width: 80%;
+  padding-top: 8px;
+  margin-bottom: 10px;
+}
+
+/* Mobilní optimalizace */
+@media (max-width: 480px) {
+  .space-inspect-scene {
+    width: 280px;
+    height: 420px;
+  }
+  .space-inspect-name {
+    font-size: 22px;
+  }
+  .space-inspect-body {
+    padding: 10px;
+    gap: 8px;
+  }
+  .inspect-table td {
+    padding: 4px 6px;
+    font-size: 12px;
+  }
+  .space-inspect-back-desc {
+    font-size: 12px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REDUCED MOTION — zachovává barvu a opacitu, ruší posuny a smyčky
+═══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  /* 1. Nekonečné dekorativní smyčky zastavit úplně */
+  .space.current-turn,
+  .debt-banner,
+  .lobby-bg-glow,
+  .space.airport-selectable {
+    animation: none !important;
+  }
+
+  /* 2. Třes vězení nahradit statickým zvýrazněním */
+  .jail-shake {
+    animation: none !important;
+    box-shadow: 0 0 50px rgba(255, 77, 77, 0.7) !important;
+  }
+
+  /* 3. Teleport figurky — nechat prolnutí, zrušit scale a blur */
+  .pawn-teleport-in,
+  .pawn-teleport-out {
+    animation: none !important;
+    transition: opacity 200ms var(--ease-out);
+  }
+  .pawn-teleport-out { opacity: 0; }
+  .pawn-teleport-in  { opacity: 1; }
+
+  /* 4. Let figurky bez oblouku a bez zvětšení (výšku řeší getPawnArcLift),
+        políčko pod ní se nežduchne */
+  .space.space-bump {
+    transform: none;
+  }
+
+  /* 5. Karta: nechat prolnutí, zrušit 3D otočku i nálet */
+  .card-3d {
+    transition: none;
+    transform: rotateY(0deg);
+  }
+  .card-3d-scene {
+    transform: none;
+    transition: none;
+  }
+
+  /* 6. Částice skrýt (generátor se navíc nespustí — viz particles.js) */
+  .particle { display: none; }
+
+  /* 6b. Šestka: světelný pulz zůstává (nese informaci), poskočení scény ne */
+  .dice-scene.dice-six-hit { animation: none !important; }
+
+  /* 6c. Odhalení výherce: bez zvětšování a rozostření, jen prolnutí.
+        Losování se navíc vůbec neprotáčí — viz starter.js */
+  .starter-winner {
+    animation: fadeIn 300ms var(--ease-out);
+  }
+  #starter-overlay {
+    animation: fadeIn 200ms var(--ease-out);
+  }
+
+  /* 7. Spinner necháváme — je to indikátor stavu, ne dekorace, ale zpomalený */
+  .reconnect-spinner { animation-duration: 1.6s; }
+}
+/* Zaškrtávátka v nastavení */
+.setting-check {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+/* ─── Posouvání modálních oken ─── */
+.drag-handle {
+  cursor: grab;
+  /* Aby tažení na dotyku neposouvalo stránku pod modálem. */
+  touch-action: none;
+  user-select: none;
+}
+
+.drag-handle.is-dragging {
+  cursor: grabbing;
+}
+
+/* Detail políčka nemá záhlaví — tohle je jeho úchyt. */
+.space-inspect-grip {
+  width: 64px;
+  height: 6px;
+  margin: 0 auto 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.space-inspect-grip:hover {
+  background: rgba(255, 215, 0, 0.55);
 }
