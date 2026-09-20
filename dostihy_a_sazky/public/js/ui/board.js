@@ -1,8 +1,47 @@
-import { makeEl, fmt, safeColor } from '../utils.js';
+import { makeEl, fmt, safeColor, hexToRgb } from '../utils.js';
 import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { socket } from '../socket.js';
 import { showTip, moveTip } from './tooltip.js';
+import { showSpaceInspect } from './spaceInspect.js';
+import { ownershipsChanged, tokensChanged } from './renderGate.mjs';
+
+// Odkazy na prvky políček, postavené jednou při stavbě plánu. Dřív se při
+// každém `game:state` pětkrát skenoval celý dokument přes querySelectorAll
+// a pak ještě čtyřicetkrát volalo getElementById — a stavy chodí až 20×/s.
+let cells = null;
+
+// Poslední vykreslený stav, aby se přeskočila práce, když se nic nezměnilo.
+let prevOwn = null;
+let prevTok = null;
+let prevTurnSpace = null;
+let prevAirportSelect = false;
+
+function getCells() {
+  if (cells) return cells;
+  cells = [];
+  dom.board?.querySelectorAll('.space').forEach(el => {
+    const id = Number(el.dataset.id);
+    if (!Number.isFinite(id)) return;
+    cells[id] = {
+      id,
+      el,
+      overlay: el.querySelector('.own-overlay'),
+      dots: el.querySelector('.token-dots'),
+    };
+  });
+  return cells;
+}
+
+/** Zahodí cache prvků — volá se, když se plán staví znovu. */
+export function resetBoardCache() {
+  cells = null;
+  prevOwn = null;
+  prevTok = null;
+  prevTurnSpace = null;
+  prevAirportSelect = false;
+}
+
 
 // ─── Pozice políček na CSS gridu ──────────────────────────────────────────────
 
@@ -25,8 +64,8 @@ function getSide(id) {
   if (id >= 31 && id <= 39) return 'right';
 }
 
-const CORNER_ICONS = { 0: '🚩', 10: '✋', 20: '🅿️', 30: '🚫' };
-const TYPE_ICONS   = { finance: '💱', nahoda: '❓', tax: '📉', go_to_jail: '🚔', free_parking: '🅿️', service: '👤', start: '🚩' };
+const CORNER_ICONS = { 0: '🚩', 10: '🔒', 20: '🅿️', 30: '💉' };
+const TYPE_ICONS   = { finance: '💱', nahoda: '❓', tax: '🩺', go_to_jail: '🚔', free_parking: '🅿️', service: '👤', start: '🚩' };
 const SERVICE_ICONS = {
   trener: '👤',
   preprava: '🚚',
@@ -36,6 +75,7 @@ const SERVICE_ICONS = {
 // ─── Build ────────────────────────────────────────────────────────────────────
 
 export function buildBoard(board) {
+  resetBoardCache();
   board.forEach(space => {
     const [row, col] = getGridPos(space.id);
     const side = getSide(space.id);
@@ -75,10 +115,6 @@ export function buildBoard(board) {
     ownOverlay.id = `ov-${space.id}`;
     el.appendChild(ownOverlay);
 
-    const ownBadge = makeEl('div', 'own-badge hidden');
-    ownBadge.id = `ob-${space.id}`;
-    el.appendChild(ownBadge);
-
     const tokenDots = makeEl('div', 'token-dots');
     tokenDots.id = `td-${space.id}`;
     el.appendChild(tokenDots);
@@ -87,56 +123,132 @@ export function buildBoard(board) {
     pawns.id = `pw-${space.id}`;
     el.appendChild(pawns);
 
-    el.addEventListener('mouseenter', ev => showTip(space, state.gameState, ev));
-    el.addEventListener('mousemove',  ev => moveTip(ev));
-    el.addEventListener('mouseleave', () => dom.tooltip?.classList.add('hidden'));
-    el.addEventListener('click', () => {
-      const gs = state.gameState;
-      const pa = gs?.pendingAction;
-      if (!pa || pa.type !== 'airport_select_target' || pa.targetId !== state.myId) return;
+    dom.board.appendChild(el);
+  });
+
+  attachBoardListeners(board);
+}
+
+// Jeden posluchač na celý plán místo čtyř na každé ze čtyřiceti políček.
+// Dřív jich viselo 160, z toho 40 na mousemove.
+//
+// Hlídá se element, ne příznak: při stavbě plánu nad stejným elementem se
+// posluchače nesmí zdvojit, při výměně elementu se musí nasadit znovu.
+let listenersBoard = null;
+let boardSpaces = null;
+
+function attachBoardListeners(board) {
+  boardSpaces = board;
+
+  const boardEl = dom.board;
+  if (!boardEl || listenersBoard === boardEl) return;
+  listenersBoard = boardEl;
+
+  const spaceFrom = ev => {
+    const el = ev.target.closest?.('.space');
+    if (!el || !boardEl.contains(el)) return null;
+    return boardSpaces?.[Number(el.dataset.id)] ?? null;
+  };
+
+  boardEl.addEventListener('mouseover', ev => {
+    const space = spaceFrom(ev);
+    // mouseover bublá, mouseenter ne — hlídáme, že kurzor přišel zvenčí políčka.
+    if (!space) return;
+    if (ev.relatedTarget && ev.target.closest('.space')?.contains(ev.relatedTarget)) return;
+    showTip(space, state.gameState, ev);
+  });
+
+  boardEl.addEventListener('mousemove', ev => {
+    if (spaceFrom(ev)) moveTip(ev);
+  });
+
+  boardEl.addEventListener('mouseout', ev => {
+    const el = ev.target.closest?.('.space');
+    if (!el) return;
+    if (ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+    dom.tooltip?.classList.add('hidden');
+  });
+
+  boardEl.addEventListener('click', ev => {
+    const space = spaceFrom(ev);
+    if (!space) return;
+    const gs = state.gameState;
+    const pa = gs?.pendingAction;
+
+    // Pokud probíhá výběr cíle letiště, kliknutí slouží k letu
+    if (pa && pa.type === 'airport_select_target' && pa.targetId === state.myId) {
       const me = gs.players?.find(p => p.id === state.myId);
       if (!me || me.position === space.id) return;
       socket.emit('game:respond', { decision: 'fly', spaceId: space.id });
-    });
-
-    dom.board.appendChild(el);
+    } else {
+      // Jinak zobrazíme detail karty (pouze pro koně a služby)
+      if (space.type === 'horse' || space.type === 'service') {
+        showSpaceInspect(space, gs);
+      }
+    }
   });
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 
 export function updateBoard(gameState) {
-  document.querySelectorAll('.space.current-turn').forEach(el => el.classList.remove('current-turn'));
+  const cells = getCells();
 
+  if (prevTurnSpace !== null) cells[prevTurnSpace]?.el.classList.remove('current-turn');
   const currentPlayer = gameState.players.find(p => p.id === gameState.currentTurnId);
-  if (currentPlayer) {
-    const spaceEl = dom.board?.querySelector(`.space[data-id="${currentPlayer.position}"]`);
-    if (spaceEl) spaceEl.classList.add('current-turn');
+  prevTurnSpace = currentPlayer ? currentPlayer.position : null;
+  if (prevTurnSpace !== null) cells[prevTurnSpace]?.el.classList.add('current-turn');
+
+  const ownerships = gameState.ownerships || {};
+  if (ownershipsChanged(prevOwn, ownerships)) {
+    prevOwn = { ...ownerships };
+    const byId = new Map(gameState.players.map(p => [p.id, p]));
+
+    for (const cell of cells) {
+      if (!cell) continue;
+      const owner = byId.get(ownerships[cell.id]);
+      if (!owner) {
+        cell.overlay.classList.add('hidden');
+        cell.el.classList.remove('is-owned');
+        continue;
+      }
+      const color = safeColor(owner.color);
+      const { r, g, b } = hexToRgb(color);
+
+      // Vlastnictví nese celé políčko: závoj v barvě majitele a vnitřní rám.
+      // Rám musí být plnou silou, proto rgba pozadí místo opacity na elementu —
+      // opacity by ztlumila i rám. Sílu rámu řeší CSS přes --own-ring, aby si
+      // ji mohl mobilní layout ztenčit; inline by ji přebít nešlo.
+      cell.overlay.style.setProperty('--own-color', color);
+      cell.overlay.style.background = `rgba(${r}, ${g}, ${b}, 0.3)`;
+      cell.overlay.classList.remove('hidden');
+      cell.el.classList.add('is-owned');
+    }
   }
 
-  document.querySelectorAll('.own-badge, .own-overlay').forEach(el => el.classList.add('hidden'));
-  Object.entries(gameState.ownerships || {}).forEach(([spaceId, playerId]) => {
-    const ob    = document.getElementById(`ob-${spaceId}`);
-    const ov    = document.getElementById(`ov-${spaceId}`);
-    const owner = gameState.players.find(p => p.id === playerId);
-    if (!ob || !ov || !owner) return;
-    const color = safeColor(owner.color);
-    ob.style.background = color;
-    ob.classList.remove('hidden');
-    ov.style.background = color;
-    ov.classList.remove('hidden');
-  });
-
-  document.querySelectorAll('.token-dots').forEach(el => { el.innerHTML = ''; });
-  Object.entries(gameState.tokens || {}).forEach(([spaceId, tok]) => {
-    const el = document.getElementById(`td-${spaceId}`);
-    if (!el) return;
-    if (tok.big) {
-      el.appendChild(makeEl('div', 'dot-big'));
-    } else {
-      for (let i = 0; i < tok.small; i++) el.appendChild(makeEl('div', 'dot-small'));
+  const tokens = gameState.tokens || {};
+  if (tokensChanged(prevTok, tokens)) {
+    prevTok = {};
+    for (const [spaceId, tok] of Object.entries(tokens)) {
+      prevTok[spaceId] = { small: tok.small, big: tok.big };
     }
-  });
+
+    for (const cell of cells) {
+      if (!cell) continue;
+      const tok = tokens[cell.id];
+      if (!tok) {
+        if (cell.dots.firstChild) cell.dots.replaceChildren();
+        continue;
+      }
+      const frag = document.createDocumentFragment();
+      if (tok.big) {
+        frag.appendChild(makeEl('div', 'dot-big'));
+      } else {
+        for (let i = 0; i < tok.small; i++) frag.appendChild(makeEl('div', 'dot-small'));
+      }
+      cell.dots.replaceChildren(frag);
+    }
+  }
 
   const field20Mode = gameState.config?.field20Mode ?? 'parking';
   const field20El = dom.board?.querySelector(`.space[data-id="20"]`);
@@ -151,13 +263,16 @@ export function updateBoard(gameState) {
   const inAirportSelect = pa?.type === 'airport_select_target' && pa?.targetId === state.myId;
   const me = gameState.players?.find(p => p.id === state.myId);
   const myPos = me?.position;
-  document.querySelectorAll('.space').forEach(spaceEl => {
-    spaceEl.classList.remove('airport-selectable', 'is-self');
-    if (inAirportSelect) {
-      spaceEl.classList.add('airport-selectable');
-      if (Number(spaceEl.dataset.id) === myPos) {
-        spaceEl.classList.add('is-self');
-      }
+
+  // Výběr cíle letiště je vzácný stav. Bez téhle brány se čtyřicet políček
+  // přebarvovalo při každém stavu, i když žádný výběr neběžel.
+  if (inAirportSelect || prevAirportSelect) {
+    prevAirportSelect = inAirportSelect;
+    for (const cell of cells) {
+      if (!cell) continue;
+      cell.el.classList.toggle('airport-selectable', inAirportSelect);
+      cell.el.classList.toggle('is-self', inAirportSelect && cell.id === myPos);
     }
-  });
+  }
 }
+
