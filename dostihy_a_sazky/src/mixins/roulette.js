@@ -59,6 +59,24 @@ module.exports = {
     if (!player) return false;
 
     switch (outcome.id) {
+      case 'bet': {
+        // Strhává se HNED, ne až při hodu — jinak by hráč mohl mezitím
+        // zbankrotovat a sázka by zmizela bez zaplacení.
+        const stake = Math.min(outcome.stake, player.balance);
+        if (stake <= 0) {
+          this._addLog(`🎲 ${player.name} nemá na sázku — Totalizátor tentokrát nepřijímá.`);
+          return false;
+        }
+        player.balance -= stake;
+        player.pendingBet = {
+          stake,
+          threshold: outcome.threshold,
+          payout: stake * outcome.payoutMultiplier,
+        };
+        this._addLog(`🎲 ${player.name} vsadil(a) ${stake} Kč na vlastní hod (${outcome.threshold}+).`);
+        return false;
+      }
+
       case 'preemption':
         player.halfPriceNext = true;
         this._addLog(`🎟️ ${player.name} má přednostní právo — příští volný kůň za polovinu.`);
@@ -112,5 +130,21 @@ module.exports = {
     }
 
     return amount;
+  },
+
+  /** Vyhodnotí a vynuluje sázku. Volá se z `handleRoll` na prvním hodu po vsazení. */
+  _resolvePendingBet(pid, dice) {
+    const player = this.players.get(pid);
+    if (!player || !player.pendingBet) return;
+
+    const { threshold, payout } = player.pendingBet;
+    player.pendingBet = null;
+
+    if (dice >= threshold) {
+      player.balance += payout;
+      this._addLog(`🎉 ${player.name} trefil(a) sázku (${dice}) a bere ${payout} Kč!`);
+    } else {
+      this._addLog(`💸 ${player.name} sázku neuhrál(a) (${dice}) — vklad propadá.`);
+    }
   },
 };

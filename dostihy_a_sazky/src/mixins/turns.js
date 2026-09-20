@@ -59,6 +59,10 @@ module.exports = {
       if (this._forceDice) this._forceDice = null;
       this.lastDice = { value: dice, id: Math.random() };
 
+      // Sázka z Totalizátoru se vyhodnotí na prvním hodu po vsazení.
+      // Vynuluje se tady, takže opakovaný hod po šestce se už nesází.
+      this._resolvePendingBet(pid, dice);
+
       if (dice === 6 && prevAccumulator > 0) {
         // Dvojitá šestka → jde do Distancu z libovolného místa
         const from = player.position;
