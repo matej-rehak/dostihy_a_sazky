@@ -76,20 +76,53 @@ export function showTip(space, gameState, ev) {
 
   dom.tooltip.innerHTML = html;
   dom.tooltip.classList.remove('hidden');
+  measureTip();
   moveTip(ev);
 }
 
-export function moveTip(ev) {
+// Rozměr tooltipu se mění jen s jeho obsahem. Čtení offsetWidth/offsetHeight
+// vynutí přepočet layoutu, takže se dělá jednou po naplnění obsahu — ne při
+// každém pohybu myši, kterých je přes plán až sto za sekundu.
+let tipW = 240;
+let tipH = 200;
+
+function measureTip() {
   const tip = dom.tooltip;
   if (!tip) return;
-  const tw = tip.offsetWidth || 240;
-  const th = tip.offsetHeight || 200;
-  let x = ev.clientX + 14;
-  let y = ev.clientY + 14;
-  if (x + tw > window.innerWidth) x = ev.clientX - tw - 10;
-  if (y + th > window.innerHeight) y = ev.clientY - th - 10;
-  tip.style.left = x + 'px';
-  tip.style.top = y + 'px';
+  tipW = tip.offsetWidth || 240;
+  tipH = tip.offsetHeight || 200;
+}
+
+// Poloha se zapisuje jednou za snímek. Mousemove chodí hustěji než snímky,
+// takže zápisy mezi nimi by se stejně zahodily.
+let pendingMove = null;
+let moveFrame = 0;
+
+function applyMove() {
+  moveFrame = 0;
+  const tip = dom.tooltip;
+  if (!tip || !pendingMove) return;
+
+  const { cx, cy } = pendingMove;
+  pendingMove = null;
+
+  const m = 8;
+  let x = cx + 14;
+  let y = cy + 14;
+  if (x + tipW > window.innerWidth  - m) x = cx - tipW - 10;
+  if (y + tipH > window.innerHeight - m) y = cy - tipH - 10;
+  if (x < m) x = m;
+  if (y < m) y = m;
+  tip.style.transform = `translate(${x}px, ${y}px)`;
+}
+
+export function moveTip(ev) {
+  if (!dom.tooltip) return;
+  pendingMove = {
+    cx: ev.touches ? ev.touches[0].clientX : ev.clientX,
+    cy: ev.touches ? ev.touches[0].clientY : ev.clientY,
+  };
+  if (!moveFrame) moveFrame = requestAnimationFrame(applyMove);
 }
 
 export function initTooltipListeners(playersList) {
