@@ -52,6 +52,7 @@ module.exports = {
       case 'airport_choice': return this._handleAirportChoice(pid, decision);
       case 'airport_select_target': return this._handleAirportSelectTarget(pid, decision, spaceId);
       case 'roulette_ack': return this._handleRouletteAck(pid, actionData);
+      case 'roulette_pick_player': return this._handleRoulettePickPlayer(pid, decision, actionData);
     }
   },
 
@@ -131,6 +132,9 @@ module.exports = {
       }
       case 'roulette_ack':
         this._handleRouletteAck(targetId, data);
+        break;
+      case 'roulette_pick_player':
+        this._handleRoulettePickPlayer(targetId, data?.candidates?.[0], data);
         break;
     }
   },

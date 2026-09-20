@@ -97,9 +97,46 @@ module.exports = {
         this._addLog(`🤒 ${player.name} je pod podezřením z dopingu — vynechává příští tah.`);
         return false;
 
+      case 'strike':
+      case 'report': {
+        const candidates = this.turnOrder.filter(
+          id => id !== pid && !this.players.get(id)?.bankrupt
+        );
+        if (candidates.length === 0) {
+          this._addLog(`🎰 ${player.name} nemá koho vybrat — efekt propadá.`);
+          return false;
+        }
+        this._setPendingAction({
+          type: 'roulette_pick_player',
+          targetId: pid,
+          data: { outcomeId: outcome.id, candidates },
+        });
+        return true;
+      }
+
       default:
         return false;
     }
+  },
+
+  _handleRoulettePickPlayer(pid, decision, actionData) {
+    const { outcomeId, candidates } = actionData || {};
+    const target = this.players.get(decision);
+
+    // Neplatný cíl (vlastní id, bankrotář, nesmysl z klienta) efekt zahodí.
+    // Tah musí pokračovat, jinak by hra zamrzla.
+    if (!target || !candidates || !candidates.includes(decision)) {
+      this._addLog('🎰 Neplatný cíl — efekt Totalizátoru propadá.');
+    } else if (outcomeId === 'strike') {
+      target.tokenStrike = 1;
+      this._addLog(`🚧 Ve stáji ${target.name} je stávka — jedno kolo mu nefungují žetony.`);
+    } else if (outcomeId === 'report') {
+      this._sendToJail(decision);
+      this._addLog(`🎯 ${target.name} byl(a) udán(a) a míří na Distanc.`);
+    }
+
+    this._broadcast();
+    this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
   },
 
   /**
