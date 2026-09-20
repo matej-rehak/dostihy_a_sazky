@@ -1,6 +1,6 @@
 import { isEffectEnabled } from '../settings.js';
 import { prefersReducedMotion } from '../utils.js';
-import { SPIN_MS, segmentAngle, targetRotation } from './rouletteAnimationGate.mjs';
+import { SPIN_MS, segmentAngle, targetRotation, spinPlan } from './rouletteAnimationGate.mjs';
 
 // Délka prolnutí overlaye. Musí odpovídat `transition: opacity 200ms` na
 // .roulette-overlay v public/style.css — o ni se opírá zavírací prodleva
@@ -9,9 +9,18 @@ const FADE_MS = 200;
 
 let hideTimer = null;
 
-// Každé zatočení má na serveru vlastní `spinId`. Po reconnectu dorazí stejný
-// `roulette_ack` znovu — bez téhle paměti by se kolo roztočilo podruhé.
-let lastSpinId = null;
+// Každé zatočení má na serveru vlastní `spinId`. Dvě různé otázky, dvě různé
+// paměti — dřív je držela jedna proměnná a pletly se dohromady:
+//
+//  • `animatedSpinId` — „tohle zatočení jsem už odanimoval". Po reconnectu
+//    dorazí stejný `roulette_ack` znovu a kolo se ukáže rovnou dojeté.
+//  • `spinningSpinId` — „tohle zatočení právě běží". `updateActionPanel` se
+//    volá při KAŽDÉM `game:state` (cizí reconnect, odpověď na obchod…), takže
+//    během 3,2s točení sem klidně přijde druhé zavolání se stejným `spinId`.
+//    To musí být no-op; dřív spadlo do větve „už viděno" a živé kolo skočilo
+//    na výsledek.
+let animatedSpinId = null;
+let spinningSpinId = null;
 
 /**
  * Sestaví výplň kola ze dvou tokenových barev. Devět barevných výsečí by
@@ -37,9 +46,15 @@ export function showRouletteOverlay(result, outcomes, isTargeted, onConfirm) {
   const btn     = document.getElementById('roulette-btn');
   if (!overlay || !wheel) return;
 
-  // Už jsme tenhle výsledek animovali → ukaž rovnou dojeté kolo.
-  const alreadySeen = lastSpinId === result.spinId;
-  lastSpinId = result.spinId;
+  const plan = spinPlan({
+    spinId: result.spinId,
+    animatedSpinId,
+    spinningSpinId,
+    animationEnabled: isEffectEnabled('rouletteSpin') && !prefersReducedMotion(),
+  });
+  // Kolo pro tenhle `spinId` se právě točí → nesahat na něj.
+  if (plan === 'ignore') return;
+  animatedSpinId = result.spinId;
 
   if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
 
@@ -48,7 +63,7 @@ export function showRouletteOverlay(result, outcomes, isTargeted, onConfirm) {
   // se čte z `result`, takže hra funguje i tak.
   const count = outcomes.length || 9;
   const index = Number.isInteger(result.index) ? result.index : 0;
-  const spin = isEffectEnabled('rouletteSpin') && !prefersReducedMotion() && !alreadySeen;
+  const spin = plan === 'spin';
 
   overlay.classList.remove('hidden');
   paintWheel(wheel, count);
@@ -75,8 +90,13 @@ export function showRouletteOverlay(result, outcomes, isTargeted, onConfirm) {
   });
 
   if (spin) {
-    hideTimer = setTimeout(reveal, SPIN_MS);
+    spinningSpinId = result.spinId;
+    hideTimer = setTimeout(() => {
+      spinningSpinId = null;
+      reveal();
+    }, SPIN_MS);
   } else {
+    spinningSpinId = null;
     reveal();
   }
 
@@ -107,5 +127,6 @@ export function hideRouletteOverlay() {
  */
 export function resetRouletteCache() {
   if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-  lastSpinId = null;
+  animatedSpinId = null;
+  spinningSpinId = null;
 }

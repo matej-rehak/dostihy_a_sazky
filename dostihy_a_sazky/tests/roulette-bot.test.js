@@ -45,7 +45,9 @@ test('bot si vybere koně v dražbě', () => {
   const action = Bot.decideAction(ctx, 'BOT');
 
   assert.notEqual(action, null, 'bot nesmí zamrznout na dražbě');
-  assert.ok(action.data.decision === FANTOME || action.data.decision === 'decline');
+  // Bot má 30.000 Kč, kůň za 1.800 Kč mu po zaplacení nechá rezervu s přehledem
+  // — dražbu má vzít. `decision === 'decline'` by tady byla chyba, ne varianta.
+  assert.equal(action.data.decision, FANTOME);
 });
 
 test('bot na dražbu, na kterou nemá, odpoví decline', () => {

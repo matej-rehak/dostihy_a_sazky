@@ -1,7 +1,7 @@
 'use strict';
 
 const Bot = require('../Bot');
-const { PLAYER_COLORS } = require('../constants');
+const { PLAYER_COLORS, ROULETTE_BOT_ACK_DELAY_MS } = require('../constants');
 
 const BOT_NAMES = ['Robot Karel', 'Robot Jana', 'Robot Pepa', 'Robot Eva', 'Robot Tonda'];
 const MAX_PLAYERS = 6;
@@ -81,9 +81,25 @@ module.exports = {
       if (this._botTimers.has(player.id)) continue;
 
       const botId = player.id;
-      const timer = setTimeout(() => this._botAct(botId), Bot.BOT_THINK_MS);
+      const timer = setTimeout(() => this._botAct(botId), this._botThinkDelay(botId));
       this._botTimers.set(botId, timer);
     }
+  },
+
+  /**
+   * Jak dlouho má bot „přemýšlet", než odbaví aktuální prompt.
+   *
+   * Načasování animací patří na server, stejně jako `SIX_REROLL_DELAY_MS`:
+   * kolo Totalizátoru točí bot, ale dívají se na něj všichni, a potvrzení
+   * změní `pendingAction`, takže divákům overlay zmizí. Než bot potvrdí,
+   * musí kolo dojet — viz ROULETTE_BOT_ACK_DELAY_MS.
+   */
+  _botThinkDelay(botId) {
+    const pa = this.pendingAction;
+    if (pa && pa.type === 'roulette_ack' && pa.targetId === botId) {
+      return ROULETTE_BOT_ACK_DELAY_MS;
+    }
+    return Bot.BOT_THINK_MS;
   },
 
   /**

@@ -6,6 +6,29 @@
 export const SPIN_MS = 3200;
 export const SPIN_TURNS = 4;
 
+/**
+ * Jak naložit s (dalším) požadavkem na zobrazení zatočení.
+ *
+ * `updateActionPanel` běží při KAŽDÉM `game:state`, ne jen při změně promptu —
+ * během 3,2s točení sem tedy snadno přijde druhé zavolání se stejným `spinId`
+ * (cizí reconnect, odpověď na obchodní nabídku). Dokud běží animace, musí být
+ * takové zavolání no-op; dřív spadlo do větve „už viděno" a živé kolo skočilo
+ * rovnou na výsledek.
+ *
+ * Paměť „už odanimováno" (`animatedSpinId`) je jiná otázka než „právě se točí"
+ * (`spinningSpinId`) — první přežívá dotočení kvůli reconnectu, druhá ne.
+ *
+ * @returns {'ignore'|'snap'|'spin'}
+ *   `ignore` = nesahat na běžící kolo, `snap` = ukázat rovnou dojeté,
+ *   `spin` = roztočit.
+ */
+export function spinPlan({ spinId, animatedSpinId, spinningSpinId, animationEnabled }) {
+  if (spinningSpinId != null && spinningSpinId === spinId) return 'ignore';
+  if (!animationEnabled) return 'snap';
+  if (animatedSpinId != null && animatedSpinId === spinId) return 'snap';
+  return 'spin';
+}
+
 /** Kolik stupňů zabere jedna výseč. */
 export function segmentAngle(count) {
   return 360 / count;
