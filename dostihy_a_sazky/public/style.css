@@ -4298,3 +4298,132 @@ input:checked+.slider:before {
 .space-inspect-grip:hover {
   background: rgba(255, 215, 0, 0.55);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Totalizátor — ruleta na poli 30
+   Overlay kopíruje .card-3d-overlay, aby se obě odhalení chovala stejně.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.roulette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+
+.roulette-overlay.is-open { opacity: 1; }
+
+.roulette-scene {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--gold);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  transform: translateY(12px) scale(0.96);
+  transition: transform 260ms var(--ease-out);
+}
+
+.roulette-overlay.is-open .roulette-scene {
+  transform: translateY(0) scale(1);
+}
+
+.roulette-title {
+  font-family: var(--font-h);
+  color: var(--gold);
+  letter-spacing: 2px;
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.roulette-wheel-wrap {
+  position: relative;
+  width: 280px;
+  height: 280px;
+}
+
+/* Ručička ukazuje dolů na horní okraj kola. */
+.roulette-pointer {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-top: 20px solid var(--gold);
+  filter: drop-shadow(0 2px 6px var(--gold-glow));
+  z-index: 2;
+}
+
+.roulette-wheel {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 3px solid var(--gold);
+  box-shadow: 0 0 0 1px var(--border-hi), 0 12px 40px rgba(0, 0, 0, 0.6);
+  /* Výplň kreslí conic-gradient sestavený v JS ze dvou tokenových barev —
+     devět barevných výsečí by rozbilo paletu hry. */
+  transition: transform 3200ms var(--ease-in-out);
+}
+
+/* Vypnutá animace z nastavení: kolo skočí rovnou na výsledek. */
+.roulette-wheel.no-spin { transition: none; }
+
+.roulette-segment-label {
+  position: absolute;
+  font-size: 18px;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.roulette-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 92px;
+  text-align: center;
+  max-width: 300px;
+}
+
+.roulette-result-icon { font-size: 34px; line-height: 1; }
+
+.roulette-result-name {
+  font-family: var(--font-h);
+  letter-spacing: 1.5px;
+  font-size: 1.15rem;
+  color: var(--gold);
+}
+
+.roulette-result-text {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+/* Semantiku nese jen jméno výsledku, ne výplň kola. */
+.roulette-result-name.is-good { color: var(--green); }
+.roulette-result-name.is-bad  { color: var(--red); }
+
+@media (max-width: 768px) {
+  .roulette-scene       { padding: 18px; gap: 12px; width: 92%; }
+  .roulette-wheel-wrap  { width: 220px; height: 220px; }
+  .roulette-result-text { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roulette-wheel { transition: none; }
+  .roulette-overlay, .roulette-scene { transition: none; }
+}
