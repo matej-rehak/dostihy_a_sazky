@@ -2,6 +2,7 @@
 
 const { ACTION_DELAY_MS } = require('../constants');
 const { OUTCOMES, spin } = require('../Roulette');
+const BOARD = require('../data/boardData');
 
 module.exports = {
 
@@ -114,9 +115,99 @@ module.exports = {
         return true;
       }
 
+      case 'auction': {
+        const options = BOARD
+          .filter(s => s.type === 'horse' && !this.ownerships[s.id])
+          .map(s => ({
+            spaceId: s.id,
+            price: Math.round(s.price * (1 + outcome.surchargePct / 100)),
+          }))
+          .filter(o => o.price <= player.balance);
+
+        if (options.length === 0) {
+          this._addLog(`🏇 ${player.name} nemá na žádného volného koně — dražba propadá.`);
+          return false;
+        }
+        this._setPendingAction({
+          type: 'roulette_pick_horse',
+          targetId: pid,
+          data: { outcomeId: outcome.id, options },
+        });
+        return true;
+      }
+
+      case 'free_token': {
+        const options = player.properties
+          .filter(sid => {
+            const space = BOARD[sid];
+            if (space.type !== 'horse') return false;
+            if (!this._ownsFullGroup(pid, space.group)) return false;
+            const tok = this.tokens[sid] || { small: 0, big: false };
+            return !tok.big && tok.small < 4;
+          })
+          .map(sid => ({ spaceId: sid, price: 0 }));
+
+        if (options.length === 0) {
+          this._addLog(`🏗️ ${player.name} nemá koně z úplné stáje — dostih zdarma propadá.`);
+          return false;
+        }
+        this._setPendingAction({
+          type: 'roulette_pick_horse',
+          targetId: pid,
+          data: { outcomeId: outcome.id, options },
+        });
+        return true;
+      }
+
       default:
         return false;
     }
+  },
+
+  /**
+   * Vyhodnotí volbu koně z dražby nebo dostihu zdarma.
+   *
+   * `options` v `actionData` je jen SNÍMEK z okamžiku otevření promptu —
+   * `_handleTradeResponse` je routováno nezávisle na `pendingAction` (viz
+   * komentář v `handleRespond`), takže zatímco tento prompt visí otevřený,
+   * soupeř může přijmout dřívější obchodní nabídku od `pid` a změnit mu
+   * zůstatek nebo vlastnictví koní. Proto se tady živý stav ověřuje ZNOVU,
+   * ne jen podle `chosen` ze snímku — jinak by dražba mohla hráče poslat
+   * do záporu a nechtěně zbankrotovat, nebo by dostih zdarma přistál na
+   * koni, který mezitím patří někomu jinému.
+   */
+  _handleRoulettePickHorse(pid, decision, actionData) {
+    const { outcomeId, options } = actionData || {};
+    const player = this.players.get(pid);
+    const chosen = (options || []).find(o => o.spaceId === decision);
+
+    if (!player || !chosen) {
+      // Odmítnutí i nesmysl z klienta efekt spotřebují — nedrží se na příště.
+      this._addLog('🎰 Nabídka Totalizátoru nevyužita.');
+    } else if (outcomeId === 'auction') {
+      const stillFree = !this.ownerships[chosen.spaceId];
+      if (stillFree && player.balance >= chosen.price) {
+        // Vlastní cena → `_buyProperty` nespotřebuje přednostní právo.
+        this._buyProperty(pid, chosen.spaceId, chosen.price);
+      } else {
+        this._addLog(`🏇 Nabídka Totalizátoru na ${BOARD[chosen.spaceId].name} mezitím propadla.`);
+      }
+    } else if (outcomeId === 'free_token') {
+      const space = BOARD[chosen.spaceId];
+      const stillEligible = this.ownerships[chosen.spaceId] === pid
+        && this._ownsFullGroup(pid, space.group);
+      const tok = this.tokens[chosen.spaceId] || { small: 0, big: false };
+      if (stillEligible && !tok.big && tok.small < 4) {
+        if (!this.tokens[chosen.spaceId]) this.tokens[chosen.spaceId] = tok;
+        tok.small++;
+        this._addLog(`🏗️ ${player.name} dostal(a) žeton dostihů na ${space.name} zdarma.`);
+      } else {
+        this._addLog(`🏗️ Nabídka Totalizátoru na ${space.name} mezitím propadla.`);
+      }
+    }
+
+    this._broadcast();
+    this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
   },
 
   _handleRoulettePickPlayer(pid, decision, actionData) {
