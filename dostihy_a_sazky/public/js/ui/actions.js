@@ -3,6 +3,7 @@ import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { socket } from '../socket.js';
 import { showCardOverlay, hideCardOverlay } from '../animations/cards.js';
+import { showRouletteOverlay, hideRouletteOverlay } from '../animations/roulette.js';
 import { isEffectEnabled } from '../settings.js';
 import { runStarterAnimation, stopStarterAnimation } from '../animations/starter.js';
 import { audioManager } from '../audio.js';
@@ -42,6 +43,7 @@ export function updateActionPanel(gameState) {
   const pa = gameState.pendingAction;
 
   if (!pa || pa.type !== 'card_ack') hideCardOverlay();
+  if (!pa || pa.type !== 'roulette_ack') hideRouletteOverlay();
 
   // Skrýt dluhový modal pokud akce už není debt_manage
   if (pa?.type !== 'debt_manage' && dom.debtOverlay) {
@@ -127,6 +129,9 @@ export function updateActionPanel(gameState) {
     case 'trade_offer': renderTradeOffer(isTargeted, targetPlayer, pa, gameState); break;
     case 'airport_choice': renderAirportChoice(isTargeted, targetPlayer, pa, me); break;
     case 'airport_select_target': renderAirportSelectTarget(isTargeted, targetPlayer, pa, gameState, me); break;
+    case 'roulette_ack': renderRouletteAck(isTargeted, targetPlayer, pa); break;
+    case 'roulette_pick_player': renderRoulettePickPlayer(isTargeted, targetPlayer, pa, gameState); break;
+    case 'roulette_pick_horse': renderRoulettePickHorse(isTargeted, targetPlayer, pa); break;
     case 'game_over': renderGameOver(pa.winner, pa.reason); break;
     default:
       dom.actionContent.innerHTML = '';
@@ -563,6 +568,86 @@ function renderAirportSelectTarget(isTargeted, targetPlayer, pa, gameState, me) 
     socket.emit('game:respond', { decision: 'cancel' })
   );
   dom.actionContent.appendChild(cancelBtn);
+}
+
+function renderRouletteAck(isTargeted, targetPlayer, pa) {
+  // Kolo vidí všichni — i ten, kdo zrovna není na tahu. Tlačítko má jen
+  // hráč, kterého se výsledek týká. Seznam výsečí přišel v `game:init`.
+  dom.actionTitle.textContent = '🎰 Totalizátor';
+  showRouletteOverlay(pa.data.result, state.rouletteOutcomes || [], isTargeted, () => {
+    socket.emit('game:respond', { decision: 'ack' });
+  });
+
+  dom.actionContent.innerHTML = '';
+  dom.actionContent.appendChild(
+    makeEl('p', 'dim', isTargeted
+      ? 'Totalizátor se točí…'
+      : `${targetPlayer?.name ?? 'Hráč'} točí Totalizátorem…`)
+  );
+}
+
+function renderRoulettePickPlayer(isTargeted, targetPlayer, pa, gameState) {
+  dom.actionTitle.textContent = '🎰 Totalizátor';
+  dom.actionContent.innerHTML = '';
+
+  if (!isTargeted) {
+    dom.actionContent.appendChild(
+      makeEl('p', 'dim', `${targetPlayer?.name ?? 'Hráč'} vybírá cíl…`)
+    );
+    return;
+  }
+
+  const label = pa.data.outcomeId === 'strike'
+    ? 'Komu zastavíš stáj?'
+    : 'Koho udáš?';
+  dom.actionContent.appendChild(makeEl('p', '', label));
+
+  pa.data.candidates.forEach(id => {
+    const target = gameState.players?.find(p => p.id === id);
+    if (!target) return;
+    const btn = actionBtn(target.name, 'btn-outline', () => {
+      socket.emit('game:respond', { decision: id });
+    });
+    btn.style.borderColor = safeColor(target.color);
+    dom.actionContent.appendChild(btn);
+  });
+}
+
+function renderRoulettePickHorse(isTargeted, targetPlayer, pa) {
+  dom.actionTitle.textContent = '🎰 Totalizátor';
+  dom.actionContent.innerHTML = '';
+
+  if (!isTargeted) {
+    dom.actionContent.appendChild(
+      makeEl('p', 'dim', `${targetPlayer?.name ?? 'Hráč'} si vybírá koně…`)
+    );
+    return;
+  }
+
+  const isAuction = pa.data.outcomeId === 'auction';
+  dom.actionContent.appendChild(
+    makeEl('p', '', isAuction ? 'Vyber koně do dražby:' : 'Kam položíš žeton zdarma?')
+  );
+
+  pa.data.options.forEach(({ spaceId, price }) => {
+    const space = state.boardData?.[spaceId];
+    const name = space?.name ?? `Pole ${spaceId}`;
+    // U žetonu zdarma nemá cena co dělat — je nula.
+    const caption = isAuction ? `${name} — ${fmt(price)} Kč` : name;
+    dom.actionContent.appendChild(
+      actionBtn(caption, 'btn-gold', () => {
+        socket.emit('game:respond', { decision: spaceId });
+      })
+    );
+  });
+
+  if (isAuction) {
+    dom.actionContent.appendChild(
+      actionBtn('Nechat být', 'btn-outline', () => {
+        socket.emit('game:respond', { decision: 'decline' });
+      })
+    );
+  }
 }
 
 function showBrokeOverlay(propertyName, shortage) {
