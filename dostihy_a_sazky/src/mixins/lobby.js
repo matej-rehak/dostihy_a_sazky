@@ -70,6 +70,11 @@ module.exports = {
       ? field20Mode
       : 'parking';
 
+    const field30Mode = nextConfig.field30Mode;
+    this.config.field30Mode = (field30Mode === 'roulette' || field30Mode === 'doping')
+      ? field30Mode
+      : 'doping';
+
     const airportFee = Number(nextConfig.airportFee);
     this.config.airportFee = Number.isFinite(airportFee) ? Math.max(0, Math.round(airportFee)) : 2000;
 
