@@ -1,7 +1,7 @@
 'use strict';
 
 const BOARD = require('../data/boardData');
-const { ACTION_DELAY_MS, JAIL_SPACE, roll, fmt } = require('../constants');
+const { ACTION_DELAY_MS, SIX_REROLL_DELAY_MS, JAIL_SPACE, roll, fmt } = require('../constants');
 
 module.exports = {
 
@@ -72,8 +72,14 @@ module.exports = {
         player.rollAccumulator = prevAccumulator + dice;
         if (dice === 6) {
           this._addLog(`🎲 ${player.name} hodil(a) 6! Celkem nasčítáno: ${player.rollAccumulator}. Hází znovu...`);
-          this._setPendingAction({ type: 'wait_roll', targetId: pid });
-          this._broadcast();
+          // Další hod se povolí až po dohrání animace šestky. Kdyby se povolil
+          // hned, protihráčův klient dostane nový hod doprostřed běžící
+          // animace a ta se utne. Viz SIX_REROLL_DELAY_MS.
+          this._setPendingAction(null);
+          this._scheduleAction(SIX_REROLL_DELAY_MS, () => {
+            this._setPendingAction({ type: 'wait_roll', targetId: pid });
+            this._broadcast();
+          });
         } else {
           const totalSteps = player.rollAccumulator;
           player.rollAccumulator = 0;

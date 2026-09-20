@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const GameEngine = require('../src/GameEngine');
-const { JAIL_SPACE } = require('../src/constants');
+const { JAIL_SPACE, SIX_REROLL_DELAY_MS } = require('../src/constants');
 
 test('druhá šestka po sobě pošle hráče na Distanc jako teleport událost', () => {
   const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
@@ -33,7 +33,10 @@ test('druhá šestka po sobě pošle hráče na Distanc jako teleport událost',
   engine.pendingAction = { type: 'wait_roll', targetId: 'A' };
 
   engine._broadcast = () => {};
-  engine._scheduleAction = () => {};
+  // Po šestce server odkládá další hod o SIX_REROLL_DELAY_MS, aby na klientovi
+  // dohrála animace. Tady prodlevu přeskakujeme — předmětem testu je důsledek
+  // druhé šestky, ne časování. Ostatní odložené akce (posun tahu) ignorujeme.
+  engine._scheduleAction = (delay, fn) => { if (delay === SIX_REROLL_DELAY_MS) fn(); };
 
   engine._forceDice = 6;
   engine.handleRoll({ playerId: 'A', emit: () => {} });
