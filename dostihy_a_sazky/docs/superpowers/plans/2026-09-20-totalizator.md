@@ -477,7 +477,7 @@ V `src/mixins/lobby.js` v `addPlayer` rozšiř objekt `player` o pět polí. `_b
 'use strict';
 
 const { ACTION_DELAY_MS } = require('../constants');
-const { spin } = require('../Roulette');
+const { OUTCOMES, spin } = require('../Roulette');
 
 module.exports = {
 
@@ -499,10 +499,18 @@ module.exports = {
     // `spinId` odlišuje jednotlivá zatočení — klient podle něj pozná, že po
     // reconnectu dostal tentýž výsledek znovu, a kolo už neroztáčí.
     // Stejný vzor jako `lastDice.id`.
+    // `index` je pozice výseče v OUTCOMES — klient podle něj otočí kolo, aniž
+    // by potřeboval vlastní kopii seznamu.
     this._setPendingAction({
       type: 'roulette_ack',
       targetId: pid,
-      data: { result: { ...outcome, spinId: Math.random() } },
+      data: {
+        result: {
+          ...outcome,
+          index: OUTCOMES.indexOf(outcome),
+          spinId: Math.random(),
+        },
+      },
     });
     this._broadcast();
   },
@@ -586,7 +594,35 @@ A do switche v `_handleTurnTimeout` přidej — při vypršení limitu se efekt 
         break;
 ```
 
-- [ ] **Step 3e: Registrace mixinu**
+- [ ] **Step 3e: Seznam výsečí ke klientovi**
+
+Klient potřebuje popisky všech devíti výsečí, aby kolo vykreslil dřív, než se
+zatočí. Posílá se jednou v `game:init` jako statická data — vědomě se **nedělá**
+ESM kopie `src/Roulette.js` na frontendu, protože doslovná duplikace by se
+rozešla. V `src/mixins/state.js` rozšiř `sendInit`:
+
+```js
+const { OUTCOMES } = require('../Roulette');
+```
+
+```js
+  sendInit(socket) {
+    socket.emit('game:init', {
+      roomId: this.roomId,
+      board: BOARD,
+      colors: PLAYER_COLORS,
+      // Statický seznam výsečí Totalizátoru — klient z něj kreslí kolo.
+      roulette: OUTCOMES,
+      state: this._buildState(),
+    });
+  },
+```
+
+Na klientovi v `public/js/main.js` v handleru `game:init` ulož seznam do
+`state.rouletteOutcomes` (přidej pole do `public/js/state.js` s výchozí
+hodnotou `[]`), vedle toho, jak se ukládá `board`.
+
+- [ ] **Step 3f: Registrace mixinu**
 
 V `src/GameEngine.js` přidej `require` k ostatním mixinům:
 
@@ -2131,11 +2167,15 @@ export function showRouletteOverlay(result, outcomes, isTargeted, onConfirm) {
 
   if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
 
-  const index = outcomes.findIndex(o => o.id === result.id);
+  // Pozici výseče určuje server (`result.index`) — klient ji nedohledává.
+  // Když seznam výsečí ještě nedorazil, kolo se vykreslí prázdné; výsledek
+  // se čte z `result`, takže hra funguje i tak.
+  const count = outcomes.length || 9;
+  const index = Number.isInteger(result.index) ? result.index : 0;
   const spin = isEffectEnabled('rouletteSpin') && !prefersReducedMotion();
 
   overlay.classList.remove('hidden');
-  paintWheel(wheel, outcomes.length);
+  paintWheel(wheel, count);
   wheel.classList.toggle('no-spin', !spin);
 
   // Výsledek je hned k dispozici; jen ho při točení odhalíme až po dojetí.
@@ -2154,7 +2194,7 @@ export function showRouletteOverlay(result, outcomes, isTargeted, onConfirm) {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       overlay.classList.add('is-open');
-      wheel.style.transform = `rotate(${targetRotation(index, outcomes.length)}deg)`;
+      wheel.style.transform = `rotate(${targetRotation(index, count)}deg)`;
     });
   });
 
@@ -2253,10 +2293,13 @@ V `public/js/ui/actions.js` přidej import:
 
 ```js
 import { showRouletteOverlay, hideRouletteOverlay } from '../animations/roulette.js';
-import { OUTCOMES } from '../rouletteOutcomes.mjs';
 ```
 
-> `src/Roulette.js` je CommonJS a frontend ho načíst neumí. Vytvoř `public/js/rouletteOutcomes.mjs`, který exportuje **stejné pole** — a přidej do `tests/roulette-outcomes.test.js` test, že se obě kopie shodují v `id` a pořadí. Bez toho by se kolo mohlo rozejít se serverem a zastavit na špatné výseči.
+> **Seznam výsečí se na frontendu NEDUPLIKUJE.** `src/Roulette.js` je CommonJS
+> a frontend ho načíst neumí, ale ESM kopie by se dřív nebo později rozešla.
+> Seznam proto posílá server v `game:init` (Task 3, krok 3e) a klient ho má
+> v `state.rouletteOutcomes`. Rotaci kola řídí `result.index`, který server
+> přikládá k výsledku — klient nemusí v seznamu nic dohledávat.
 
 Do switche u řádku ~130 přidej:
 
@@ -2280,8 +2323,8 @@ Přidej na konec `public/js/ui/actions.js`. Vzorem jsou `renderCardAck` a
 ```js
 function renderRouletteAck(isTargeted, targetPlayer, pa) {
   // Kolo vidí všichni — i ten, kdo zrovna není na tahu. Tlačítko má jen
-  // hráč, kterého se výsledek týká.
-  showRouletteOverlay(pa.data.result, OUTCOMES, isTargeted, () => {
+  // hráč, kterého se výsledek týká. Seznam výsečí přišel v `game:init`.
+  showRouletteOverlay(pa.data.result, state.rouletteOutcomes || [], isTargeted, () => {
     socket.emit('game:respond', { decision: 'ack' });
   });
 
@@ -2384,7 +2427,7 @@ a doplň import ze stejného modulu.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add public/js/ui/actions.js public/js/main.js public/js/rouletteOutcomes.mjs
+git add public/js/ui/actions.js public/js/main.js
 git commit -m "feat(totalizator): renderery promptů rulety"
 ```
 
