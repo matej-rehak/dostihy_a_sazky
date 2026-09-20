@@ -12,12 +12,14 @@ export function segmentAngle(count) {
 }
 
 /**
- * O kolik stupňů otočit kolo, aby výseč `index` skončila pod ručičkou nahoře.
+ * O kolik stupňů otočit kolo, aby výseč `index` skončila pod ručičkou nahoře —
+ * uprostřed svého pásma, ne na jeho okraji.
  *
  * Kolo se točí po směru, takže výseč se pod ručičku dostane odečtením jejího
- * úhlu od plné otáčky. `turns` přidává celé otáčky kvůli efektu — na koncové
- * poloze nic nemění.
+ * počátečního úhlu od plné otáčky; odečtení poloviny `segmentAngle` pak
+ * posune zastavení ze švu mezi výsečemi na střed té vybrané. `turns` přidává
+ * celé otáčky kvůli efektu — na koncové poloze nic nemění.
  */
 export function targetRotation(index, count, turns = SPIN_TURNS) {
-  return turns * 360 - index * segmentAngle(count);
+  return turns * 360 - index * segmentAngle(count) - segmentAngle(count) / 2;
 }

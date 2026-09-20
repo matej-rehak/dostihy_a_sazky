@@ -7,18 +7,20 @@ test('devět výsečí po 40 stupních', () => {
   assert.equal(segmentAngle(9), 40);
 });
 
-test('první výseč končí pod ručičkou bez zbytkového posunu', () => {
+test('první výseč skončí uprostřed svého pásma, ne na okraji', () => {
   const rot = targetRotation(0, 9, 4);
-  assert.equal(rot % 360, 0);
-  assert.equal(rot, 4 * 360);
+  // úhel ve stupních, který po otočení skončí pod ručičkou nahoře
+  const underPointer = (360 - (rot % 360) + 360) % 360;
+  assert.equal(underPointer, 20); // střed výseče 0 (0*40 + 20), ne 0
 });
 
-test('každá výseč se zastaví ve svém pásmu', () => {
+test('každá výseč se zastaví uprostřed svého pásma', () => {
   for (let i = 0; i < 9; i++) {
     const rot = targetRotation(i, 9, 4);
-    // Kolo se točí dopředu, výseč i musí skončit na svém úhlu
-    const landed = ((360 - (rot % 360)) % 360) / 40;
-    assert.equal(Math.round(landed), i, `výseč ${i} se zastavila na ${landed}`);
+    // úhel ve stupních, který po otočení skončí pod ručičkou nahoře
+    const underPointer = (360 - (rot % 360) + 360) % 360;
+    // musí padnout doprostřed výseče `i`, ne na její okraj
+    assert.equal(underPointer, i * 40 + 20, `výseč ${i} se zastavila na ${underPointer}`);
   }
 });
 

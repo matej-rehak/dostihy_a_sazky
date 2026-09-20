@@ -2,6 +2,11 @@ import { isEffectEnabled } from '../settings.js';
 import { prefersReducedMotion } from '../utils.js';
 import { SPIN_MS, segmentAngle, targetRotation } from './rouletteAnimationGate.mjs';
 
+// Délka prolnutí overlaye. Musí odpovídat `transition: opacity 200ms` na
+// .roulette-overlay v public/style.css — o ni se opírá zavírací prodleva
+// po potvrzení výsledku.
+const FADE_MS = 200;
+
 let hideTimer = null;
 
 // Každé zatočení má na serveru vlastní `spinId`. Po reconnectu dorazí stejný
@@ -84,7 +89,7 @@ export function showRouletteOverlay(result, outcomes, isTargeted, onConfirm) {
         wheel.classList.add('no-spin');
         wheel.style.transform = 'rotate(0deg)';
         onConfirm();
-      }, 200);
+      }, FADE_MS);
     };
   }
 }
@@ -94,7 +99,13 @@ export function hideRouletteOverlay() {
   if (overlay) overlay.classList.add('hidden');
 }
 
-/** Vynuluje paměť odanimovaných zatočení — volá se při návratu do lobby. */
+/**
+ * Vynuluje paměť odanimovaných zatočení — volá se při návratu do lobby.
+ * Zruší i rozplánované odhalení výsledku: bez toho by hráč, který odejde
+ * uprostřed točení (3,2s okno), dostal `reveal()` o pár sekund později do
+ * DOM patřícího už jiné obrazovce.
+ */
 export function resetRouletteCache() {
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
   lastSpinId = null;
 }

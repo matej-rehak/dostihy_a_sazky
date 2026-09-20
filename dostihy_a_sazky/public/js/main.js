@@ -10,7 +10,7 @@ import { updateLog, updateCenter, resetLogCache } from './ui/log.js';
 import { initTooltipListeners }                 from './ui/tooltip.js';
 import { animatePawnsIfNeeded }                 from './animations/pawns.js';
 import { playBuyAnimation, playTokenAnimation } from './animations/cards.js';
-import { resetRouletteCache }                   from './animations/roulette.js';
+import { resetRouletteCache, hideRouletteOverlay } from './animations/roulette.js';
 import { generateParticles }                    from './animations/particles.js';
 import { audioManager }                         from './audio.js';
 import { initSettings }                         from './settings.js';
@@ -79,6 +79,7 @@ function resetLocalState() {
   resetBoardCache();
   resetLogCache();
   resetRouletteCache();
+  hideRouletteOverlay();
 
   // Zastav pozadí hudbu při návratu do lobby
   audioManager.stopMusic();
