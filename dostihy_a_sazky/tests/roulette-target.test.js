@@ -91,3 +91,27 @@ test('bez soupeřů efekt propadne a prompt se neotevře', () => {
 
   assert.notEqual(engine.pendingAction?.type, 'roulette_pick_player');
 });
+
+test('udání: kandidát zbankrotuje mezi promptem a odpovědí — efekt propadne, ne poslat do Distancu', () => {
+  const engine = makeEngine('report');
+  spinAndAck(engine);
+  // Simuluje odpojení hráče B v okně mezi otevřením promptu a odpovědí —
+  // `candidates` v pendingAction je stále stará (obsahuje B).
+  engine.players.get('B').bankrupt = true;
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'B' });
+
+  const b = engine.players.get('B');
+  assert.equal(b.inJail, false);
+  assert.equal(b.position, 0);
+  assert.notEqual(engine.pendingAction?.type, 'roulette_pick_player');
+});
+
+test('stávka: kandidát zbankrotuje mezi promptem a odpovědí — efekt propadne, tokenStrike se nenabije', () => {
+  const engine = makeEngine('strike');
+  spinAndAck(engine);
+  engine.players.get('C').bankrupt = true;
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'C' });
+
+  assert.equal(engine.players.get('C').tokenStrike, 0);
+  assert.notEqual(engine.pendingAction?.type, 'roulette_pick_player');
+});

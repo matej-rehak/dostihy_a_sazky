@@ -124,8 +124,11 @@ module.exports = {
     const target = this.players.get(decision);
 
     // Neplatný cíl (vlastní id, bankrotář, nesmysl z klienta) efekt zahodí.
+    // `target.bankrupt` se ověřuje ZNOVU tady, ne jen při vytvoření promptu —
+    // kandidát mohl mezi otevřením promptu a odpovědí zbankrotovat (odpojení
+    // hráče), a `candidates` je jen snímek z okamžiku otočení kolem.
     // Tah musí pokračovat, jinak by hra zamrzla.
-    if (!target || !candidates || !candidates.includes(decision)) {
+    if (!target || target.bankrupt || !candidates || !candidates.includes(decision)) {
       this._addLog('🎰 Neplatný cíl — efekt Totalizátoru propadá.');
     } else if (outcomeId === 'strike') {
       target.tokenStrike = 1;
