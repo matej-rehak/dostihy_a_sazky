@@ -259,6 +259,15 @@ export function updateBoard(gameState) {
     if (nameEl) nameEl.textContent = field20Mode === 'airport' ? 'Letiště' : 'Parkoviště';
   }
 
+  const field30Mode = gameState.config?.field30Mode ?? 'doping';
+  const field30El = dom.board?.querySelector(`.space[data-id="30"]`);
+  if (field30El) {
+    const iconEl = field30El.querySelector('.corner-icon');
+    const nameEl = field30El.querySelector('.corner-name');
+    if (iconEl) iconEl.textContent = field30Mode === 'roulette' ? '🎰' : '💉';
+    if (nameEl) nameEl.textContent = field30Mode === 'roulette' ? 'Totalizátor' : 'Podezření z dopingu';
+  }
+
   const pa = gameState.pendingAction;
   const inAirportSelect = pa?.type === 'airport_select_target' && pa?.targetId === state.myId;
   const me = gameState.players?.find(p => p.id === state.myId);

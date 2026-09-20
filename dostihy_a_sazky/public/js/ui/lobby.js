@@ -72,13 +72,14 @@ function renderHostControls(gameState, me) {
     const balDisp = document.getElementById('cfg-bal-disp');
     if (balDisp) {
       balDisp.classList.remove('hidden');
-      const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', airportFee: 2000 };
+      const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', field30Mode: 'doping', airportFee: 2000 };
       const field20Label = c.field20Mode === 'airport' ? `Letiště (${fmt(c.airportFee)} Kč)` : 'Parkoviště';
+      const field30Label = c.field30Mode === 'roulette' ? 'Totalizátor' : 'Podezření z dopingu';
       balDisp.textContent = '';
       balDisp.appendChild(document.createTextNode('Pravidla hostitele: '));
       balDisp.appendChild(makeEl('strong', '', `Kapitál ${fmt(c.startBalance)} Kč`));
       balDisp.appendChild(document.createTextNode(
-        `, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${c.buyoutMultiplier > 0 ? c.buyoutMultiplier + 'x' : 'Vypnuto'}, Čas: ${c.timeLimitMinutes > 0 ? c.timeLimitMinutes + ' min' : 'Bez limitu'}, Tah: ${c.turnTimeLimitSeconds > 0 ? c.turnTimeLimitSeconds + ' s' : 'Bez limitu'}, Pole 20: ${field20Label}`
+        `, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${c.buyoutMultiplier > 0 ? c.buyoutMultiplier + 'x' : 'Vypnuto'}, Čas: ${c.timeLimitMinutes > 0 ? c.timeLimitMinutes + ' min' : 'Bez limitu'}, Tah: ${c.turnTimeLimitSeconds > 0 ? c.turnTimeLimitSeconds + ' s' : 'Bez limitu'}, Pole 20: ${field20Label}, Pole 30: ${field30Label}`
       ));
     }
     return;
@@ -88,13 +89,14 @@ function renderHostControls(gameState, me) {
   dom.hostControls?.classList.remove('hidden');
   document.getElementById('cfg-bal-disp')?.classList.add('hidden');
 
-  const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', airportFee: 2000 };
+  const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', field30Mode: 'doping', airportFee: 2000 };
   const cfgBal = document.getElementById('cfg-startBal');
   const cfgBon = document.getElementById('cfg-startBon');
   const cfgBuy = document.getElementById('cfg-buyout');
   const cfgTime = document.getElementById('cfg-timeLimit');
   const cfgTurnTime = document.getElementById('cfg-turnTimeLimit');
   const cfgField20 = document.getElementById('cfg-field20Mode');
+  const cfgField30 = document.getElementById('cfg-field30Mode');
   const cfgFee = document.getElementById('cfg-airportFee');
   const cfgFeeRow = document.getElementById('cfg-airportFee-row');
   if (cfgBal && document.activeElement !== cfgBal) cfgBal.value = c.startBalance;
@@ -103,6 +105,7 @@ function renderHostControls(gameState, me) {
   if (cfgTime && document.activeElement !== cfgTime) cfgTime.value = c.timeLimitMinutes ?? 0;
   if (cfgTurnTime && document.activeElement !== cfgTurnTime) cfgTurnTime.value = c.turnTimeLimitSeconds ?? 0;
   if (cfgField20 && document.activeElement !== cfgField20) cfgField20.value = c.field20Mode ?? 'parking';
+  if (cfgField30 && document.activeElement !== cfgField30) cfgField30.value = c.field30Mode ?? 'doping';
   if (cfgFee && document.activeElement !== cfgFee) cfgFee.value = c.airportFee ?? 2000;
   if (cfgFeeRow) cfgFeeRow.classList.toggle('hidden', c.field20Mode !== 'airport');
 
@@ -205,7 +208,7 @@ export function showIntroSelection() {
 
 export function initLobbyListeners(onLeave) {
   // Config inputs (host)
-  ['cfg-startBal', 'cfg-startBon', 'cfg-buyout', 'cfg-timeLimit', 'cfg-turnTimeLimit', 'cfg-field20Mode', 'cfg-airportFee'].forEach(id => {
+  ['cfg-startBal', 'cfg-startBon', 'cfg-buyout', 'cfg-timeLimit', 'cfg-turnTimeLimit', 'cfg-field20Mode', 'cfg-field30Mode', 'cfg-airportFee'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
       socket.emit('game:update_config', {
         startBalance:      Number(document.getElementById('cfg-startBal')?.value ?? 30000),
@@ -214,6 +217,7 @@ export function initLobbyListeners(onLeave) {
         timeLimitMinutes:  Number(document.getElementById('cfg-timeLimit')?.value ?? 0),
         turnTimeLimitSeconds: Number(document.getElementById('cfg-turnTimeLimit')?.value ?? 0),
         field20Mode:       document.getElementById('cfg-field20Mode')?.value ?? 'parking',
+        field30Mode:       document.getElementById('cfg-field30Mode')?.value ?? 'doping',
         airportFee:        Number(document.getElementById('cfg-airportFee')?.value ?? 2000),
       });
     });
