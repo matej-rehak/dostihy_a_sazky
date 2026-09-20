@@ -5,6 +5,7 @@
 export const SETTING_KEYS = [
   'pawnAnimation',      // pohyb figurky po plánu
   'cardFlip',           // otáčení karty Finance / Náhoda
+  'rouletteSpin',       // roztočení kola Totalizátoru
   'particles',          // částice na pozadí
   'sixSparks',          // jiskry po hodu šestky
   'starterDraw',        // losování prvního hráče

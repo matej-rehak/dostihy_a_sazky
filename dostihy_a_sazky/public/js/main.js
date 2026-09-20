@@ -10,6 +10,7 @@ import { updateLog, updateCenter, resetLogCache } from './ui/log.js';
 import { initTooltipListeners }                 from './ui/tooltip.js';
 import { animatePawnsIfNeeded }                 from './animations/pawns.js';
 import { playBuyAnimation, playTokenAnimation } from './animations/cards.js';
+import { resetRouletteCache }                   from './animations/roulette.js';
 import { generateParticles }                    from './animations/particles.js';
 import { audioManager }                         from './audio.js';
 import { initSettings }                         from './settings.js';
@@ -77,6 +78,7 @@ function resetLocalState() {
   // Cache vykreslování drží odkazy na prvky, které teď zanikly.
   resetBoardCache();
   resetLogCache();
+  resetRouletteCache();
 
   // Zastav pozadí hudbu při návratu do lobby
   audioManager.stopMusic();

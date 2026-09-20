@@ -21,8 +21,8 @@ test('všechny efekty jsou ve výchozím stavu zapnuté', () => {
   }
 });
 
-test('sedm přepínačů, žádný navíc', () => {
-  assert.equal(SETTING_KEYS.length, 7);
+test('osm přepínačů, žádný navíc', () => {
+  assert.equal(SETTING_KEYS.length, 8);
   assert.deepEqual(Object.keys(DEFAULTS).sort(), [...SETTING_KEYS].sort());
 });
 
