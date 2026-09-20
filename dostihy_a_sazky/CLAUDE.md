@@ -192,7 +192,7 @@ Pole 30 (běžně „Doping" se skipnutím tahu) lze nahradit **Totalizátorem**
 | Dostih zdarma (🏗️) | Žeton dostihů na vlastního koně zdarma (jen na úplné stáje). |
 | Dvojitý nájem (💵) | Příští vybraný nájem bude dvojnásobný. |
 | Imunita (🛡️) | Příští zaplacený nájem je zdarma. |
-| Stávka ve stáji (🚧) | Vybraný soupeř vynechá jeden kolo; jeho žetony nefungují. |
+| Stávka ve stáji (🚧) | Vybranému soupeři nefungují žetony dostihů — tah **nevynechává**. Stávka se odečítá na začátku jeho tahů a je nabitá na dva (`STRIKE_TARGET_TURNS`): přežije jeho nejbližší tah a zhasne až na začátku toho druhého, takže platí i na tahu hráče, který ji vyvolal. |
 | Udání (🎯) | Vybraný soupeř jde rovnou na Distanc. |
 | Podezření z dopingu (🤒) | Hráč vynechá jeden tah; jeho žetony nefungují. |
 

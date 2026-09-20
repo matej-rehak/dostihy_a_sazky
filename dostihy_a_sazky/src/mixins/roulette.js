@@ -4,6 +4,20 @@ const { ACTION_DELAY_MS } = require('../constants');
 const { OUTCOMES, spin } = require('../Roulette');
 const BOARD = require('../data/boardData');
 
+/**
+ * Na kolik ZAČÁTKŮ VLASTNÍCH TAHŮ cíle se stávka nabíjí.
+ *
+ * `tokenStrike` se odečítá v `_startTurn` cílového hráče. S hodnotou 1 by
+ * stávka zhasla hned na začátku jeho nejbližšího tahu — ve hře dvou hráčů
+ * by tedy nezafungovala vůbec: točící hráč by se ke svému dalšímu tahu dostal
+ * až po jejím vypršení a platil by plný nájem.
+ *
+ * Dvojka nechá stávku přežít cílův nejbližší tah a zhasne až na začátku toho
+ * druhého. Tím pokryje celé kolo soupeřů mezi dvěma tahy cíle — a hlavně tah
+ * hráče, který stávku vyvolal. Hlídá to tests/roulette-modifiers.test.js.
+ */
+const STRIKE_TARGET_TURNS = 2;
+
 module.exports = {
 
   /**
@@ -222,7 +236,7 @@ module.exports = {
     if (!target || target.bankrupt || !candidates || !candidates.includes(decision)) {
       this._addLog('🎰 Neplatný cíl — efekt Totalizátoru propadá.');
     } else if (outcomeId === 'strike') {
-      target.tokenStrike = 1;
+      target.tokenStrike = STRIKE_TARGET_TURNS;
       this._addLog(`🚧 Ve stáji ${target.name} je stávka — jedno kolo mu nefungují žetony.`);
     } else if (outcomeId === 'report') {
       this._sendToJail(decision);

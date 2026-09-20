@@ -51,7 +51,9 @@ test('stávka nabije tokenStrike vybranému soupeři', () => {
   spinAndAck(engine);
   engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'C' });
 
-  assert.equal(engine.players.get('C').tokenStrike, 1);
+  // 2 = STRIKE_TARGET_TURNS (mixins/roulette.js): stávka musí přežít nejbližší
+  // tah cíle, aby platila i na tahu hráče, který ji vyvolal.
+  assert.equal(engine.players.get('C').tokenStrike, 2);
   assert.equal(engine.players.get('B').tokenStrike, 0);
   assert.equal(engine.players.get('A').tokenStrike, 0);
 });

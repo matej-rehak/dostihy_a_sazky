@@ -140,11 +140,42 @@ test('insufficient_funds hlásí sníženou cenu a nedoplatek podle přednostní
   assert.equal(typeof scheduled, 'function');
 });
 
-test('stávka se snižuje na začátku tahu cílového hráče', () => {
+test('stávka drží i na tahu hráče, který ji vyvolal (hra dvou hráčů)', () => {
   const engine = makeEngine();
-  engine.players.get('A').tokenStrike = 1;
+  giveStable(engine, 'B');
+  engine.tokens[FANTOME] = { small: 2, big: false };
+  engine.currentTurnIdx = 0;
+
+  // A točí Totalizátorem a stávkuje B. Zbytek A-ova tahu není předmětem testu —
+  // naplánované pokračování by jen rozjelo _advanceTurn a přepsalo currentTurnIdx.
+  engine._scheduleAction = () => {};
+  engine._handleRoulettePickPlayer('A', 'B', { outcomeId: 'strike', candidates: ['B'] });
+  assert.ok(engine.players.get('B').tokenStrike > 0, 'stávka se musí nabít');
+
+  // Tah B — stávka se odečítá, ale skončit nesmí.
+  engine.currentTurnIdx = 1;
+  engine._startTurn();
+  assert.ok(
+    engine.players.get('B').tokenStrike > 0,
+    'stávka nesmí vypršet už na nejbližším tahu cíle — ve dvou hráčích by nezafungovala vůbec'
+  );
+
+  // Tah A: pořád platí, takže A stoupne na koně B a platí ZÁKLADNÍ nájem.
   engine.currentTurnIdx = 0;
   engine._startTurn();
+  assert.equal(
+    engine._calcRent(FANTOME, 3),
+    BOARD[FANTOME].rents[0],
+    'na tahu hráče, který stávku vyvolal, musí žetony cíle pořád stát'
+  );
 
-  assert.equal(engine.players.get('A').tokenStrike, 0);
+  // Druhý tah B — teprve tady stávka končí.
+  engine.currentTurnIdx = 1;
+  engine._startTurn();
+  assert.equal(engine.players.get('B').tokenStrike, 0, 'stávka musí po celém kole skončit');
+  assert.equal(
+    engine._calcRent(FANTOME, 3),
+    BOARD[FANTOME].rents[2],
+    'po vypršení stávky žetony zase fungují'
+  );
 });

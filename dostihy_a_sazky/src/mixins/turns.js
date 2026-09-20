@@ -11,6 +11,9 @@ module.exports = {
     const player = this.players.get(pid);
     if (!player || player.bankrupt) { this._advanceTurn(); return; }
 
+    // Stávka se odečítá na začátku tahu cíle, ale nabíjí se na DVA jeho tahy
+    // (STRIKE_TARGET_TURNS v mixins/roulette.js) — jinak by v duelu skončila
+    // dřív, než se ke svému tahu vrátí hráč, který ji vyvolal.
     if (player.tokenStrike > 0) {
       player.tokenStrike--;
       if (player.tokenStrike === 0) {
