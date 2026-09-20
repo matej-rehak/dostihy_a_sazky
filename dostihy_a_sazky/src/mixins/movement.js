@@ -90,7 +90,7 @@ module.exports = {
       case 'service': {
         const owner = this.ownerships[space.id];
         if (!owner) {
-          if (player.balance >= space.price) {
+          if (player.balance >= this._effectiveBuyPrice(pid, space.id)) {
             this._setPendingAction({ type: 'buy_offer', targetId: pid, data: { spaceId: space.id } });
             this._broadcast();
           } else {
@@ -117,7 +117,7 @@ module.exports = {
             this._setPendingAction({ type: 'service_roll', targetId: pid, data: { spaceId: space.id } });
             this._broadcast();
           } else {
-            const rent = this._calcRent(space.id, this.lastDice?.value || 1);
+            const rent = this._applyRentModifiers(pid, owner, this._calcRent(space.id, this.lastDice?.value || 1));
             const ownerPlayer = this.players.get(owner);
             this._addLog(`💸 ${player.name} platí nájem ${fmt(rent)} Kč → ${ownerPlayer.name} (${space.name})`);
             this._transfer(pid, owner, rent);

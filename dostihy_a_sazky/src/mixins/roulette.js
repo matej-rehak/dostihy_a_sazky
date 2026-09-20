@@ -83,4 +83,34 @@ module.exports = {
         return false;
     }
   },
+
+  /**
+   * Spotřebuje nabité modifikátory a vrátí skutečnou částku k zaplacení.
+   *
+   * Vědomě NEŽIJE v `_calcRent` — ta se volá i pro zobrazení a odhady, a
+   * spotřebovávat nabití při výpočtu by je nenávratně sežralo. Tohle se volá
+   * výhradně z platebních míst.
+   *
+   * Pořadí je určující: imunita se vyhodnocuje AŽ PO zdvojnásobení, takže
+   * proti dvojitému nájmu vyhraje — ale obě nabití se spotřebují.
+   */
+  _applyRentModifiers(payerId, ownerId, rent) {
+    const payer = this.players.get(payerId);
+    const owner = this.players.get(ownerId);
+    let amount = rent;
+
+    if (owner && owner.doubleRent > 0) {
+      owner.doubleRent--;
+      amount *= 2;
+      this._addLog(`💵 ${owner.name} uplatňuje dvojitý nájem — ${amount} Kč.`);
+    }
+
+    if (payer && payer.rentImmunity > 0) {
+      payer.rentImmunity--;
+      this._addLog(`🛡️ ${payer.name} uplatňuje imunitu — nájem neplatí.`);
+      return 0;
+    }
+
+    return amount;
+  },
 };

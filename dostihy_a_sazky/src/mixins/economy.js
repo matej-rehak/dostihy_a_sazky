@@ -24,13 +24,34 @@ module.exports = {
     this._endGame(isTie ? null : ranking[0].id, 'time_limit');
   },
 
-  _buyProperty(pid, spaceId) {
+  /**
+   * Cena, za kterou hráč koně skutečně koupí. Přednostní právo z Totalizátoru
+   * ji půlí. Příznak se tady NESPOTŘEBUJE — dotaz na cenu se dělá i při
+   * kontrole, jestli na koně hráč vůbec má.
+   */
+  _effectiveBuyPrice(pid, spaceId) {
+    const player = this.players.get(pid);
+    const price = BOARD[spaceId].price;
+    if (player && player.halfPriceNext) return Math.floor(price / 2);
+    return price;
+  },
+
+  _buyProperty(pid, spaceId, priceOverride = null) {
     const player = this.players.get(pid);
     const space = BOARD[spaceId];
-    player.balance -= space.price;
+    const price = priceOverride !== null ? priceOverride : this._effectiveBuyPrice(pid, spaceId);
+
+    // Příznak spotřebuj jen tehdy, když kůň SKUTEČNĚ mění majitele —
+    // a jen u běžného nákupu. Dražba má vlastní cenu a právo nespotřebuje.
+    if (priceOverride === null && player.halfPriceNext) {
+      player.halfPriceNext = false;
+      this._addLog(`🎟️ ${player.name} uplatnil(a) přednostní právo — poloviční cena.`);
+    }
+
+    player.balance -= price;
     this.ownerships[spaceId] = pid;
     player.properties.push(spaceId);
-    this._addLog(`🏠 ${player.name} koupil(a) ${space.name} za ${fmt(space.price)} Kč`);
+    this._addLog(`🏠 ${player.name} koupil(a) ${space.name} za ${fmt(price)} Kč`);
     this._checkBankrupt(pid);
     this._checkStableCompletion(pid, spaceId);
   },
@@ -119,6 +140,8 @@ module.exports = {
         this._addLog(`ℹ️ Majitel ${ownerPlayer.name} je v Distancu — žetony nefungují!`);
       } else if (ownerPlayer.skipTurns > 0) {
         this._addLog(`ℹ️ Majitel ${ownerPlayer.name} je pod podezřením z dopingu — žetony nefungují!`);
+      } else if (ownerPlayer.tokenStrike > 0) {
+        this._addLog(`ℹ️ Ve stáji ${ownerPlayer.name} je stávka — žetony nefungují!`);
       } else if (!hasMonopoly) {
         this._addLog(`ℹ️ Majitel ${ownerPlayer.name} nemá celou stáj — žetony nefungují!`);
       } else {

@@ -11,6 +11,13 @@ module.exports = {
     const player = this.players.get(pid);
     if (!player || player.bankrupt) { this._advanceTurn(); return; }
 
+    if (player.tokenStrike > 0) {
+      player.tokenStrike--;
+      if (player.tokenStrike === 0) {
+        this._addLog(`🚧 Stávka ve stáji ${player.name} skončila.`);
+      }
+    }
+
     if (player.skipTurns > 0) {
       player.skipTurns--;
       this._addLog(`🚫 ${player.name} vynechává tah (${player.skipTurns} kol zbývá)`);
@@ -99,7 +106,7 @@ module.exports = {
       const ownerPlayer = this.players.get(owner);
 
       this._addLog(`🎲 ${player.name} hází pro poplatek: ${dice}`);
-      const rent = this._calcRent(spaceId, dice);
+      const rent = this._applyRentModifiers(pid, owner, this._calcRent(spaceId, dice));
       this._scheduleAction(ACTION_DELAY_MS, () => {
         this._addLog(`💸 ${player.name} platí poplatek ${fmt(rent)} Kč → ${ownerPlayer.name} (${space.name})`);
       });
