@@ -1,4 +1,5 @@
-import { makeEl } from '../utils.js';
+import { makeEl, prefersReducedMotion } from '../utils.js';
+import { isEffectEnabled } from '../settings.js';
 import { state } from '../state.js';
 
 const MAX_PARTICLES = 30;
@@ -7,6 +8,12 @@ export function generateParticles() {
   const container = document.getElementById('particles-container');
   if (!container) return;
   if (state.particleIntervalId) clearInterval(state.particleIntervalId);
+
+  // Redukovaný pohyb nebo vypnuté v nastavení: částice vůbec negenerujeme.
+  if (prefersReducedMotion() || !isEffectEnabled('particles')) {
+    state.particleIntervalId = null;
+    return;
+  }
 
   let activeParticles = 0;
 

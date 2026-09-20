@@ -3,7 +3,8 @@ import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { socket } from '../socket.js';
 import { showCardOverlay, hideCardOverlay } from '../animations/cards.js';
-import { runStarterAnimation } from '../animations/starter.js';
+import { isEffectEnabled } from '../settings.js';
+import { runStarterAnimation, stopStarterAnimation } from '../animations/starter.js';
 import { audioManager } from '../audio.js';
 import { actionBtn, buildWaitEl } from './actionsHelpers.js';
 import { tradeDraft, setTradeDraft, renderTradeBuild, renderTradeOffer, renderIncomingTradeOffer } from './actionsTrade.js';
@@ -101,6 +102,9 @@ export function updateActionPanel(gameState) {
     }
   } else {
     state.isStarterAnimating = false;
+    // Zrušit i běžící losování — jinak by doběhlo do skrytého overlaye a
+    // další `selecting_starter` by nad ním rozjel druhé.
+    stopStarterAnimation();
     document.getElementById('starter-overlay')?.classList.add('hidden');
   }
 
@@ -562,6 +566,7 @@ function renderAirportSelectTarget(isTargeted, targetPlayer, pa, gameState, me) 
 }
 
 function showBrokeOverlay(propertyName, shortage) {
+  if (!isEffectEnabled('celebrationOverlays')) return;
   const existing = document.getElementById('broke-overlay');
   if (existing) existing.remove();
 
@@ -600,6 +605,7 @@ function renderGameOver(winner, reason) {
 }
 
 export function showStableOverlay(playerName, group, groupColor) {
+  if (!isEffectEnabled('celebrationOverlays')) return;
   const existing = document.getElementById('stable-overlay');
   if (existing) existing.remove();
 
