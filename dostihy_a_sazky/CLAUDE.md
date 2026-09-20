@@ -35,6 +35,7 @@ server.js                   ← HTTP + Socket.IO server, správa místností, re
 │   ├── GameEngine.js       ← Hlavní třída hry (složena z mixinů přes Object.assign)
 │   ├── Bot.js              ← Čistá rozhodovací logika bota (bez vedlejších efektů)
 │   ├── Cards.js            ← Balíčky karet Finance a Náhoda
+│   ├── Roulette.js         ← Devět výsečí Totalizátoru a spin()
 │   ├── auth.js             ← JWT generování / ověřování (playerId persistence)
 │   ├── constants.js        ← BOARD_SIZE, JAIL_*, ACTION_DELAY_MS, PLAYER_COLORS, roll(), fmt()
 │   ├── data/
@@ -46,6 +47,7 @@ server.js                   ← HTTP + Socket.IO server, správa místností, re
 │       ├── movement.js     ← _movePlayer, _evaluateSpace
 │       ├── actions.js      ← handleRespond, _handleBuy, _handleSell, _handleRent, _handleJail…
 │       ├── cards.js        ← _applyCard (Finance / Náhoda karty)
+│       ├── roulette.js     ← Logika Totalizátoru (_spinRoulette, apply effects, _applyRentModifiers)
 │       ├── economy.js      ← _buyProperty, _sellProperty, _calcRent, _transfer, _calcAssetsValue, bankrot
 │       ├── tokens.js       ← _addToken, _eligibleTokenSpaces, _offerTokensOrEnd
 │       ├── trade.js        ← initiateTrade (nabídka obchodu mezi hráči)
@@ -178,6 +180,23 @@ Hráč má **30 s** grace period po odpojení (`RECONNECT_GRACE_MS = 30_000`). J
 ### Tokeny dostihů
 - Max 4 malé + 1 velký žeton na koně
 - Nájem roste s počtem žetonů (řeší `EconomyMixin._calcRent`)
+
+### Totalizátor (režim pole 30)
+Pole 30 (běžně „Doping" se skipnutím tahu) lze nahradit **Totalizátorem** — ruletou se 9 výsečemi se stejnými šancemi (1/9). Hostitel ji volí v lobby pomocí `field30Mode` (`'doping'` je výchozí). Následující efekty jsou záměrně hráči příznivé a matematicky fair:
+
+| Výseč | Efekt |
+|-------|-------|
+| Sázka na vlastní hod (🎲) | Vsadí se 5.000 Kč (bez peněz = neplatí). Padne-li 5+ při příštím hodu, vítěž 15.000 Kč. |
+| Dražba (🏇) | Kupuje libovolného volného koně se 50% přirážkou. |
+| Přednostní právo (🎟️) | Příští volný kůň za polovinu. |
+| Dostih zdarma (🏗️) | Žeton dostihů na vlastního koně zdarma (jen na úplné stáje). |
+| Dvojitý nájem (💵) | Příští vybraný nájem bude dvojnásobný. |
+| Imunita (🛡️) | Příští zaplacený nájem je zdarma. |
+| Stávka ve stáji (🚧) | Vybraný soupeř vynechá jeden kolo; jeho žetony nefungují. |
+| Udání (🎯) | Vybraný soupeř jde rovnou na Distanc. |
+| Podezření z dopingu (🤒) | Hráč vynechá jeden tah; jeho žetony nefungují. |
+
+Interní stav: `pendingBet`, `halfPriceNext`, `doubleRent`, `rentImmunity`, `skipTurns`, `tokenStrike` na hráči; pending-action typy `roulette_ack`, `roulette_pick_horse`, `roulette_pick_player`.
 
 ### Konec hry
 - Hráč bez peněz → bankrot → vypadá ze hry
