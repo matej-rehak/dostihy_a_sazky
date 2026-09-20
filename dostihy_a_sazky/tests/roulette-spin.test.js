@@ -106,3 +106,17 @@ test('nový hráč má všechny příznaky vynulované', () => {
   assert.equal(p.halfPriceNext, false);
   assert.equal(p.tokenStrike, 0);
 });
+
+test('nový bot má všechny příznaky vynulované', () => {
+  const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
+  engine._broadcast = () => {};
+  engine.addBot();
+  const bot = [...engine.players.values()].find(p => p.isBot);
+
+  assert.ok(bot, 'addBot() nevytvořil hráče');
+  assert.equal(bot.pendingBet, null);
+  assert.equal(bot.doubleRent, 0);
+  assert.equal(bot.rentImmunity, 0);
+  assert.equal(bot.halfPriceNext, false);
+  assert.equal(bot.tokenStrike, 0);
+});

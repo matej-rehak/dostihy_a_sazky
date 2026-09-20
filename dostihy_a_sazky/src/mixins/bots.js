@@ -41,6 +41,8 @@ module.exports = {
       ready: true,
       disconnected: false,
       canFly: false,
+      // Totalizátor — příznaky visící na hráči přes tahy (vzor `canFly`).
+      pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
     });
 
     this._addLog(`🤖 ${name} se připojil(a) k hře`);
