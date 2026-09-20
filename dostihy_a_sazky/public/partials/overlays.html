@@ -30,6 +30,43 @@
     </div>
   </div>
 
+  <!-- Space Inspect Overlay -->
+  <div id="space-inspect-overlay" class="space-inspect-overlay hidden">
+    <div class="space-inspect-backdrop" id="space-inspect-backdrop"></div>
+    <div class="space-inspect-content">
+      <button class="space-inspect-close" id="space-inspect-close">✖</button>
+      <!-- Detail nemá záhlaví (to je až uvnitř otáčecí karty), proto vlastní
+           úchyt pro posouvání. Tahat za kartu nejde — kliká se a otáčí. -->
+      <div class="space-inspect-grip" id="space-inspect-grip" aria-hidden="true"></div>
+      <div class="space-inspect-scene">
+        <div id="space-inspect-card" class="space-inspect-card">
+          <!-- Front Face -->
+          <div class="space-inspect-face space-inspect-front">
+            <div class="space-inspect-header" id="space-inspect-header">
+              <div class="space-inspect-badge" id="space-inspect-owner-badge"></div>
+              <div class="space-inspect-name" id="space-inspect-name">NAPOLI</div>
+            </div>
+            <div class="space-inspect-body">
+              <div class="space-inspect-icon" id="space-inspect-icon">🐴</div>
+              <div class="space-inspect-rents" id="space-inspect-rents"></div>
+              <div class="space-inspect-prices" id="space-inspect-prices"></div>
+            </div>
+          </div>
+          <!-- Back Face -->
+          <div class="space-inspect-face space-inspect-back">
+            <div class="space-inspect-back-inner">
+              <div class="space-inspect-back-pattern">🏇</div>
+              <div class="space-inspect-back-title">DOSTIHY A SÁZKY</div>
+              <div class="space-inspect-back-desc" id="space-inspect-desc"></div>
+              <div class="space-inspect-back-vintage">Edice 1984</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-gold btn-lg" id="space-inspect-flip-btn" style="margin-top: 18px; z-index: 10;">🔄 Otočit kartu</button>
+    </div>
+  </div>
+
   <!-- Tooltip -->
   <div id="space-tip" class="space-tip hidden"></div>
 
