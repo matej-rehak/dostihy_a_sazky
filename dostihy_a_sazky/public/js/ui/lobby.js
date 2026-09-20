@@ -189,6 +189,20 @@ export function buildColorPicker(colors, usedColors = [], isJoined = false, cont
 
 // ─── Event listenery lobby/intro ──────────────────────────────────────────────
 
+/**
+ * Vrátí intro do výchozí podoby: seznam místností viditelný, formulář
+ * pro vytvoření schovaný.
+ *
+ * Bez tohohle zůstaly po vytvoření místnosti schované obě části — formulář
+ * schoval handler `room:created` a seznam předtím tlačítko „Vytvořit".
+ * Nikdo si toho nevšiml, protože `game:init` vzápětí schoval celé intro.
+ * Při návratu ze hry se ale intro odkrylo prázdné a nešlo založit novou hru.
+ */
+export function showIntroSelection() {
+  document.getElementById('room-create-form')?.classList.add('hidden');
+  document.getElementById('room-selection')?.classList.remove('hidden');
+}
+
 export function initLobbyListeners(onLeave) {
   // Config inputs (host)
   ['cfg-startBal', 'cfg-startBon', 'cfg-buyout', 'cfg-timeLimit', 'cfg-turnTimeLimit', 'cfg-field20Mode', 'cfg-airportFee'].forEach(id => {

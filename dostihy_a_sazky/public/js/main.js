@@ -2,18 +2,23 @@ import { state }                                from './state.js';
 import { dom }                                  from './dom.js';
 import { socket }                               from './socket.js';
 import { showToast }                            from './utils.js';
-import { renderRoomList, renderLobby, buildColorPicker, initLobbyListeners } from './ui/lobby.js';
-import { buildBoard, updateBoard }              from './ui/board.js';
+import { renderRoomList, renderLobby, buildColorPicker, initLobbyListeners, showIntroSelection } from './ui/lobby.js';
+import { buildBoard, updateBoard, resetBoardCache } from './ui/board.js';
 import { updatePlayers }                        from './ui/players.js';
 import { updateActionPanel, showStableOverlay }                    from './ui/actions.js';
-import { updateLog, updateCenter }              from './ui/log.js';
+import { updateLog, updateCenter, resetLogCache } from './ui/log.js';
 import { initTooltipListeners }                 from './ui/tooltip.js';
 import { animatePawnsIfNeeded }                 from './animations/pawns.js';
 import { playBuyAnimation, playTokenAnimation } from './animations/cards.js';
 import { generateParticles }                    from './animations/particles.js';
 import { audioManager }                         from './audio.js';
+import { initSettings }                         from './settings.js';
 import { initDebugPanel, showDebugBtnIfNeeded } from './ui/debug.js';
 import { confirmDialog }                        from './ui/confirm.js';
+import { initMobileTabs, autoSwitchToAction }   from './ui/mobileTabs.js';
+import { initInspectListeners }                 from './ui/spaceInspect.js';
+import { initModalDragging }                    from './ui/draggable.js';
+
 
 // ─── Load HTML partials ───────────────────────────────────────────────────────
 
@@ -69,12 +74,17 @@ function resetLocalState() {
   if (state.particleIntervalId) { clearInterval(state.particleIntervalId); state.particleIntervalId = null; }
   if (dom.board) dom.board.innerHTML = '';
 
+  // Cache vykreslování drží odkazy na prvky, které teď zanikly.
+  resetBoardCache();
+  resetLogCache();
+
   // Zastav pozadí hudbu při návratu do lobby
   audioManager.stopMusic();
 
   dom.introView.classList.remove('hidden');
   dom.lobbyView.classList.add('hidden');
   dom.gameView.classList.add('hidden');
+  showIntroSelection();
 
   // Správně odhlásit ze serveru — handleLeave odstraní hráče z místnosti
   // a server sám rozešle aktualizovaný room:list všem klientům.
@@ -241,6 +251,7 @@ function processState(gameState) {
     } else if (pa && pa.targetId === state.myId && (pa.type === 'wait_roll' || pa.type === 'jail_choice')) {
       // Oznámení, že jsi na tahu
       audioManager.play('bell');
+      autoSwitchToAction();
     }
     state.prevPaJSON = currentPaJSON;
   }
@@ -283,6 +294,8 @@ function processState(gameState) {
   audioManager.init();
   window.confirmDialog = confirmDialog;
   await loadPartials();
+  initMobileTabs();
+  initInspectListeners();
   initDebugPanel();
 
   // Načtení konfigurace (devMode + barvy figurek)
@@ -306,7 +319,9 @@ function processState(gameState) {
   socket.on('room:list', list => renderRoomList(list));
 
   socket.on('room:created', () => {
-    document.getElementById('room-create-form')?.classList.add('hidden');
+    // Formulář schovat a seznam místností vrátit — jinak zůstanou schované
+    // obě části intra a při návratu ze hry je prázdné.
+    showIntroSelection();
   });
 
   socket.on('game:init', ({ roomId, board, colors, state: gameState }) => {
@@ -330,6 +345,8 @@ function processState(gameState) {
     }
   });
 
+  initSettings();
+  initModalDragging();
   initLobbyListeners(resetLocalState);
   socket.emit('room:list');
 })();
