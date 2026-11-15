@@ -1,7 +1,7 @@
 'use strict';
 
 const BOARD = require('../data/boardData');
-const { ACTION_DELAY_MS, fmt } = require('../constants');
+const { ACTION_DELAY_MS, fmt, inflate, inflationFactor, SERVICE_RENT_SINGLE, SERVICE_RENT_PAIR } = require('../constants');
 
 module.exports = {
   _endByTimeLimit() {
@@ -24,14 +24,73 @@ module.exports = {
     this._endGame(isTie ? null : ranking[0].id, 'time_limit');
   },
 
+  // ─── Ceny po inflaci ──────────────────────────────────────────────────────
+
   /**
-   * Cena, za kterou hráč koně skutečně koupí. Přednostní právo z Totalizátoru
+   * Částka, kterou hráč platí, po inflaci z Rulety. Týká se jen PLATEB —
+   * nákup, žetony, nájmy, daně, poplatky a karty „zaplať". Příjmy (START,
+   * výhry z karet) a prodejní ceny zůstávají původní.
+   */
+  _price(amount) {
+    return inflate(amount, this.inflation, this.autoInflation, this.config.inflationRate);
+  },
+
+  /** Kolikrát je všechno dražší než na začátku hry (1 = bez inflace). */
+  _inflationFactor() {
+    return inflationFactor(this.inflation, this.autoInflation, this.config.inflationRate);
+  },
+
+  /**
+   * Automatická inflace z nastavení hostitele: každých `inflationEveryRounds`
+   * kol zdraží všechny platby o `inflationRate` %. Volá se při začátku
+   * nového kola — první zdražení tedy přijde na začátku kola N + 1.
+   */
+  _applyRoundInflation() {
+    const every = this.config.inflationEveryRounds;
+    const rate = this.config.inflationRate;
+    if (!(every > 0) || !(rate > 0) || this.round <= 1 || (this.round - 1) % every !== 0) return;
+    this.autoInflation++;
+    const total = Math.round((this._inflationFactor() - 1) * 100);
+    this._addLog(`📈 Inflace — začíná ${this.round}. kolo! Všechno zdražuje o ${rate} % (od začátku hry +${total} %).`);
+  },
+
+  _tokenCost(spaceId, big) {
+    const space = BOARD[spaceId];
+    return this._price(big ? space.bigTokenCost : space.tokenCost);
+  },
+
+  _airportFee() {
+    return this._price(this.config.airportFee);
+  },
+
+  _rouletteFee() {
+    return this._price(this.config.rouletteFee);
+  },
+
+  /**
+   * Karta „zaplať" po inflaci — částky i text, aby hráč na kartě četl to,
+   * co mu skutečně odejde. Ostatní karty se vrací beze změny.
+   */
+  _inflateCard(card) {
+    if (this._inflationFactor() === 1 || (card.type !== 'pay' && card.type !== 'pay_per_token_custom')) return card;
+    const dots = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const out = { ...card };
+    for (const key of ['amount', 'small', 'big']) {
+      if (!(card[key] > 0)) continue;
+      out[key] = this._price(card[key]);
+      if (out.text) out.text = out.text.replace(`${dots(card[key])} Kč`, `${dots(out[key])} Kč`);
+    }
+    return out;
+  },
+
+  /**
+   * Cena, za kterou hráč koně skutečně koupí. Přednostní právo z Rulety
    * ji půlí. Příznak se tady NESPOTŘEBUJE — dotaz na cenu se dělá i při
    * kontrole, jestli na koně hráč vůbec má.
    */
   _effectiveBuyPrice(pid, spaceId) {
     const player = this.players.get(pid);
-    const price = BOARD[spaceId].price;
+    const price = this._price(BOARD[spaceId].price);
     if (player && player.halfPriceNext) return Math.floor(price / 2);
     return price;
   },
@@ -42,7 +101,7 @@ module.exports = {
     const price = priceOverride !== null ? priceOverride : this._effectiveBuyPrice(pid, spaceId);
 
     // Příznak spotřebuj jen tehdy, když kůň SKUTEČNĚ mění majitele —
-    // a jen u běžného nákupu. Dražba má vlastní cenu a právo nespotřebuje.
+    // a jen u běžného nákupu. Nákup za vlastní cenu (priceOverride) právo nespotřebuje.
     if (priceOverride === null && player.halfPriceNext) {
       player.halfPriceNext = false;
       this._addLog(`🎟️ ${player.name} uplatnil(a) přednostní právo — poloviční cena.`);
@@ -77,7 +136,7 @@ module.exports = {
     const space = BOARD[spaceId];
     if (this.ownerships[spaceId] !== pid) return;
 
-    const addedValue = Math.floor(space.price / 2) + this._calcTokenSellValue(spaceId);
+    const addedValue = this._bankSaleValue(space.price) + this._calcTokenSellValue(spaceId);
     if (this.tokens[spaceId]) delete this.tokens[spaceId];
 
     p.balance += addedValue;
@@ -122,11 +181,11 @@ module.exports = {
         const count = ownerPlayer.properties.filter(
           sid => BOARD[sid].serviceType === 'trener'
         ).length;
-        return count * 1000;
+        return this._price(count * 1000);
       }
       const hasPreprava = ownerPlayer.properties.some(sid => BOARD[sid].serviceType === 'preprava');
       const hasStaje = ownerPlayer.properties.some(sid => BOARD[sid].serviceType === 'staje');
-      return (hasPreprava && hasStaje ? 200 : 80) * dice;
+      return this._price((hasPreprava && hasStaje ? SERVICE_RENT_PAIR : SERVICE_RENT_SINGLE) * dice);
     }
 
     // horse
@@ -140,17 +199,15 @@ module.exports = {
         this._addLog(`ℹ️ Majitel ${ownerPlayer.name} je v Distancu — žetony nefungují!`);
       } else if (ownerPlayer.skipTurns > 0) {
         this._addLog(`ℹ️ Majitel ${ownerPlayer.name} je pod podezřením z dopingu — žetony nefungují!`);
-      } else if (ownerPlayer.tokenStrike > 0) {
-        this._addLog(`ℹ️ Ve stáji ${ownerPlayer.name} je stávka — žetony nefungují!`);
       } else if (!hasMonopoly) {
         this._addLog(`ℹ️ Majitel ${ownerPlayer.name} nemá celou stáj — žetony nefungují!`);
       } else {
-        if (tok.big) return space.rents[5];
-        return space.rents[tok.small];
+        if (tok.big) return this._price(space.rents[5]);
+        return this._price(space.rents[tok.small]);
       }
     }
 
-    return baseRent;
+    return this._price(baseRent);
   },
 
   _transfer(fromId, toId, amount) {
@@ -186,7 +243,7 @@ module.exports = {
     if (!p) return 0;
     return p.properties.reduce((sum, spId) => {
       const space = BOARD[spId];
-      const sellVal = Math.floor(space.price / 2) + this._calcTokenSellValue(spId);
+      const sellVal = this._bankSaleValue(space.price) + this._calcTokenSellValue(spId);
       return sum + sellVal;
     }, 0);
   },
@@ -202,8 +259,8 @@ module.exports = {
     }
 
     if (player.balance >= buyoutCost) {
-      this._setPendingAction({ type: 'buyout_offer', targetId: pid, data: { spaceId, buyoutCost } });
-      this._broadcast();
+      // Na odkup je jen krátké okno (DECISION_WINDOW_MS) — pak propadá.
+      this._setTimedPendingAction('buyout_offer', pid, { spaceId, buyoutCost });
     } else {
       this._offerTokensOrEnd(pid);
     }
@@ -230,6 +287,16 @@ module.exports = {
     });
     player.properties = [];
     this._cancelStaleTradeOffers(soldHorses);
+    if (player.jailFreeCards > 0) {
+      player.jailFreeCards = 0;
+      this.nahodaCards.returnCard('jail_free_card');
+      this._addLog(`🃏 Karta „Zrušen distanc" hráče ${player.name} se vrací do balíčku.`);
+    }
+    if (player.rerollCards > 0) {
+      player.rerollCards = 0;
+      this.nahodaCards.returnCard('reroll_card');
+      this._addLog(`🃏 Karta „Opakovaný hod" hráče ${player.name} se vrací do balíčku.`);
+    }
     
     // Zrušit VŠECHNY nabídky obchodu spojené s tímto hráčem
     const playerOffers = this.tradeOffers.filter(o => o.fromId === pid || o.targetId === pid);
@@ -248,6 +315,10 @@ module.exports = {
   _removeFromTurnOrder(pid) {
     const idx = this.turnOrder.indexOf(pid);
     if (idx !== -1) {
+      // Vypadl první hráč v pořadí přímo na svém tahu: ukazatel níž skočí na
+      // posledního a další tah „přeteče" na začátek pořadí — kolo tím ale
+      // nekončí, ostatní v něm ještě nehráli. `_advanceTurn` pak kolo nepřičte.
+      if (idx === 0 && idx === this.currentTurnIdx) this._keepRoundOnNextAdvance = true;
       this.turnOrder.splice(idx, 1);
       if (idx <= this.currentTurnIdx) {
         this.currentTurnIdx--;

@@ -1,4 +1,4 @@
-import { makeEl, prefersReducedMotion } from '../utils.js';
+import { makeEl, prefersReducedMotion, uiIcon, imgIcon } from '../utils.js';
 import { isEffectEnabled } from '../settings.js';
 import { state } from '../state.js';
 
@@ -28,12 +28,20 @@ export function generateParticles() {
   }, 250);
 }
 
-export function spawnFloatingText(spaceId, text, color) {
+// icon: volitelná ikonka před textem
+export function spawnFloatingText(spaceId, text, color, icon = null) {
   const space = document.querySelector(`#board .space[data-id="${spaceId}"]`);
   if (!space) return;
   const rect = space.getBoundingClientRect();
+  spawnFloatingTextAt(rect.left + rect.width / 2, rect.top + rect.height / 2, text, color, icon);
+}
+
+/** Plovoucí text na bodu obrazovky (3D plán nemá políčka v DOM). */
+export function spawnFloatingTextAt(x, y, text, color, icon = null) {
   const el = makeEl('div', 'floating-text', text);
-  el.style.cssText = `left:${rect.left + rect.width / 2}px;top:${rect.top + rect.height / 2}px;color:${color}`;
+  // icon: jméno ikonky UI (img/ui/) nebo cesta k obrázku (obsahuje '/')
+  if (icon) el.prepend(icon.includes('/') ? imgIcon(icon, true) : uiIcon(icon, true));
+  el.style.cssText = `left:${x}px;top:${y}px;color:${color}`;
   document.body.appendChild(el);
   setTimeout(() => { if (el.parentNode) el.remove(); }, 1200);
 }

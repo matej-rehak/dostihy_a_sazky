@@ -285,6 +285,36 @@ test('protinabídka mířená na bota ho také probudí', (t) => {
     'protinabídka pro bota musí naplánovat _botAct');
 });
 
+test('bot přijme výhodnou nabídku a obchod v enginu proběhne', (t) => {
+  const engine = makeEngine(t);
+  engine.addPlayer(humanSocket('h1'), 'Matej', null);
+  engine.addBot();
+  const bot = [...engine.players.values()].find(p => p.isBot);
+
+  engine.phase = 'playing';
+  engine.turnOrder = ['h1', bot.id];
+  engine.currentTurnIdx = 0;
+  engine.ownerships[6] = bot.id;
+  bot.properties = [6];
+  const human = engine.players.get('h1');
+  const humanBefore = human.balance;
+  const botBefore = bot.balance;
+  engine.pendingAction = { type: 'wait_roll', targetId: 'h1' };
+
+  engine.initiateTrade(humanSocket('h1'), {
+    targetId: bot.id,
+    offer: { horses: [], money: 3000 },
+    request: { horses: [6], money: 0 },
+  });
+  engine._clearBotTimers();
+  engine._botAct(bot.id);
+
+  assert.equal(engine.ownerships[6], 'h1');
+  assert.equal(human.balance, humanBefore - 3000);
+  assert.equal(bot.balance, botBefore + 3000);
+  assert.equal(engine.tradeOffers.length, 0);
+});
+
 // ─── Regrese finding 5: výjimka v _botAct nesmí shodit proces ────────────────
 
 test('výjimka uvnitř _botAct je zachycena a bota trvale nezasekne', (t) => {

@@ -2,6 +2,7 @@
 
 const { FinanceDeck, NahodaDeck } = require('./Cards');
 const { PLAYER_COLORS } = require('./constants');
+const { defaultConfig } = require('./gameSettings');
 
 const DebugMixin    = require('./mixins/debug');
 const LobbyMixin    = require('./mixins/lobby');
@@ -15,6 +16,8 @@ const StateMixin    = require('./mixins/state');
 const TradeMixin    = require('./mixins/trade');
 const BotsMixin     = require('./mixins/bots');
 const RouletteMixin = require('./mixins/roulette');
+const DiceBetMixin  = require('./mixins/diceBet');
+const RerollMixin   = require('./mixins/reroll');
 
 class GameEngine {
   constructor(io, roomId) {
@@ -31,9 +34,11 @@ class GameEngine {
     this.lastPawnMove = null;
     this.log = [];
     this.round = 1;
+    this.inflation = 0;          // úroveň inflace z Rulety (viz inflate v constants.js)
+    this.autoInflation = 0;      // úroveň automatické inflace každých N kol (config.inflationEveryRounds)
     this.financeCards = FinanceDeck();
     this.nahodaCards = NahodaDeck();
-    this.config = { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', airportFee: 2000, field30Mode: 'doping' };
+    this.config = defaultConfig(); // schéma a výchozí hodnoty: src/gameSettings.js
     this.timeLimitEndsAt = null;
     this.timeLimitExpired = false;
     this.gameStartTime = null;
@@ -82,6 +87,8 @@ Object.assign(GameEngine.prototype,
   TradeMixin,    // initiateTrade
   BotsMixin,     // addBot, removeBot, _notifyBots, _botAct
   DebugMixin,    // handleDebugSetState
+  DiceBetMixin,  // _takeDiceBet, _resolveDiceBet — sázka na vlastní hod
+  RerollMixin,   // _offerReroll, _handleRerollOffer — karta „Opakovaný hod"
 );
 
 module.exports = GameEngine;

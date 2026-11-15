@@ -1,4 +1,4 @@
-import { makeEl, safeColor, prefersReducedMotion } from '../utils.js';
+import { makeEl, safeColor, prefersReducedMotion, imgIcon } from '../utils.js';
 import { audioManager } from '../audio.js';
 import { isEffectEnabled } from '../settings.js';
 import {
@@ -56,7 +56,7 @@ export function runStarterAnimation(winnerId, players) {
 
     const winner = players.find(pl => pl.id === winnerId);
     flicker.classList.add('hidden');
-    winnerEl.textContent = `🏁 ${winner?.name ?? '?'} ZAČÍNÁ!`;
+    winnerEl.replaceChildren(imgIcon('img/start.png', true), `${winner?.name ?? '?'} ZAČÍNÁ!`);
     winnerEl.style.color = safeColor(winner?.color ?? '#fff');
     winnerEl.classList.remove('hidden');
     winnerEl.classList.add('winning-gold');

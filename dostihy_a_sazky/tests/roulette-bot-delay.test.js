@@ -8,7 +8,7 @@ const Bot = require('../src/Bot');
 const { ROULETTE_BOT_ACK_DELAY_MS } = require('../src/constants');
 
 /**
- * Kolo Totalizátoru točí ten, kdo stojí na poli 30, ale dívají se na něj
+ * Kolo Rulety točí ten, kdo stojí na poli 30, ale dívají se na něj
  * všichni. Potvrzení změní `pendingAction`, a klienti diváků podle toho
  * overlay schovají — takže když točí bot, nesmí potvrdit dřív, než kolo dojede.
  * Načasování drží server, stejně jako u `SIX_REROLL_DELAY_MS`.
@@ -19,13 +19,14 @@ function makeEngine() {
   engine._broadcast = () => {};
   engine.phase = 'playing';
   engine.config.field30Mode = 'roulette';
+  engine.config.rouletteFee = 0;   // točí se hned, bez volby zaplatit
 
   engine.players.set('BOT', {
     id: 'BOT', socketId: null, name: 'Robot Karel', color: '#fff', isHost: false,
     isBot: true, position: 0, balance: 30000, bankrupt: false, inJail: false,
     jailTurns: 0, skipTurns: 0, properties: [], rollAccumulator: 0, moveDirection: 1,
     jailFreeCards: 0, ready: true, disconnected: false, canFly: false,
-    pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
+    pendingBet: null, halfPriceNext: false,
   });
   engine.turnOrder = ['BOT'];
   engine.currentTurnIdx = 0;
@@ -54,7 +55,7 @@ test('prodleva bota na roulette_ack pokryje celé točení kola', async () => {
   );
 });
 
-test('bot točící Totalizátorem čeká dýl než běžnou pauzu na přemýšlení', () => {
+test('bot točící Ruletou čeká dýl než běžnou pauzu na přemýšlení', () => {
   const engine = makeEngine();
   engine.pendingAction = { type: 'roulette_ack', targetId: 'BOT', data: { result: { id: 'immunity' } } };
 

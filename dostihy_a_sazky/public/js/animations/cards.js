@@ -41,6 +41,17 @@ export function showCardOverlay(label, text, isTargeted, onConfirm) {
 
   overlay.classList.remove('hidden');
   if (titleEl) titleEl.textContent = label;
+
+  // Barva a ikonka balíčku, ze kterého karta je — stejné jako balíček na plánu (.bc-deck)
+  const deck = /finance/i.test(label) ? 'finance' : 'nahoda';
+  cardEl.dataset.deck = deck;
+  for (const id of ['card-3d-icon', 'card-3d-back-icon']) {
+    const img = document.getElementById(id);
+    // Náhoda má na kartě vlastní znak — ikonka políčka je sama kartička a karta na kartě nevypadá dobře
+    if (img) img.src = deck === 'nahoda' ? 'img/nahoda-znak.png' : 'img/finance.png';
+  }
+  const backTitle = document.getElementById('card-3d-back-title');
+  if (backTitle) backTitle.textContent = label.toUpperCase();
   if (textEl)  textEl.textContent  = text;
   if (btn) btn.classList.toggle('hidden', !isTargeted);
 
@@ -97,5 +108,5 @@ export function playBuyAnimation(spaceId, owner) {
 }
 
 export function playTokenAnimation(spaceId, isBig) {
-  spawnFloatingText(spaceId, isBig ? '👑 HLAVNÍ DOSTIH' : '➕ ŽETON', 'var(--gold)');
+  spawnFloatingText(spaceId, isBig ? 'HLAVNÍ DOSTIH' : 'ŽETON', 'var(--gold)', isBig ? 'img/hlavni-dostih.png' : 'img/dostih.png');
 }

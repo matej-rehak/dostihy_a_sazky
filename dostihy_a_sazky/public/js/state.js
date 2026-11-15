@@ -3,6 +3,7 @@ export const state = {
   myId:              null,
   boardData:         null,
   rouletteOutcomes:  [],
+  gameSettings: null,     // schéma nastavení hry z game:init
   gameState:         null,
   boardBuilt:        false,
   clientVisualPos:   {},

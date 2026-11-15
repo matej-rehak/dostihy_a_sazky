@@ -26,6 +26,26 @@ export function makeEl(tag, cls, text) {
   return el;
 }
 
+/** Obrázek jako ikonka (styl .ui-icon); inline = vedle textu v tlačítku. */
+export function imgIcon(src, inline = false) {
+  const img = document.createElement('img');
+  img.className = inline ? 'ui-icon ui-icon-inline' : 'ui-icon';
+  img.src = src;
+  img.alt = '';
+  img.draggable = false;
+  return img;
+}
+
+/** Ikonka UI z public/img/ui/{name}.png. */
+export function uiIcon(name, inline = false) {
+  return imgIcon(`img/ui/${name}.png`, inline);
+}
+
+/** Nahradí obsah prvku ikonkou UI a textem (nadpisy a tlačítka přepisované z JS). */
+export function setIconText(el, name, text) {
+  el.replaceChildren(uiIcon(name, true), text);
+}
+
 // ─── Toast ────────────────────────────────────────────────────────────────────
 let _toastTimer;
 export function showToast(msg, err = false) {

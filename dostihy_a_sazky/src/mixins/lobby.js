@@ -1,7 +1,8 @@
 'use strict';
 
 const { PLAYER_COLORS } = require('../constants');
-const MAX_TIME_LIMIT_MINUTES = 240;
+const { sanitizeConfig } = require('../gameSettings');
+const { shuffle } = require('../random');
 
 module.exports = {
 
@@ -33,12 +34,12 @@ module.exports = {
       id: socket.playerId, socketId: socket.id,
       name, color: finalColor, isHost,
       position: 0, balance: this.config.startBalance,
-      bankrupt: false, inJail: false, jailTurns: 0, skipTurns: 0,
+      bankrupt: false, inJail: false, jailTurns: 0, skipTurns: 0, waitTurns: 0,
       properties: [], rollAccumulator: 0, moveDirection: 1,
-      jailFreeCards: 0, ready: false, disconnected: false,
+      jailFreeCards: 0, rerollCards: 0, ready: false, disconnected: false,
       canFly: false, left: false,
-      // Totalizátor — příznaky visící na hráči přes tahy (vzor `canFly`).
-      pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
+      // Ruleta — příznaky visící na hráči přes tahy (vzor `canFly`).
+      pendingBet: null, halfPriceNext: false, canSpin: false,
     };
     this.players.set(socket.playerId, player);
     this._addLog(`🐎 ${name} se připojil(a) k hře`);
@@ -49,37 +50,9 @@ module.exports = {
     if (this.phase !== 'lobby') return;
     const player = this.players.get(socket.playerId);
     if (!player || !player.isHost) return;
-    const nextConfig = { ...this.config, ...config };
-
-    const startBalance = Number(nextConfig.startBalance);
-    const startBonus = Number(nextConfig.startBonus);
-    const buyoutMultiplier = Number(nextConfig.buyoutMultiplier);
-    const timeLimitMinutes = Number(nextConfig.timeLimitMinutes);
-    const turnTimeLimitSeconds = Number(nextConfig.turnTimeLimitSeconds);
-
-    this.config.startBalance = Number.isFinite(startBalance) ? Math.max(1000, Math.round(startBalance)) : 30000;
-    this.config.startBonus = Number.isFinite(startBonus) ? Math.max(0, Math.round(startBonus)) : 4000;
-    this.config.buyoutMultiplier = Number.isFinite(buyoutMultiplier) ? Math.max(0, buyoutMultiplier) : 0;
-    this.config.timeLimitMinutes = Number.isFinite(timeLimitMinutes)
-      ? Math.max(0, Math.min(MAX_TIME_LIMIT_MINUTES, Math.round(timeLimitMinutes)))
-      : 0;
-    this.config.turnTimeLimitSeconds = Number.isFinite(turnTimeLimitSeconds)
-      ? Math.max(0, Math.min(300, Math.round(turnTimeLimitSeconds)))
-      : 0;
-
-    const field20Mode = nextConfig.field20Mode;
-    this.config.field20Mode = (field20Mode === 'airport' || field20Mode === 'parking')
-      ? field20Mode
-      : 'parking';
-
-    const field30Mode = nextConfig.field30Mode;
-    this.config.field30Mode = (field30Mode === 'roulette' || field30Mode === 'doping')
-      ? field30Mode
-      : 'doping';
-
-    const airportFee = Number(nextConfig.airportFee);
-    this.config.airportFee = Number.isFinite(airportFee) ? Math.max(0, Math.round(airportFee)) : 2000;
-
+    // Validaci (rozsahy, výchozí hodnoty, neplatné vstupy) řídí schéma
+    // v src/gameSettings.js — nové nastavení se přidává tam, ne sem.
+    this.config = sanitizeConfig({ ...this.config, ...(config || {}) });
     this._broadcast();
   },
 
@@ -174,12 +147,7 @@ module.exports = {
     }
     this.players.forEach(p => p.balance = this.config.startBalance);
 
-    const keys = [...this.players.keys()];
-    for (let i = keys.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [keys[i], keys[j]] = [keys[j], keys[i]];
-    }
-    this.turnOrder = keys;
+    this.turnOrder = shuffle([...this.players.keys()]);
     this.currentTurnIdx = 0;
 
     this._setPendingAction({

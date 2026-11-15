@@ -18,11 +18,15 @@
     <div class="card-3d-scene">
       <div id="card-3d" class="card-3d">
         <div class="card-face card-back">
-          <div class="card-back-pattern">🃏</div>
-          <div class="card-back-text">DOSTIHY<br>A SÁZKY</div>
+          <!-- Rub jako balíček na plánu (.bc-deck): barva balíčku + název -->
+          <img class="card-back-icon" id="card-3d-back-icon" src="img/finance.png" alt="" draggable="false" />
+          <div class="card-back-text" id="card-3d-back-title">FINANCE</div>
         </div>
         <div class="card-face card-front">
-          <h3 id="card-3d-title">Finance</h3>
+          <div class="card-front-head">
+            <img class="card-front-icon" id="card-3d-icon" src="img/finance.png" alt="" draggable="false" />
+            <h3 id="card-3d-title">Finance</h3>
+          </div>
           <p id="card-3d-text">Získáváte 1 000 Kč.</p>
           <button id="card-3d-btn" class="btn btn-gold btn-lg" style="margin-top:auto">OK →</button>
         </div>
@@ -34,7 +38,7 @@
   <div id="space-inspect-overlay" class="space-inspect-overlay hidden">
     <div class="space-inspect-backdrop" id="space-inspect-backdrop"></div>
     <div class="space-inspect-content">
-      <button class="space-inspect-close" id="space-inspect-close">✖</button>
+      <button class="space-inspect-close" id="space-inspect-close" aria-label="Zavřít"><img class="ui-icon" src="img/ui/zavrit.png" alt="" draggable="false" /></button>
       <!-- Detail nemá záhlaví (to je až uvnitř otáčecí karty), proto vlastní
            úchyt pro posouvání. Tahat za kartu nejde — kliká se a otáčí. -->
       <div class="space-inspect-grip" id="space-inspect-grip" aria-hidden="true"></div>
@@ -43,19 +47,19 @@
           <!-- Front Face -->
           <div class="space-inspect-face space-inspect-front">
             <div class="space-inspect-header" id="space-inspect-header">
-              <div class="space-inspect-badge" id="space-inspect-owner-badge"></div>
-              <div class="space-inspect-name" id="space-inspect-name">NAPOLI</div>
+              <div class="space-inspect-name" id="space-inspect-name"></div>
             </div>
+            <div class="space-inspect-media" id="space-inspect-icon"></div>
             <div class="space-inspect-body">
-              <div class="space-inspect-icon" id="space-inspect-icon">🐴</div>
               <div class="space-inspect-rents" id="space-inspect-rents"></div>
-              <div class="space-inspect-prices" id="space-inspect-prices"></div>
+              <div class="inspect-prices" id="space-inspect-prices"></div>
             </div>
+            <div class="tip-owner-info hidden" id="space-inspect-owner"></div>
           </div>
           <!-- Back Face -->
           <div class="space-inspect-face space-inspect-back">
             <div class="space-inspect-back-inner">
-              <div class="space-inspect-back-pattern">🏇</div>
+              <div class="space-inspect-back-pattern"><img class="ui-icon" src="img/logo.png" alt="" draggable="false" /></div>
               <div class="space-inspect-back-title">DOSTIHY A SÁZKY</div>
               <div class="space-inspect-back-desc" id="space-inspect-desc"></div>
               <div class="space-inspect-back-vintage">Edice 1984</div>
@@ -63,34 +67,78 @@
           </div>
         </div>
       </div>
-      <button class="btn btn-gold btn-lg" id="space-inspect-flip-btn" style="margin-top: 18px; z-index: 10;">🔄 Otočit kartu</button>
+      <button class="btn btn-gold btn-lg" id="space-inspect-flip-btn" style="margin-top: 18px; z-index: 10;"><img class="ui-icon ui-icon-inline" src="img/ui/otocit.png" alt="" draggable="false" />Otočit kartu</button>
     </div>
   </div>
 
-  <!-- Totalizátor -->
+  <!-- Ruleta -->
   <div id="roulette-overlay" class="roulette-overlay hidden">
     <div class="roulette-scene">
-      <h2 class="roulette-title">Totalizátor</h2>
+      <header class="roulette-head">
+        <h2 class="roulette-title">Ruleta</h2>
+        <div id="roulette-who" class="roulette-who"></div>
+        <!-- Šance skupin dopočítává JS z vah výsečí. -->
+        <div id="roulette-odds" class="roulette-odds"></div>
+      </header>
       <div class="roulette-wheel-wrap">
-        <div class="roulette-pointer" aria-hidden="true"></div>
-        <div id="roulette-wheel" class="roulette-wheel"></div>
+        <!-- Ručička: kapka mířící dolů na ráfek, při točení ťuká o kolíky. -->
+        <svg id="roulette-pointer" class="roulette-pointer" viewBox="0 0 30 40" aria-hidden="true">
+          <path d="M15 39 L3 14 A13 13 0 1 1 27 14 Z" />
+          <circle cx="15" cy="13" r="4.5" />
+        </svg>
+        <!-- Kolo kreslí JS jako SVG; pro odečítač je to šum, závazný
+             výsledek nese .roulette-result pod kolem. -->
+        <div id="roulette-wheel" class="roulette-wheel" aria-hidden="true"></div>
+        <!-- Lesk a náboj stojí, kolo se točí pod nimi — světlo tak nepadá
+             pokaždé odjinud. -->
+        <div class="roulette-sheen" aria-hidden="true"></div>
+        <div class="roulette-hub" aria-hidden="true"><img src="img/ruleta.png" alt="" draggable="false" /></div>
       </div>
-      <div class="roulette-result">
+      <div id="roulette-result" class="roulette-result" data-state="spinning" aria-live="polite">
         <div id="roulette-result-icon" class="roulette-result-icon"></div>
         <div id="roulette-result-name" class="roulette-result-name"></div>
         <div id="roulette-result-text" class="roulette-result-text"></div>
       </div>
-      <button id="roulette-btn" class="btn btn-gold btn-lg hidden">Potvrdit</button>
+      <!-- Patička drží místo i během točení, aby karta po dojetí neposkočila. -->
+      <div class="roulette-foot">
+        <button id="roulette-btn" class="btn btn-gold btn-lg is-hidden">Potvrdit</button>
+        <div id="roulette-status" class="roulette-status is-hidden"></div>
+      </div>
     </div>
   </div>
 
   <!-- Tooltip -->
   <div id="space-tip" class="space-tip hidden"></div>
 
+  <!-- Vyjednávání: „X pro tebe skládá nabídku…" (ui/tradeNotice.js) -->
+  <div id="trade-drafting-banner" class="trade-drafting-banner hidden" role="status" aria-live="polite"></div>
+
   <!-- Toast error -->
   <div id="toast" class="toast hidden"></div>
 
   <!-- Custom Confirm Modal -->
+  <!-- Sázka na vlastní hod (volitelné pravidlo) — ui/diceBet.js -->
+  <div id="dicebet-overlay" class="overlays-bg hidden" style="z-index: 10004;">
+    <div class="dice-bet-modal modal-card">
+      <div class="modal-header">
+        <h2><img class="ui-icon ui-icon-inline" src="img/ui/kostka.png" alt="" draggable="false" />Sázka na hod</h2>
+        <button class="btn-icon" id="dicebet-close-btn" aria-label="Zavřít"><img class="ui-icon" src="img/ui/zavrit.png" alt="" draggable="false" /></button>
+      </div>
+      <div id="dicebet-content" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Prodej bance (hráč na tahu, před hodem / v Distancu) — ui/actionsBankSale.js -->
+  <div id="bank-overlay" class="overlays-bg hidden" style="z-index: 10004;">
+    <div class="bank-modal modal-card">
+      <div class="modal-header">
+        <h2><img class="ui-icon ui-icon-inline" src="img/ui/koruna.png" alt="" draggable="false" />Prodej bance</h2>
+        <button class="btn-icon" id="bank-close-btn" aria-label="Zavřít"><img class="ui-icon" src="img/ui/zavrit.png" alt="" draggable="false" /></button>
+      </div>
+      <div id="bank-content" class="modal-body"></div>
+    </div>
+  </div>
+
   <div id="confirm-overlay" class="overlays-bg hidden" style="z-index: 11000;">
     <div class="confirm-modal modal-card">
       <div class="modal-header">
@@ -98,6 +146,8 @@
       </div>
       <div class="modal-body">
         <p id="confirm-message" class="confirm-text"></p>
+        <!-- Políčko jen pro promptDialog() (např. heslo k místnosti) -->
+        <input id="confirm-input" class="text-input confirm-input hidden" autocomplete="off" />
         <div class="confirm-footer">
           <button id="confirm-no" class="btn btn-outline">Zrušit</button>
           <button id="confirm-yes" class="btn btn-gold">Potvrdit</button>

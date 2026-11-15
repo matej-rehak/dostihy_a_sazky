@@ -1,4 +1,4 @@
-import { makeEl, fmt, safeColor } from '../utils.js';
+import { makeEl, fmt, safeColor, setIconText } from '../utils.js';
 import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { socket } from '../socket.js';
@@ -171,7 +171,8 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
   // Incoming trade offers count
   const myOffers = gameState.tradeOffers?.filter(o => o.targetId === state.myId || o.fromId === state.myId || o.targetId === null) || [];
   if (myOffers.length > 0) {
-    const offerBtn = makeEl('button', 'btn btn-gold', `📩 Obchodní nabídky (${myOffers.length})`);
+    const offerBtn = makeEl('button', 'btn btn-gold');
+    setIconText(offerBtn, 'nabidka', `Obchodní nabídky (${myOffers.length})`);
     offerBtn.onclick = () => {
       // Zavřeme dluhový modal a otevřeme nabídku — X vrátí zpět do dluhu
       dom.debtOverlay.classList.add('hidden');
@@ -184,7 +185,8 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
 
   const others = gameState.players.filter(p => p.id !== state.myId && !p.bankrupt);
   if (others.length > 0) {
-    const tradeBtn = makeEl('button', 'btn btn-outline', '🤝 Vyjednat obchod');
+    const tradeBtn = makeEl('button', 'btn btn-outline');
+    setIconText(tradeBtn, 'obchod', 'Vyjednat obchod');
     tradeBtn.onclick = () => {
       dom.debtOverlay.classList.add('hidden');
       setTradeDraft({ targetId: others[0].id, offer: { horses: [], money: 0 }, request: { horses: [], money: 0 }, context: 'debt_manage' });
@@ -211,10 +213,11 @@ export function renderDebtModal(isTargeted, targetPlayer, gameState, me) {
   };
   rightBtns.appendChild(confirmBtn);
 
-  const bankruptBtn = makeEl('button', 'btn btn-red', 'Vyhlásit bankrot 💀');
+  const bankruptBtn = makeEl('button', 'btn btn-red');
+  setIconText(bankruptBtn, 'bankrot', 'Vyhlásit bankrot');
   bankruptBtn.onclick = async () => {
     if (await confirmDialog('Opravdu chcete vyhlásit bankrot? Tato akce vás vyřadí ze hry.')) {
-      audioManager.play('gameover');
+      // Zvuk bankrotu zahraje main.js, až dorazí stav (počet bankrotů vzroste).
       socket.emit('game:respond', { decision: 'declare_bankrupt' });
       selectedIds = [];
       dom.debtOverlay.classList.add('hidden');

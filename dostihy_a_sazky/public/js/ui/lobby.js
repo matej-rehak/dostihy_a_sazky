@@ -1,8 +1,9 @@
-import { makeEl, fmt, safeColor, isSafeColor, showToast } from '../utils.js';
+import { makeEl, safeColor, isSafeColor, showToast, uiIcon, setIconText } from '../utils.js';
 import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { socket } from '../socket.js';
-import { confirmDialog } from './confirm.js';
+import { confirmDialog, promptDialog } from './confirm.js';
+import { renderSettingsForm, renderSettingsSummary } from './lobbySettings.js';
 
 export function renderLobby(gameState, me) {
   dom.lobbyView.classList.remove('hidden');
@@ -23,6 +24,8 @@ export function renderLobby(gameState, me) {
     dom.joinForm?.classList.remove('hidden');
     dom.joinedWait?.classList.add('hidden');
     dom.hostControls?.classList.add('hidden');
+    document.getElementById('gs-summary-wrap')?.classList.add('hidden');
+    dom.lobbyView.querySelector('.lobby-card')?.classList.remove('has-settings');
   }
 
   if (state.allColors.length > 0) {
@@ -45,7 +48,8 @@ function renderPlayerList(players, me) {
     const row    = makeEl('div', 'lp-row');
     const avatar = makeEl('div', 'lp-avatar');
     avatar.style.background = safeColor(p.color);
-    avatar.textContent = p.isBot ? '🤖' : p.name[0].toUpperCase();
+    if (p.isBot) avatar.appendChild(uiIcon('bot'));
+    else avatar.textContent = p.name[0].toUpperCase();
     row.appendChild(avatar);
     row.appendChild(makeEl('span', 'lp-name', p.name));
     if (p.isHost) row.appendChild(makeEl('span', 'lp-host', 'HOST'));
@@ -54,8 +58,10 @@ function renderPlayerList(players, me) {
     row.appendChild(makeEl('div', `lp-ready-dot${p.ready ? ' is-ready' : ''}`));
 
     if (p.isBot && me?.isHost) {
-      const remove = makeEl('button', 'btn btn-outline btn-xs', '✖');
+      const remove = makeEl('button', 'btn btn-outline btn-xs');
+      remove.appendChild(uiIcon('zavrit'));
       remove.title = `Odebrat ${p.name}`;
+      remove.setAttribute('aria-label', `Odebrat ${p.name}`);
       remove.addEventListener('click', () => socket.emit('game:remove_bot', { botId: p.id }));
       row.appendChild(remove);
     }
@@ -66,48 +72,20 @@ function renderPlayerList(players, me) {
 
 function renderHostControls(gameState, me) {
   const card = dom.lobbyView.querySelector('.lobby-card');
+  const summaryWrap = document.getElementById('gs-summary-wrap');
+  // Hostitel i ostatní mají široké lobby se dvěma sloupci: vlevo hráči,
+  // vpravo nastavení (hostitel ho upravuje, ostatní ho jen čtou).
+  if (card) card.classList.add('has-settings');
   if (!me.isHost) {
-    if (card) card.classList.remove('is-host');
     dom.hostControls?.classList.add('hidden');
-    const balDisp = document.getElementById('cfg-bal-disp');
-    if (balDisp) {
-      balDisp.classList.remove('hidden');
-      const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', field30Mode: 'doping', airportFee: 2000 };
-      const field20Label = c.field20Mode === 'airport' ? `Letiště (${fmt(c.airportFee)} Kč)` : 'Parkoviště';
-      const field30Label = c.field30Mode === 'roulette' ? 'Totalizátor' : 'Podezření z dopingu';
-      balDisp.textContent = '';
-      balDisp.appendChild(document.createTextNode('Pravidla hostitele: '));
-      balDisp.appendChild(makeEl('strong', '', `Kapitál ${fmt(c.startBalance)} Kč`));
-      balDisp.appendChild(document.createTextNode(
-        `, Průchod START: ${fmt(c.startBonus)} Kč, Odkup koní: ${c.buyoutMultiplier > 0 ? c.buyoutMultiplier + 'x' : 'Vypnuto'}, Čas: ${c.timeLimitMinutes > 0 ? c.timeLimitMinutes + ' min' : 'Bez limitu'}, Tah: ${c.turnTimeLimitSeconds > 0 ? c.turnTimeLimitSeconds + ' s' : 'Bez limitu'}, Pole 20: ${field20Label}, Pole 30: ${field30Label}`
-      ));
-    }
+    summaryWrap?.classList.remove('hidden');
+    renderSettingsSummary(document.getElementById('gs-summary'), state.gameSettings, gameState.config);
     return;
   }
 
-  if (card) card.classList.add('is-host');
   dom.hostControls?.classList.remove('hidden');
-  document.getElementById('cfg-bal-disp')?.classList.add('hidden');
-
-  const c = gameState.config || { startBalance: 30000, startBonus: 4000, buyoutMultiplier: 0, timeLimitMinutes: 0, turnTimeLimitSeconds: 0, field20Mode: 'parking', field30Mode: 'doping', airportFee: 2000 };
-  const cfgBal = document.getElementById('cfg-startBal');
-  const cfgBon = document.getElementById('cfg-startBon');
-  const cfgBuy = document.getElementById('cfg-buyout');
-  const cfgTime = document.getElementById('cfg-timeLimit');
-  const cfgTurnTime = document.getElementById('cfg-turnTimeLimit');
-  const cfgField20 = document.getElementById('cfg-field20Mode');
-  const cfgField30 = document.getElementById('cfg-field30Mode');
-  const cfgFee = document.getElementById('cfg-airportFee');
-  const cfgFeeRow = document.getElementById('cfg-airportFee-row');
-  if (cfgBal && document.activeElement !== cfgBal) cfgBal.value = c.startBalance;
-  if (cfgBon && document.activeElement !== cfgBon) cfgBon.value = c.startBonus;
-  if (cfgBuy && document.activeElement !== cfgBuy) cfgBuy.value = c.buyoutMultiplier;
-  if (cfgTime && document.activeElement !== cfgTime) cfgTime.value = c.timeLimitMinutes ?? 0;
-  if (cfgTurnTime && document.activeElement !== cfgTurnTime) cfgTurnTime.value = c.turnTimeLimitSeconds ?? 0;
-  if (cfgField20 && document.activeElement !== cfgField20) cfgField20.value = c.field20Mode ?? 'parking';
-  if (cfgField30 && document.activeElement !== cfgField30) cfgField30.value = c.field30Mode ?? 'doping';
-  if (cfgFee && document.activeElement !== cfgFee) cfgFee.value = c.airportFee ?? 2000;
-  if (cfgFeeRow) cfgFeeRow.classList.toggle('hidden', c.field20Mode !== 'airport');
+  summaryWrap?.classList.add('hidden');
+  renderSettingsForm(document.getElementById('gs-form'), state.gameSettings, gameState.config);
 
   const allReady = gameState.players.every(p => p.ready);
   if (dom.startBtn) {
@@ -141,17 +119,28 @@ export function renderRoomList(list) {
 
     const meta      = makeEl('div', 'room-meta');
     const statusCls = r.phase === 'lobby' ? 'status-lobby' : 'status-playing';
-    meta.appendChild(makeEl('span', '', `👥 ${r.players}/6`));
+    const count = makeEl('span');
+    setIconText(count, 'hraci', `${r.players}/6`);
+    meta.appendChild(count);
     meta.appendChild(makeEl('span', `room-status ${statusCls}`, r.phase === 'lobby' ? 'Lobby' : 'Probíhá'));
-    if (r.hasPassword) meta.appendChild(makeEl('span', '', '🔒 Heslo'));
+    if (r.hasPassword) {
+      const pw = makeEl('span');
+      setIconText(pw, 'zamek', 'Heslo');
+      meta.appendChild(pw);
+    }
     main.appendChild(meta);
 
     item.appendChild(main);
     item.appendChild(makeEl('div', 'room-join-btn', 'Vstoupit →'));
-    item.addEventListener('click', () => {
+    item.addEventListener('click', async () => {
       let password = '';
       if (r.hasPassword) {
-        password = prompt('Zadejte heslo k místnosti:');
+        password = await promptDialog(`Místnost „${r.name}" je chráněná heslem.`, {
+          title: 'Heslo k místnosti',
+          type: 'password',
+          placeholder: 'Zadejte heslo...',
+          confirmLabel: 'Vstoupit',
+        });
         if (password === null) return;
       }
       socket.emit('room:join', { roomId: r.id, password });
@@ -207,22 +196,6 @@ export function showIntroSelection() {
 }
 
 export function initLobbyListeners(onLeave) {
-  // Config inputs (host)
-  ['cfg-startBal', 'cfg-startBon', 'cfg-buyout', 'cfg-timeLimit', 'cfg-turnTimeLimit', 'cfg-field20Mode', 'cfg-field30Mode', 'cfg-airportFee'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', () => {
-      socket.emit('game:update_config', {
-        startBalance:      Number(document.getElementById('cfg-startBal')?.value ?? 30000),
-        startBonus:        Number(document.getElementById('cfg-startBon')?.value ?? 4000),
-        buyoutMultiplier:  Number(document.getElementById('cfg-buyout')?.value   ?? 0),
-        timeLimitMinutes:  Number(document.getElementById('cfg-timeLimit')?.value ?? 0),
-        turnTimeLimitSeconds: Number(document.getElementById('cfg-turnTimeLimit')?.value ?? 0),
-        field20Mode:       document.getElementById('cfg-field20Mode')?.value ?? 'parking',
-        field30Mode:       document.getElementById('cfg-field30Mode')?.value ?? 'doping',
-        airportFee:        Number(document.getElementById('cfg-airportFee')?.value ?? 2000),
-      });
-    });
-  });
-
   // Intro — tvorba místnosti
   const roomSelection  = document.getElementById('room-selection');
   const roomCreateForm = document.getElementById('room-create-form');

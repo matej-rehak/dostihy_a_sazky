@@ -12,6 +12,7 @@ export function initSettings() {
   catch (err) { /* privátní okno nebo zakázané úložiště */ }
 
   settings = parseSettings(raw);
+  applyLayoutSettings();
   syncSettingsUi();
 }
 
@@ -36,8 +37,14 @@ export function getSettings() {
 export function setEffectEnabled(key, enabled) {
   if (!SETTING_KEYS.includes(key)) return;
   settings = mergeSettings({ ...settings, [key]: Boolean(enabled) });
+  applyLayoutSettings();
   try { localStorage.setItem(STORAGE_KEY, serializeSettings(settings)); }
   catch (err) { /* neuložíme, ale v rámci session to platí */ }
+}
+
+/** Nastavení, která mění rozložení stránky (ne efekty) — promítne je do DOM. */
+export function applyLayoutSettings() {
+  document.body.classList.toggle('hide-log', !settings.showLog);
 }
 
 /** Srovná zaškrtávátka v panelu nastavení s načteným stavem. */

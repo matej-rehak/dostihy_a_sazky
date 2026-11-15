@@ -1,6 +1,7 @@
 'use strict';
 
 const { ACTION_DELAY_MS, fmt } = require('../constants');
+const { shortId } = require('../random');
 
 module.exports = {
 
@@ -11,6 +12,11 @@ module.exports = {
 
     // Iniciátor nesmí odpovídat na vlastní nabídku (zabrání samo-akceptaci protinabídky)
     if (offerData.fromId === pid) return;
+
+    // Zbankrotovaný hráč může zůstat připojený, ale už nehraje — jinak by
+    // přijal veřejnou nabídku a kůň by skončil mimo hru. Nabídka zůstává ostatním.
+    const responder = this.players.get(pid);
+    if (!responder || responder.bankrupt) return;
 
     // Cílená nabídka: jen určený příjemce; veřejná nabídka (targetId === null): kdokoli kromě iniciátora
     if (offerData.targetId !== null && offerData.targetId !== pid) return;
@@ -34,6 +40,8 @@ module.exports = {
       const cRequestHorses = Array.isArray(clientRequest.horses) ? clientRequest.horses.map(Number) : [];
       const cOfferMoney    = Math.max(0, Number(clientOffer.money)   || 0);
       const cRequestMoney  = Math.max(0, Number(clientRequest.money) || 0);
+      const cOfferJailCard   = clientOffer.jailCard === true;
+      const cRequestJailCard = clientRequest.jailCard === true;
 
       let valid = true;
       for (const sid of cOfferHorses) {
@@ -45,18 +53,20 @@ module.exports = {
         }
       }
       if (valid && cOfferMoney > 0 && target && target.balance < cOfferMoney) valid = false;
+      if (valid && cOfferJailCard && !(target?.jailFreeCards > 0)) valid = false;
+      if (valid && cRequestJailCard && !(initiator?.jailFreeCards > 0)) valid = false;
 
       if (valid) {
         this._addLog(`🔄 ${target?.name ?? '?'} posílá protinabídku hráči ${initiator?.name ?? '?'}...`);
-        const counterOfferId = 'trade_' + Math.random().toString(36).substr(2, 9);
+        const counterOfferId = 'trade_' + shortId();
         const newOffer = {
           id: counterOfferId,
           fromId: pid,
           targetId: fromId,
           fromContext,
           turnPlayerId,
-          offer:   { horses: cOfferHorses,   money: cOfferMoney   },
-          request: { horses: cRequestHorses, money: cRequestMoney },
+          offer:   { horses: cOfferHorses,   money: cOfferMoney,   jailCard: cOfferJailCard   },
+          request: { horses: cRequestHorses, money: cRequestMoney, jailCard: cRequestJailCard },
           timestamp: Date.now()
         };
         // Odstraníme starší nabídku mezi stejnými hráči
@@ -78,6 +88,10 @@ module.exports = {
       } else if (!(fromContext === 'debt_manage' && fromId === turnPlayerId) && offer.money > 0 && initiator.balance < offer.money) {
         this._addLog(`❌ Obchod zrušen — ${initiator.name} nemá dostatek peněz (potřeba ${fmt(offer.money)} Kč, má ${fmt(initiator.balance)} Kč)`);
         decision = 'decline';
+      } else if ((offer.jailCard && !(initiator.jailFreeCards > 0)) || (request.jailCard && !(target.jailFreeCards > 0))) {
+        // Karta mohla být mezitím použita nebo prodána jinému hráči.
+        this._addLog('❌ Obchod zrušen — karta „Zrušen distanc" už není u hráče, který ji nabízel.');
+        decision = 'decline';
       }
     }
 
@@ -96,6 +110,9 @@ module.exports = {
         if (!initiator.properties.includes(sid)) initiator.properties.push(sid);
         this._checkStableCompletion(fromId, sid);
       });
+      // Karta „Zrušen distanc" — v balíčku není, jen mění majitele
+      if (offer.jailCard)   { initiator.jailFreeCards--; target.jailFreeCards++; }
+      if (request.jailCard) { target.jailFreeCards--;    initiator.jailFreeCards++; }
       // Peníze
       initiator.balance -= offer.money;
       initiator.balance += request.money;

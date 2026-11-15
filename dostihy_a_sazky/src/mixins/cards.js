@@ -3,7 +3,43 @@
 const BOARD = require('../data/boardData');
 const { BOARD_SIZE, fmt } = require('../constants');
 
+// Tón karty v přehledu balíčku: příjem / platba či trest / pohyb po plánu.
+const CARD_TONE = {
+  gain: 'good', collect_from_all: 'good', jail_free_card: 'good', reroll_card: 'good',
+  pay: 'bad', pay_per_token_custom: 'bad', go_to_jail: 'bad', skip_turn: 'bad',
+};
+
 module.exports = {
+
+  /**
+   * Karta tak, jak ji hráč uvidí: platby po inflaci, {startBonus} z nastavení
+   * a {space:N} jako název pole podle režimu (Parkoviště / Letiště…).
+   * Používá ji tažení karty i přehled balíčků — texty tak nemůžou rozjet.
+   */
+  _cardView(rawCard) {
+    const card = this._inflateCard({ ...rawCard });
+    if (card.text) {
+      card.text = card.text
+        .replace(/{startBonus}/g, fmt(this.config.startBonus))
+        .replace(/{space:(\d+)}/g, (_, id) => this._spaceName(Number(id)));
+    }
+    return card;
+  },
+
+  /**
+   * Přehled balíčku pro detail pole Finance / Náhoda: každý text jednou
+   * s počtem kusů, tónem a příznakem, že kartu zrovna drží hráč.
+   */
+  _deckOverview(deck) {
+    const byText = new Map();
+    for (const raw of deck.original) {
+      const { text } = this._cardView(raw);
+      const entry = byText.get(text);
+      if (entry) { entry.count++; continue; }
+      byText.set(text, { text, type: raw.type, count: 1, tone: CARD_TONE[raw.type] || 'neutral', held: deck.held.has(raw) });
+    }
+    return [...byText.values()];
+  },
 
   _applyCard(pid, card) {
     const player = this.players.get(pid);
@@ -43,11 +79,16 @@ module.exports = {
         break;
 
       case 'skip_turn':
-        player.skipTurns += card.turns;
+        // Jen zdržení — na rozdíl od Dopingu (skipTurns) žetony dál platí.
+        player.waitTurns = (player.waitTurns || 0) + card.turns;
         break;
 
       case 'jail_free_card':
         player.jailFreeCards++;
+        break;
+
+      case 'reroll_card':
+        player.rerollCards = (player.rerollCards || 0) + 1;
         break;
 
       case 'gain_per_property':

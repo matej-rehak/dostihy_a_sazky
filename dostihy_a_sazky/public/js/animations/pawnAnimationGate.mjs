@@ -17,6 +17,24 @@ export function getPawnStepDelay(distance) {
   return 60;
 }
 
+/**
+ * Zvuk kroku se přehrává jen u běžného tahu. Při dlouhém přesunu (karta,
+ * hod se šestkami přes půl plánu) figurka běží zrychleně a cvakání
+ * na každém poli by splynulo v rachot — tehdy jde potichu.
+ * Hranice sedí s přechodem na rychlejší krok v getPawnStepDelay.
+ */
+export function playsStepSound(distance) {
+  return distance < 12;
+}
+
+/**
+ * Projela figurka při kroku STARTem? Jen směrem dopředu — pozpátku se
+ * bonus za START nevyplácí (kromě pár karet, ty ale jdou teleportem).
+ */
+export function passesStart(next, direction) {
+  return direction !== -1 && next === 0;
+}
+
 /** Počet polí herního plánu. */
 export const BOARD_SPACES = 40;
 

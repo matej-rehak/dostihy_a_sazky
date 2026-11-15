@@ -8,7 +8,9 @@ const { v4: uuidv4 } = require('uuid');
 const GameEngine = require('./src/GameEngine');
 const { generateToken, verifyToken } = require('./src/auth');
 const { PLAYER_COLORS } = require('./src/constants');
+const { shortId } = require('./src/random');
 const { hasHumanPlayers } = require('./src/roomLifecycle');
+const { listImages } = require('./src/imageManifest');
 
 // ─── HTTP + Socket.IO setup ──────────────────────────────────────────────────
 
@@ -18,8 +20,18 @@ const io = new Server(server);
 
 const DEV_MODE = process.env.npm_lifecycle_event === 'dev' || process.env.NODE_ENV === 'development';
 
+// Three.js pro 3D pohled — jen build/ a examples/jsm/ (loadery, OrbitControls)
+app.use('/vendor/three/build', express.static(path.join(__dirname, 'node_modules', 'three', 'build')));
+app.use('/vendor/three/examples/jsm', express.static(path.join(__dirname, 'node_modules', 'three', 'examples', 'jsm')));
+// Obrázky si prohlížeč smí hodinu pamatovat — jinak by je po každém obnovení
+// stránky ověřoval znovu (přes tunel na mobilu pomalé). V dev módu bez cache,
+// ať jsou nově přidané portréty vidět hned.
+const IMG_DIR = path.join(__dirname, 'public', 'img');
+app.use('/img', express.static(IMG_DIR, { maxAge: DEV_MODE ? 0 : '1h' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/config', (_req, res) => res.json({ devMode: DEV_MODE, colors: PLAYER_COLORS }));
+// Seznam obrázků pro přednačtení na klientovi (public/js/imagePreload.js)
+app.get('/api/images', (_req, res) => res.json(listImages(IMG_DIR, 'img')));
 app.get('*', (_req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 );
@@ -54,6 +66,16 @@ function getRoomList() {
     phase: r.engine.phase,
     hasPassword: !!r.password,
   }));
+}
+
+/**
+ * Kolik lidí má právě hru otevřenou (připojené sockety, boti se nepočítají).
+ * Posílá se všem při každém připojení i odpojení — úvodní obrazovka to ukazuje
+ * jako „N hráčů online". setImmediate: při odpojení socket z namespace
+ * zmizí až po obsluze 'disconnect'.
+ */
+function broadcastOnline() {
+  setImmediate(() => io.emit('server:online', { count: io.of('/').sockets.size }));
 }
 
 function removePlayerFromRoom(roomId, playerId, socket = null) {
@@ -98,6 +120,7 @@ io.use((socket, next) => {
 
 io.on('connection', socket => {
   console.log(`[+] ${socket.id} (pid: ${socket.playerId})`);
+  broadcastOnline();
 
   // ─── Registrace všech handlerů ────────────────────────────────────────────
 
@@ -126,7 +149,7 @@ io.on('connection', socket => {
         message: 'Místnost s tímto názvem již existuje. Zvolte prosím jiný název.',
       });
     }
-    const roomId = Math.random().toString(36).substr(2, 9);
+    const roomId = shortId();
     const engine = new GameEngine(io, roomId);
     rooms.set(roomId, { engine, password, name: finalRoomName });
     socket.join(roomId);
@@ -194,15 +217,16 @@ io.on('connection', socket => {
   socket.on('game:ready', () => rooms.get(socket.roomId)?.engine.toggleReady(socket.playerId));
   socket.on('game:change_color', ({ color }) => rooms.get(socket.roomId)?.engine.changeColor(socket.playerId, color));
   socket.on('game:change_name', ({ name }) => rooms.get(socket.roomId)?.engine.changeName(socket.playerId, name));
-  socket.on('game:roll', () => {
+  socket.on('game:roll', d => {
     if (throttle(socket, 'roll', 500)) return;
-    rooms.get(socket.roomId)?.engine.handleRoll(socket);
+    rooms.get(socket.roomId)?.engine.handleRoll(socket, d);
   });
   socket.on('game:respond', d => {
     if (throttle(socket, 'respond', 300)) return;
     rooms.get(socket.roomId)?.engine.handleRespond(socket, d);
   });
   socket.on('game:trade_init', d => rooms.get(socket.roomId)?.engine.initiateTrade(socket, d));
+  socket.on('game:trade_drafting', d => rooms.get(socket.roomId)?.engine.setTradeDrafting(socket, d));
   socket.on('game:debug_set_state', d => {
     if (!DEV_MODE) { socket.emit('game:error', { message: 'Debug funkce je dostupná jen v dev módu.' }); return; }
     rooms.get(socket.roomId)?.engine.handleDebugSetState(socket, d);
@@ -215,6 +239,7 @@ io.on('connection', socket => {
 
   socket.on('disconnect', () => {
     console.log(`[-] ${socket.id} (pid: ${socket.playerId})`);
+    broadcastOnline();
     ['roll', 'respond', 'room:list'].forEach(e => rateLimits.delete(`${socket.playerId}:${e}`));
     const roomId = socket.roomId;
     const playerId = socket.playerId;

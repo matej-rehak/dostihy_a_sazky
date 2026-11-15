@@ -3,13 +3,15 @@
 
     <!-- Board -->
     <div id="board-wrap">
+      <button id="view-mode-btn" class="view-mode-btn" type="button" title="Přepnout 2D / 3D pohled">3D</button>
+      <canvas id="board-3d-canvas" class="hidden"></canvas>
       <div id="board">
         <!-- Board center (spaces added dynamically around it) -->
         <div id="board-center">
           <div class="bc-artwork"></div>
           <div class="bc-deck-area">
-            <div class="bc-deck nahoda">NÁHODA</div>
-            <div class="bc-deck finance">FINANCE</div>
+            <div class="bc-deck nahoda"><img class="bc-deck-icon" src="img/nahoda-znak.png" alt="" draggable="false" />NÁHODA</div>
+            <div class="bc-deck finance"><img class="bc-deck-icon" src="img/finance.png" alt="" draggable="false" />FINANCE</div>
           </div>
           <div class="bc-logo-overlay">
             <div id="particles-container"></div>
@@ -46,7 +48,7 @@
     <div id="right-panel">
 
       <div id="game-timer" class="game-timer hidden">
-        <span class="timer-icon">⏱</span>
+        <span class="timer-icon"><img class="ui-icon" src="img/ui/casovac.png" alt="" draggable="false" /></span>
         <span id="timer-value">00:00</span>
       </div>
 
@@ -69,8 +71,12 @@
         </div>
       </section>
 
-      <section id="log-section">
-        <h2 class="section-title">Průběh</h2>
+      <section id="log-section" class="is-collapsed">
+        <h2 class="section-title">
+          <button id="log-toggle" class="log-toggle" type="button" aria-expanded="false" aria-controls="log-list">
+            Průběh <span class="log-caret" aria-hidden="true"></span>
+          </button>
+        </h2>
         <div id="log-list"></div>
       </section>
 
@@ -88,7 +94,7 @@
       <div class="debug-modal">
         <div class="debug-header">
           <h3>🐞 Debug stav hry</h3>
-          <button id="debug-close" class="debug-close">✖</button>
+          <button id="debug-close" class="debug-close" aria-label="Zavřít"><img class="ui-icon" src="img/ui/zavrit.png" alt="" draggable="false" /></button>
         </div>
         <div id="debug-body" class="debug-body"></div>
         <div class="debug-footer">

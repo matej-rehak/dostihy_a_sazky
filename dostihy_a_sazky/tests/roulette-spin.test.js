@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const GameEngine = require('../src/GameEngine');
-const { OUTCOMES } = require('../src/Roulette');
+const { spinRoulette } = require('./helpers/roulette');
+const { OUTCOMES, rndFor } = require('../src/Roulette');
 
 function makeEngine(field30Mode = 'roulette') {
   const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
@@ -12,6 +13,7 @@ function makeEngine(field30Mode = 'roulette') {
   engine._scheduleAction = (delay, fn) => fn();
   engine.phase = 'playing';
   engine.config.field30Mode = field30Mode;
+  engine.config.rouletteFee = 0;   // točí se hned, bez volby zaplatit
 
   ['A', 'B'].forEach((id, i) => {
     engine.players.set(id, {
@@ -19,7 +21,7 @@ function makeEngine(field30Mode = 'roulette') {
       position: 0, balance: 30000, bankrupt: false, inJail: false, jailTurns: 0,
       skipTurns: 0, properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: true, disconnected: false, canFly: false, left: false,
-      pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
+      pendingBet: null, halfPriceNext: false,
     });
   });
   engine.turnOrder = ['A', 'B'];
@@ -28,8 +30,7 @@ function makeEngine(field30Mode = 'roulette') {
 }
 
 function forceOutcome(engine, id) {
-  const idx = OUTCOMES.findIndex(o => o.id === id);
-  engine._rouletteRnd = () => (idx + 0.5) / OUTCOMES.length;
+  engine._rouletteRnd = () => rndFor(id);
 }
 
 test('režim doping se chová jako dřív — žádná ruleta', () => {
@@ -49,49 +50,32 @@ test('režim doping se chová jako dřív — žádná ruleta', () => {
 
 test('režim roulette otevře prompt roulette_ack s výsledkem', () => {
   const engine = makeEngine();
-  forceOutcome(engine, 'immunity');
-  engine.players.get('A').position = 30;
-  engine._evaluateSpace('A');
+  forceOutcome(engine, 'preemption');
+  spinRoulette(engine);
 
   assert.equal(engine.pendingAction.type, 'roulette_ack');
   assert.equal(engine.pendingAction.targetId, 'A');
-  assert.equal(engine.pendingAction.data.result.id, 'immunity');
+  assert.equal(engine.pendingAction.data.result.id, 'preemption');
   // Efekt se aplikuje až po potvrzení, ne při zatočení
-  assert.equal(engine.players.get('A').rentImmunity, 0);
+  assert.equal(engine.players.get('A').halfPriceNext, false);
 });
 
-test('potvrzení nabije imunitu a tah pokračuje', () => {
+test('potvrzení nabije přednostní právo a tah pokračuje', () => {
   const engine = makeEngine();
-  forceOutcome(engine, 'immunity');
-  engine.players.get('A').position = 30;
-  engine._evaluateSpace('A');
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
+  forceOutcome(engine, 'preemption');
+  spinRoulette(engine);
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'ack' });
 
-  assert.equal(engine.players.get('A').rentImmunity, 1);
+  assert.equal(engine.players.get('A').halfPriceNext, true);
 });
 
-test('dvojitý nájem a přednostní právo se nabijí', () => {
-  for (const [id, field, expected] of [
-    ['double_rent', 'doubleRent', 1],
-    ['preemption', 'halfPriceNext', true],
-  ]) {
-    const engine = makeEngine();
-    forceOutcome(engine, id);
-    engine.players.get('A').position = 30;
-    engine._evaluateSpace('A');
-    engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
-    assert.equal(engine.players.get('A')[field], expected, `${id} nenabil ${field}`);
-  }
-});
-
-test('doping na ruletě zachová původní efekt', () => {
+test('doping z Rulety stojí dva tahy', () => {
   const engine = makeEngine();
   forceOutcome(engine, 'doping');
-  engine.players.get('A').position = 30;
-  engine._evaluateSpace('A');
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
+  spinRoulette(engine);
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'ack' });
 
-  assert.equal(engine.players.get('A').skipTurns, 1);
+  assert.equal(engine.players.get('A').skipTurns, 2);
 });
 
 /**
@@ -107,8 +91,7 @@ test('vypršelý limit a opožděné kliknutí aplikují sázku právě jednou',
   const scheduled = [];
   engine._scheduleAction = (delay, fn) => scheduled.push(fn);
 
-  engine.players.get('A').position = 30;
-  engine._evaluateSpace('A');
+  spinRoulette(engine);
   assert.equal(engine.pendingAction.type, 'roulette_ack');
 
   const before = engine.players.get('A').balance;
@@ -118,7 +101,7 @@ test('vypršelý limit a opožděné kliknutí aplikují sázku právě jednou',
   const scheduledAfterTimeout = scheduled.length;
 
   // Opožděné kliknutí hráče, které dorazilo až po vypršení limitu.
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'ack' });
 
   assert.equal(
     engine.players.get('A').balance, afterTimeout,
@@ -130,11 +113,12 @@ test('vypršelý limit a opožděné kliknutí aplikují sázku právě jednou',
   );
 });
 
-test('vypršelý limit spotřebuje pendingAction u všech promptů Totalizátoru', () => {
+test('vypršelý limit spotřebuje pendingAction u všech promptů Rulety', () => {
   const prompts = [
-    { type: 'roulette_ack', data: { result: { id: 'immunity' } } },
-    { type: 'roulette_pick_player', data: { outcomeId: 'strike', candidates: ['B'] } },
-    { type: 'roulette_pick_horse', data: { outcomeId: 'auction', options: [] } },
+    { type: 'roulette_ack', data: { result: { id: 'preemption' } } },
+    { type: 'roulette_pick_player', data: { outcomeId: 'report', candidates: ['B'] } },
+    { type: 'roulette_pick_horse', data: { outcomeId: 'free_token', options: [] } },
+    { type: 'roulette_give_horse', data: { options: [], candidates: ['B'] } },
   ];
 
   for (const prompt of prompts) {
@@ -147,7 +131,7 @@ test('vypršelý limit spotřebuje pendingAction u všech promptů Totalizátoru
     assert.equal(engine.pendingAction, null, `${prompt.type} zůstal po timeoutu viset`);
 
     const scheduledAfterTimeout = scheduled.length;
-    engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
+    engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'ack' });
     assert.equal(
       scheduled.length, scheduledAfterTimeout,
       `opožděné kliknutí znovu odbavilo ${prompt.type}`
@@ -162,10 +146,7 @@ test('nový hráč má všechny příznaky vynulované', () => {
   const p = engine.players.get('X');
 
   assert.equal(p.pendingBet, null);
-  assert.equal(p.doubleRent, 0);
-  assert.equal(p.rentImmunity, 0);
   assert.equal(p.halfPriceNext, false);
-  assert.equal(p.tokenStrike, 0);
 });
 
 test('nový bot má všechny příznaky vynulované', () => {
@@ -176,8 +157,5 @@ test('nový bot má všechny příznaky vynulované', () => {
 
   assert.ok(bot, 'addBot() nevytvořil hráče');
   assert.equal(bot.pendingBet, null);
-  assert.equal(bot.doubleRent, 0);
-  assert.equal(bot.rentImmunity, 0);
   assert.equal(bot.halfPriceNext, false);
-  assert.equal(bot.tokenStrike, 0);
 });

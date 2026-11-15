@@ -23,78 +23,12 @@ function makeEngine() {
       position: 0, balance: 30000, bankrupt: false, inJail: false, jailTurns: 0,
       skipTurns: 0, properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: true, disconnected: false, canFly: false, left: false,
-      pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
+      pendingBet: null, halfPriceNext: false,
     });
   });
   engine.turnOrder = ['A', 'B'];
   return engine;
 }
-
-function giveStable(engine, pid) {
-  [FANTOME, GAVORA].forEach(sid => {
-    engine.ownerships[sid] = pid;
-    engine.players.get(pid).properties.push(sid);
-  });
-}
-
-test('stávka vypne žetony stejně jako doping', () => {
-  const engine = makeEngine();
-  giveStable(engine, 'B');
-  engine.tokens[FANTOME] = { small: 2, big: false };
-
-  const withTokens = engine._calcRent(FANTOME, 3);
-  assert.equal(withTokens, BOARD[FANTOME].rents[2]);
-
-  engine.players.get('B').tokenStrike = 1;
-  const striking = engine._calcRent(FANTOME, 3);
-  assert.equal(striking, BOARD[FANTOME].rents[0], 'při stávce má platit základní nájem');
-});
-
-test('dvojitý nájem zdvojnásobí a spotřebuje se jednou', () => {
-  const engine = makeEngine();
-  giveStable(engine, 'B');
-  engine.players.get('B').doubleRent = 1;
-
-  const base = engine._calcRent(FANTOME, 3);
-  assert.equal(engine._applyRentModifiers('A', 'B', base), base * 2);
-  assert.equal(engine.players.get('B').doubleRent, 0);
-
-  // druhý nájem už je normální
-  assert.equal(engine._applyRentModifiers('A', 'B', base), base);
-});
-
-test('imunita vynuluje nájem a spotřebuje se jednou', () => {
-  const engine = makeEngine();
-  giveStable(engine, 'B');
-  engine.players.get('A').rentImmunity = 1;
-
-  const base = engine._calcRent(FANTOME, 3);
-  assert.equal(engine._applyRentModifiers('A', 'B', base), 0);
-  assert.equal(engine.players.get('A').rentImmunity, 0);
-  assert.equal(engine._applyRentModifiers('A', 'B', base), base);
-});
-
-test('imunita vyhraje nad dvojitým nájmem a obě nabití se spotřebují', () => {
-  const engine = makeEngine();
-  giveStable(engine, 'B');
-  engine.players.get('B').doubleRent = 1;
-  engine.players.get('A').rentImmunity = 1;
-
-  const base = engine._calcRent(FANTOME, 3);
-  assert.equal(engine._applyRentModifiers('A', 'B', base), 0);
-  assert.equal(engine.players.get('B').doubleRent, 0, 'dvojitý nájem se musí spotřebovat taky');
-  assert.equal(engine.players.get('A').rentImmunity, 0);
-});
-
-test('nabití nepřeteče pod nulu', () => {
-  const engine = makeEngine();
-  giveStable(engine, 'B');
-  const base = engine._calcRent(FANTOME, 3);
-
-  engine._applyRentModifiers('A', 'B', base);
-  assert.equal(engine.players.get('B').doubleRent, 0);
-  assert.equal(engine.players.get('A').rentImmunity, 0);
-});
 
 test('přednostní právo půlí cenu a spotřebuje se až nákupem', () => {
   const engine = makeEngine();
@@ -138,44 +72,4 @@ test('insufficient_funds hlásí sníženou cenu a nedoplatek podle přednostní
   // příznak zůstává nabitý — dotaz na cenu ho nespotřebovává
   assert.equal(player.halfPriceNext, true);
   assert.equal(typeof scheduled, 'function');
-});
-
-test('stávka drží i na tahu hráče, který ji vyvolal (hra dvou hráčů)', () => {
-  const engine = makeEngine();
-  giveStable(engine, 'B');
-  engine.tokens[FANTOME] = { small: 2, big: false };
-  engine.currentTurnIdx = 0;
-
-  // A točí Totalizátorem a stávkuje B. Zbytek A-ova tahu není předmětem testu —
-  // naplánované pokračování by jen rozjelo _advanceTurn a přepsalo currentTurnIdx.
-  engine._scheduleAction = () => {};
-  engine._handleRoulettePickPlayer('A', 'B', { outcomeId: 'strike', candidates: ['B'] });
-  assert.ok(engine.players.get('B').tokenStrike > 0, 'stávka se musí nabít');
-
-  // Tah B — stávka se odečítá, ale skončit nesmí.
-  engine.currentTurnIdx = 1;
-  engine._startTurn();
-  assert.ok(
-    engine.players.get('B').tokenStrike > 0,
-    'stávka nesmí vypršet už na nejbližším tahu cíle — ve dvou hráčích by nezafungovala vůbec'
-  );
-
-  // Tah A: pořád platí, takže A stoupne na koně B a platí ZÁKLADNÍ nájem.
-  engine.currentTurnIdx = 0;
-  engine._startTurn();
-  assert.equal(
-    engine._calcRent(FANTOME, 3),
-    BOARD[FANTOME].rents[0],
-    'na tahu hráče, který stávku vyvolal, musí žetony cíle pořád stát'
-  );
-
-  // Druhý tah B — teprve tady stávka končí.
-  engine.currentTurnIdx = 1;
-  engine._startTurn();
-  assert.equal(engine.players.get('B').tokenStrike, 0, 'stávka musí po celém kole skončit');
-  assert.equal(
-    engine._calcRent(FANTOME, 3),
-    BOARD[FANTOME].rents[2],
-    'po vypršení stávky žetony zase fungují'
-  );
 });

@@ -1,8 +1,9 @@
-import { makeEl, safeColor } from '../utils.js';
+import { makeEl, safeColor, uiIcon } from '../utils.js';
 import { dom } from '../dom.js';
 import { updateDice } from '../animations/dice.js';
 import { audioManager } from '../audio.js';
 import { logChanged } from './renderGate.mjs';
+import { stateInflationPercent } from './inflation.mjs';
 
 let timerIntervalId = null;
 let lastTickSecond = 0;
@@ -50,21 +51,27 @@ function updateCenterTimer(gameState) {
     }
     
     if (dom.timerValue) dom.timerValue.textContent = timerText;
-    if (dom.bcRound) dom.bcRound.textContent = `Kolo ${gameState.round}`;
+    if (dom.bcRound) {
+      const infl = stateInflationPercent(gameState);
+      dom.bcRound.textContent = infl ? `Kolo ${gameState.round} · inflace +${infl} %` : `Kolo ${gameState.round}`;
+    }
     
     // Turn Timer
     if (dom.bcTurn) {
       const curr = gameState.players.find(p => p.id === gameState.currentTurnId);
       if (curr) {
-        let text = `${curr.name} je na řadě`;
+        const text = `${curr.name} je na řadě`;
+        let countdown = 0;
         if (gameState.turnTimerEndsAt && gameState.phase === 'playing') {
           const remaining = Math.max(0, gameState.turnTimerEndsAt - Date.now());
           if (remaining > 0 && remaining <= 10_000) {
-            text += ` (⏳ ${Math.ceil(remaining / 1000)}s)`;
+            countdown = Math.ceil(remaining / 1000);
             const secLeft = Math.ceil(remaining / 1000);
             if (secLeft !== lastTickSecond && gameState.pendingAction?.type !== 'selecting_starter') {
               lastTickSecond = secLeft;
-              audioManager.play('click', secLeft <= 3 ? 0.9 : 0.5);
+              // Posledních 10 s tiché cvaknutí, poslední 3 s tikání hodin.
+              if (secLeft <= 3) audioManager.play('tick', 0.9);
+              else audioManager.play('click', 0.5);
             }
           } else {
             lastTickSecond = 0;
@@ -73,6 +80,7 @@ function updateCenterTimer(gameState) {
           lastTickSecond = 0;
         }
         dom.bcTurn.textContent = text;
+        if (countdown) dom.bcTurn.append(' (', uiIcon('cekani', true), `${countdown}s)`);
         dom.bcTurn.style.color = safeColor(curr.color);
         dom.bcTurn.style.textShadow = `0 0 10px ${safeColor(curr.color)}`;
       } else {
@@ -102,6 +110,29 @@ export function updateLog(gameState) {
   const frag = document.createDocumentFragment();
   next.forEach(msg => frag.appendChild(makeEl('div', 'log-entry', msg)));
   dom.logList.replaceChildren(frag);
+}
+
+// Průběh je ve výchozím stavu sbalený, ať má panel akcí dost místa.
+// Rozbalení si pamatuje prohlížeč (jen pohodlnost — žádné herní nastavení).
+const LOG_OPEN_KEY = 'ds_log_open';
+
+/** Tlačítko „Průběh" sbalí / rozbalí log. Volá se jednou po načtení partials. */
+export function initLogToggle() {
+  const section = document.getElementById('log-section');
+  const btn = document.getElementById('log-toggle');
+  if (!section || !btn) return;
+  let open = false;
+  try { open = localStorage.getItem(LOG_OPEN_KEY) === '1'; } catch (err) { /* úložiště nedostupné */ }
+  const apply = () => {
+    section.classList.toggle('is-collapsed', !open);
+    btn.setAttribute('aria-expanded', String(open));
+  };
+  apply();
+  btn.addEventListener('click', () => {
+    open = !open;
+    apply();
+    try { localStorage.setItem(LOG_OPEN_KEY, open ? '1' : '0'); } catch (err) { /* neuložíme */ }
+  });
 }
 
 /** Volá se při opuštění hry, aby další hra nezdědila cizí log. */

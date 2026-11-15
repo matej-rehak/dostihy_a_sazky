@@ -1,5 +1,8 @@
-import { fmt, esc, safeColor } from '../utils.js';
-import { dom } from '../dom.js';
+import { fmt, esc, safeColor, imgIcon } from '../utils.js';
+import { priced } from './inflation.mjs';
+import { SERVICE_DICE_RENT, horseRentRow, serviceRentRow } from './rentView.mjs';
+import { propertySellValue } from './bankSale.mjs';
+import { horsePortrait } from '../horsePortraits.js';
 
 // Slovník s historickými retro popisy (lore) pro koně a služby
 const SPACE_LORE = {
@@ -35,133 +38,145 @@ const SPACE_LORE = {
 
 let currentFlipped = false;
 
+const HORSE_RENT_LABELS = ['Základní nájem', 'S 1 dostihem', 'S 2 dostihy', 'S 3 dostihy', 'S 4 dostihy', 'Hlavní dostih'];
+
+// Proč majiteli nefungují žetony — viz horseRentRow v rentView.mjs.
+const IDLE_REASON = {
+  group: 'Majitel nemá celou stáj — žetony nefungují.',
+  jail: 'Majitel je v Distancu — žetony nefungují.',
+  doping: 'Majitel je pod podezřením z dopingu — žetony nefungují.',
+};
+
+/** Tabulka nájmů; řádek `active` je ten, který se teď opravdu platí. */
+function rentTable(rows, active) {
+  return `<table class="inspect-table">${rows.map(([label, value], i) => `
+    <tr class="${i === active ? 'active-rent' : ''}"><td>${label}</td><td class="rent-val">${value}</td></tr>`).join('')}
+  </table>`;
+}
+
+function rentsHtml(space, gameState) {
+  const board = window.__boardData;
+  if (space.type === 'horse') {
+    const { row, idle } = board ? horseRentRow(board, gameState, space.id) : { row: null, idle: null };
+    const rows = (space.rents ?? []).map((r, i) => [HORSE_RENT_LABELS[i], `${fmt(priced(gameState, r))} Kč`]);
+    const note = idle ? `<p class="inspect-note">${IDLE_REASON[idle]}</p>` : '';
+    return rentTable(rows, row) + note;
+  }
+  if (space.type === 'service') {
+    const row = board ? serviceRentRow(board, gameState, space.id) : null;
+    if (space.serviceType === 'trener') {
+      const rows = [1, 2, 3, 4].map(n => [
+        `${n} ${n === 1 ? 'trenér' : 'trenéři'}`, `${fmt(priced(gameState, n * 1000))} Kč`,
+      ]);
+      return `<p class="inspect-note">Nájem podle počtu trenérů majitele.</p>` + rentTable(rows, row);
+    }
+    const rows = [
+      ['Jen Přeprava nebo Stáje', `${SERVICE_DICE_RENT.single} × hod`],
+      ['Přeprava i Stáje', `${SERVICE_DICE_RENT.pair} × hod`],
+    ];
+    return `<p class="inspect-note">Nájem je násobek hodu kostkou.</p>` + rentTable(rows, row);
+  }
+  if (DECKS[space.type]) return deckHtml(space, gameState);
+  return `<p class="inspect-note">Speciální pole herního plánu.</p>`;
+}
+
+// Balíčky karet: barva a ikona jako balíček na plánu (.bc-deck) a tažená karta.
+const DECKS = {
+  finance: { color: '#2980b9', icon: 'img/finance.png' },
+  nahoda:  { color: '#27ae60', icon: 'img/nahoda-znak.png' },
+};
+
+/** Seznam karet balíčku ze stavu (EngineMixin._deckOverview) s šancí vytažení. */
+function deckHtml(space, gameState) {
+  const cards = gameState?.cardDecks?.[space.type] ?? [];
+  if (!cards.length) return `<p class="inspect-note">Obsah balíčku se načte se stavem hry.</p>`;
+  const total = cards.reduce((s, c) => s + c.count, 0);
+  // Drženou kartu má u sebe hráč — která je která, říká `type` z přehledu.
+  const holderOf = c => gameState.players?.find(p =>
+    c.type === 'reroll_card' ? p.rerollCards > 0 : p.jailFreeCards > 0);
+  const items = cards.map(c => `
+    <li class="inspect-card" data-tone="${c.tone}">
+      <span class="inspect-card-text">${esc(c.text)}${c.held
+        ? `<small>Drží ${esc(holderOf(c)?.name ?? 'hráč')} — teď se nedá líznout.</small>` : ''}</span>
+      <span class="inspect-card-odds">${c.count > 1 ? `<b>${c.count}×</b>` : ''}${c.count}/${total}</span>
+    </li>`).join('');
+  return `<p class="inspect-note">Balíček má ${total} karet. Po dobrání se zamíchá znovu.</p>
+    <ul class="inspect-cards">${items}</ul>`;
+}
+
+function pricesHtml(space, gameState) {
+  if (!space.price) return '';
+  const row = (label, value) => `<div class="inspect-price-row"><span>${label}</span><b>${value}</b></div>`;
+  let html = row(space.type === 'horse' ? 'Cena koně' : 'Cena služby', `${fmt(priced(gameState, space.price))} Kč`);
+  if (space.type === 'horse') {
+    html += row('Cena žetonu', `${fmt(priced(gameState, space.tokenCost))} Kč`);
+    html += row('Hlavní dostih', `${fmt(priced(gameState, space.bigTokenCost))} Kč`);
+  }
+  html += row('Prodej bance', `${fmt(propertySellValue(space, gameState?.tokens?.[space.id], gameState?.config?.bankSaleRatio))} Kč`);
+  return html;
+}
+
 export function showSpaceInspect(space, gameState) {
   const overlay = document.getElementById('space-inspect-overlay');
   const card = document.getElementById('space-inspect-card');
   const header = document.getElementById('space-inspect-header');
   const nameEl = document.getElementById('space-inspect-name');
-  const iconEl = document.getElementById('space-inspect-icon');
+  const mediaEl = document.getElementById('space-inspect-icon');
   const rentsEl = document.getElementById('space-inspect-rents');
   const pricesEl = document.getElementById('space-inspect-prices');
   const descEl = document.getElementById('space-inspect-desc');
-  const ownerBadge = document.getElementById('space-inspect-owner-badge');
+  const ownerEl = document.getElementById('space-inspect-owner');
 
   if (!overlay || !card) return;
 
-  // Reset stavu otočení karty
   card.classList.remove('flipped');
   currentFlipped = false;
 
-  // Nastavení jména a ikony
-  if (nameEl) nameEl.textContent = space.name.toUpperCase();
-  
+  // Záhlaví jako tooltip: kůň v barvě stáje, ostatní tmavé se zlatým názvem.
+  if (nameEl) nameEl.textContent = space.name;
   if (header) {
-    if (space.type === 'horse') {
-      header.style.background = safeColor(space.groupColor);
-      header.style.color = '#fff';
-    } else if (space.type === 'service') {
-      header.style.background = '#e2e8f8';
-      header.style.color = '#121d2d';
-    } else {
-      header.style.background = 'var(--bg-card2)';
-      header.style.color = '#fff';
-    }
+    const color = space.type === 'horse' ? safeColor(space.groupColor) : DECKS[space.type]?.color;
+    header.classList.toggle('is-horse', !!color);
+    header.style.background = color ?? '';
   }
 
-  // Zobrazení vlastníka na kartě, pokud existuje
-  if (ownerBadge && gameState) {
-    const ownerId = gameState.ownerships?.[space.id];
+  // Portrét koně (stejný jako v tooltipu), jinak ikona pole.
+  if (mediaEl) {
+    const portrait = space.type === 'horse' ? horsePortrait(space.id) : null;
+    mediaEl.classList.toggle('is-portrait', !!portrait);
+    if (portrait) {
+      const img = document.createElement('img');
+      img.src = portrait;
+      img.alt = '';
+      mediaEl.replaceChildren(img);
+    } else if (space.type === 'service') {
+      mediaEl.replaceChildren(imgIcon(`img/${space.serviceType}.png`));
+    } else if (DECKS[space.type]) {
+      mediaEl.replaceChildren(imgIcon(DECKS[space.type].icon));
+    } else {
+      mediaEl.replaceChildren();
+    }
+    mediaEl.classList.toggle('hidden', !mediaEl.firstChild);
+  }
+
+  if (rentsEl) rentsEl.innerHTML = rentsHtml(space, gameState);
+  if (pricesEl) pricesEl.innerHTML = pricesHtml(space, gameState);
+
+  if (ownerEl) {
+    const ownerId = gameState?.ownerships?.[space.id];
     const owner = ownerId ? gameState.players.find(p => p.id === ownerId) : null;
-    if (owner) {
-      ownerBadge.style.background = safeColor(owner.color);
-      ownerBadge.textContent = `Vlastník: ${owner.name}`;
-      ownerBadge.classList.remove('hidden');
-    } else {
-      ownerBadge.classList.add('hidden');
-    }
-  } else if (ownerBadge) {
-    ownerBadge.classList.add('hidden');
+    ownerEl.classList.toggle('hidden', !owner);
+    ownerEl.innerHTML = owner
+      ? `<div class="owner-dot" style="background:${safeColor(owner.color)}"></div><div>${esc(owner.name)}</div>`
+      : '';
   }
 
-  // Nastavení ikony
-  if (iconEl) {
-    if (space.type === 'horse') {
-      iconEl.textContent = '🐴';
-    } else if (space.type === 'service') {
-      iconEl.textContent = space.serviceType === 'trener' ? '👤' : (space.serviceType === 'preprava' ? '🚚' : '🐴');
-    } else {
-      iconEl.textContent = 'ℹ️';
-    }
-  }
-
-  // Sestavení nájmů (Rents)
-  if (rentsEl) {
-    let rentsHtml = '';
-    const tok = gameState?.tokens?.[space.id] || { small: 0, big: false };
-
-    if (space.type === 'horse') {
-      rentsHtml += `<table class="inspect-table">`;
-      const rents = space.rents ?? [];
-      const labels = ['Základní taxi', 'S 1 dostihem', 'S 2 dostihy', 'S 3 dostihy', 'S 4 dostihy', 'HLAVNÍ DOSTIH'];
-      rents.forEach((r, i) => {
-        const active = (tok.big && i === 5) || (!tok.big && tok.small === i);
-        rentsHtml += `<tr class="${active ? 'active-rent' : ''}">
-          <td>${labels[i]}</td>
-          <td class="rent-val">${fmt(r)} Kč</td>
-        </tr>`;
-      });
-      rentsHtml += `</table>`;
-    } else if (space.type === 'service') {
-      const isTrener = space.serviceType === 'trener';
-      rentsHtml += `<div class="inspect-service-desc">`;
-      if (isTrener) {
-        rentsHtml += `
-          <p>Sazba za trénink se určuje podle počtu vlastněných trenérů:</p>
-          <table class="inspect-table">
-            <tr><td>1 trenér</td><td>1 000 Kč × hod kostkou</td></tr>
-            <tr><td>2 trenéři</td><td>2 000 Kč × hod kostkou</td></tr>
-            <tr><td>3 trenéři</td><td>3 000 Kč × hod kostkou</td></tr>
-            <tr><td>4 trenéři</td><td>4 000 Kč × hod kostkou</td></tr>
-          </table>
-        `;
-      } else {
-        rentsHtml += `
-          <p>Sazba za přepravu nebo stáje závisí na tom, kolik těchto služeb vlastníte:</p>
-          <table class="inspect-table">
-            <tr><td>1 služba</td><td>80 × hod kostkou</td></tr>
-            <tr><td>obě služby</td><td>200 × hod kostkou</td></tr>
-          </table>
-        `;
-      }
-      rentsHtml += `</div>`;
-    } else {
-      rentsHtml += `<p class="inspect-service-desc">Specifické pole herního plánu.</p>`;
-    }
-    rentsEl.innerHTML = rentsHtml;
-  }
-
-  // Sestavení cen (Prices)
-  if (pricesEl) {
-    let pricesHtml = '';
-    if (space.price) {
-      pricesHtml += `<div class="inspect-price-row"><span>Pořizovací cena:</span><b>${fmt(space.price)} Kč</b></div>`;
-      if (space.type === 'horse') {
-        pricesHtml += `<div class="inspect-price-row"><span>Cena dostihu (žetonu):</span><b>${fmt(space.tokenCost)} Kč</b></div>`;
-      }
-      const pledge = Math.round(space.price / 2);
-      pricesHtml += `<div class="inspect-price-row"><span>Zástavní hodnota:</span><b>${fmt(pledge)} Kč</b></div>`;
-    }
-    pricesEl.innerHTML = pricesHtml;
-  }
-
-  // Sestavení popisku na zadní straně (Lore)
   if (descEl) {
     descEl.textContent = SPACE_LORE[space.id] || 'Klasické pole české společenské hry Dostihy a sázky.';
   }
 
-  // Zobrazení overlaye
   overlay.classList.remove('hidden');
-  document.body.style.overflow = 'hidden'; // Zabránit scrollování pozadí
+  document.body.style.overflow = 'hidden';
 }
 
 export function hideSpaceInspect() {

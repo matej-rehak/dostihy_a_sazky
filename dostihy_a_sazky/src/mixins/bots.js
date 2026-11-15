@@ -2,6 +2,7 @@
 
 const Bot = require('../Bot');
 const { PLAYER_COLORS, ROULETTE_BOT_ACK_DELAY_MS } = require('../constants');
+const { shortId } = require('../random');
 
 const BOT_NAMES = ['Robot Karel', 'Robot Jana', 'Robot Pepa', 'Robot Eva', 'Robot Tonda'];
 const MAX_PLAYERS = 6;
@@ -19,7 +20,7 @@ module.exports = {
     const usedNames = new Set([...this.players.values()].map(p => p.name));
     const name = BOT_NAMES.find(n => !usedNames.has(n)) || `Robot ${this.players.size + 1}`;
 
-    const id = `bot-${Math.random().toString(36).slice(2, 10)}`;
+    const id = `bot-${shortId(8)}`;
 
     this.players.set(id, {
       id,
@@ -34,15 +35,17 @@ module.exports = {
       inJail: false,
       jailTurns: 0,
       skipTurns: 0,
+      waitTurns: 0,
       properties: [],
       rollAccumulator: 0,
       moveDirection: 1,
       jailFreeCards: 0,
+      rerollCards: 0,
       ready: true,
       disconnected: false,
       canFly: false,
-      // Totalizátor — příznaky visící na hráči přes tahy (vzor `canFly`).
-      pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
+      // Ruleta — příznaky visící na hráči přes tahy (vzor `canFly`).
+      pendingBet: null, halfPriceNext: false, canSpin: false,
     });
 
     this._addLog(`🤖 ${name} se připojil(a) k hře`);
@@ -90,7 +93,7 @@ module.exports = {
    * Jak dlouho má bot „přemýšlet", než odbaví aktuální prompt.
    *
    * Načasování animací patří na server, stejně jako `SIX_REROLL_DELAY_MS`:
-   * kolo Totalizátoru točí bot, ale dívají se na něj všichni, a potvrzení
+   * kolo Rulety točí bot, ale dívají se na něj všichni, a potvrzení
    * změní `pendingAction`, takže divákům overlay zmizí. Než bot potvrdí,
    * musí kolo dojet — viz ROULETTE_BOT_ACK_DELAY_MS.
    */

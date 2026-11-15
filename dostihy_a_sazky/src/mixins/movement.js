@@ -23,7 +23,7 @@ module.exports = {
       this._addLog(`${player.name} přistál(a) na START — +${fmt(this.config.startBonus)} Kč`);
     }
 
-    this._addLog(`➡️ ${player.name} přesunul(a) se na ${BOARD[newPos].name}`);
+    this._addLog(`➡️ ${player.name} přesunul(a) se na ${this._spaceName(newPos)}`);
     this._scheduleAction(ACTION_DELAY_MS, () => this._evaluateSpace(pid));
   },
 
@@ -49,12 +49,14 @@ module.exports = {
         this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
         break;
 
-      case 'tax':
-        player.balance -= space.amount;
-        this._addLog(`🧾 ${player.name} platí za ${space.name} ${fmt(space.amount)} Kč`);
+      case 'tax': {
+        const tax = this._price(space.amount);
+        player.balance -= tax;
+        this._addLog(`🧾 ${player.name} platí za ${space.name} ${fmt(tax)} Kč`);
         this._checkBankrupt(pid);
         this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
         break;
+      }
 
       case 'jail':
       case 'go_to_jail':
@@ -64,7 +66,10 @@ module.exports = {
 
       case 'skip_turn':
         if (this.config.field30Mode === 'roulette') {
-          this._spinRoulette(pid);
+          // Jako Letiště: zatočit se dá až na začátku příštího tahu (_startTurn).
+          player.canSpin = true;
+          this._addLog(`🎰 ${player.name} může v příštím tahu zatočit Ruletou.`);
+          this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));
           break;
         }
         player.skipTurns = space.turns;
@@ -75,10 +80,7 @@ module.exports = {
       case 'finance':
       case 'nahoda': {
         const rawCard = space.type === 'finance' ? this.financeCards.draw() : this.nahodaCards.draw();
-        const card = { ...rawCard };
-        if (card.text) {
-          card.text = card.text.replace(/{startBonus}/g, fmt(this.config.startBonus));
-        }
+        const card = this._cardView(rawCard);
         const label = space.type === 'finance' ? 'Finance' : 'Náhoda';
         this._addLog(`🃏 ${player.name} táhne kartu ${label}: "${card.text}"`);
         this._setPendingAction({ type: 'card_ack', targetId: pid, data: { card, label, spaceId: space.id } });
@@ -118,13 +120,13 @@ module.exports = {
             this._setPendingAction({ type: 'service_roll', targetId: pid, data: { spaceId: space.id } });
             this._broadcast();
           } else {
-            const rent = this._applyRentModifiers(pid, owner, this._calcRent(space.id, this.lastDice?.value || 1));
+            const rent = this._calcRent(space.id, this.lastDice?.value || 1);
             const ownerPlayer = this.players.get(owner);
             this._addLog(`💸 ${player.name} platí nájem ${fmt(rent)} Kč → ${ownerPlayer.name} (${space.name})`);
             this._transfer(pid, owner, rent);
 
             if (this.config.buyoutMultiplier > 0 && space.type === 'horse') {
-              const buyoutCost = space.price * this.config.buyoutMultiplier;
+              const buyoutCost = this._price(space.price) * this.config.buyoutMultiplier;
               this._scheduleAction(ACTION_DELAY_MS, () => this._offerBuyoutOrEnd(pid, space.id, buyoutCost));
             } else {
               this._scheduleAction(ACTION_DELAY_MS, () => this._offerTokensOrEnd(pid));

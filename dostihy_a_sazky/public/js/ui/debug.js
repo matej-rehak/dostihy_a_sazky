@@ -22,6 +22,7 @@ const FINANCE_LABELS = [
 const NAHODA_LABELS = [
   'Jdi o 3 pole zpět',
   'Zrušen distanc (karta)',
+  'Opakovaný hod (karta)',
   'Postoupíš na nejbližší Trenér',
   'Zdržíš se na 2 kola',
   'Distanc (bez 4.000 Kč)',
@@ -33,7 +34,7 @@ const NAHODA_LABELS = [
   'Zpět na START (bez bonus)',
   'Zdržíš se na 2 kola (2)',
   'Zdržíš se na 1 kolo',
-  'Zpět na Parkoviště + START bonus',
+  'Zpět na pole 20 (Parkoviště / Letiště) + START bonus',
 ];
 
 let debugDraft = {};
@@ -96,7 +97,10 @@ function renderPanel(gs) {
           <input type="number" name="jt-${p.id}" min="1" max="3" value="${p.jailTurns || 3}" style="width:50px">
         </label>
         <label>Karty Zrušen
-          <input type="number" name="jfc-${p.id}" min="0" max="3" value="${p.jailFreeCards || 0}" style="width:50px">
+          <input type="number" name="jfc-${p.id}" min="0" max="1" value="${p.jailFreeCards || 0}" style="width:50px">
+        </label>
+        <label>Karty Opak. hod
+          <input type="number" name="rrc-${p.id}" min="0" max="1" value="${p.rerollCards || 0}" style="width:50px">
         </label>
       </div>
     `;
@@ -250,6 +254,7 @@ function applyDebugState() {
     inJail: body.querySelector(`[name="jail-${p.id}"]`)?.checked ?? p.inJail,
     jailTurns: Number(body.querySelector(`[name="jt-${p.id}"]`)?.value ?? p.jailTurns ?? 3),
     jailFreeCards: Number(body.querySelector(`[name="jfc-${p.id}"]`)?.value ?? p.jailFreeCards ?? 0),
+    rerollCards: Number(body.querySelector(`[name="rrc-${p.id}"]`)?.value ?? p.rerollCards ?? 0),
   }));
 
   const purchasable = state.boardData.filter(sp => sp.type === 'horse' || sp.type === 'service');

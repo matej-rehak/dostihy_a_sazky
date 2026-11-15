@@ -2,8 +2,11 @@ import { makeEl, safeColor, lightenColor, darkenColor, prefersReducedMotion } fr
 import { state } from '../state.js';
 import { dom } from '../dom.js';
 import { audioManager } from '../audio.js';
+import { playStartPass2d } from './startPass.js';
 import {
   getPawnStepDelay,
+  playsStepSound,
+  passesStart,
   hasPendingPawnAnimation,
   isPawnTeleportMove,
   getPawnDistance,
@@ -274,6 +277,7 @@ export function animatePawnsIfNeeded(gameState, onDone = null) {
     0
   );
   const stepDelay = getPawnStepDelay(longestDistance);
+  const stepSound = playsStepSound(longestDistance);
 
   const layer = getPawnLayer();
   const ghosts = new Map();
@@ -311,9 +315,10 @@ export function animatePawnsIfNeeded(gameState, onDone = null) {
     // 2. Posun o jedno pole
     moving.forEach(p => {
       state.clientVisualPos[p.id] = nextPawnSpace(state.clientVisualPos[p.id], p.moveDirection);
+      if (passesStart(state.clientVisualPos[p.id], p.moveDirection)) playStartPass2d(gameState);
       const spaceEl = dom.board?.querySelector(`.space[data-id="${state.clientVisualPos[p.id]}"]`);
       if (spaceEl) {
-        audioManager.play('step');
+        if (stepSound) audioManager.play('step');
         spaceEl.classList.add('space-bump');
         setTimeout(() => spaceEl.classList.remove('space-bump'), 150);
       }

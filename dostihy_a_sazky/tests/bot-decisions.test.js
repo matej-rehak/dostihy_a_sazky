@@ -101,13 +101,16 @@ test('nákup: postup ve volné stáji vyžaduje rezervu i cenu žetonu', () => {
   assert.equal(r.buy, true);
 });
 
-test('nákup: osamocený kůň ve stáji cizího hráče se nekupuje nikdy', () => {
+test('nákup: kůň ve stáji soupeře se kupuje kvůli blokaci, když zbyde rezerva', () => {
   const ctx = twoPlayerCtx();
   own(ctx, 'opp', 6);                         // hneda má 3 koně → 8 a 9 volné
-  ctx.players.get('bot').balance = 100000;
+  ctx.players.get('bot').balance = 2000 + 2000;   // cena + rezerva
   const r = Bot.evaluatePurchase(ctx, 'bot', 8);
-  assert.equal(r.reason, 'isolated');
-  assert.equal(r.buy, false);
+  assert.equal(r.reason, 'deny');
+  assert.equal(r.buy, true);
+
+  ctx.players.get('bot').balance = 2000 + 2000 - 1;
+  assert.equal(Bot.evaluatePurchase(ctx, 'bot', 8).buy, false, 'rezervu nesmí prolomit');
 });
 
 test('nákup: úplně volná stáj vyžaduje dvojnásobnou rezervu', () => {
@@ -128,12 +131,15 @@ test('nákup: trenér stačí s běžnou rezervou', () => {
   assert.equal(r.buy, true);
 });
 
-test('nákup: Přeprava sólo se nekupuje', () => {
+test('nákup: první z dvojice Přeprava/Stáje se kupuje, když zbyde rezerva', () => {
   const ctx = twoPlayerCtx();
-  ctx.players.get('bot').balance = 100000;
+  ctx.players.get('bot').balance = 3000 + 2000;
   const r = Bot.evaluatePurchase(ctx, 'bot', 12);
-  assert.equal(r.reason, 'service_pair');
-  assert.equal(r.buy, false);
+  assert.equal(r.reason, 'service_first');
+  assert.equal(r.buy, true);
+
+  ctx.players.get('bot').balance = 3000 + 2000 - 1;
+  assert.equal(Bot.evaluatePurchase(ctx, 'bot', 12).buy, false, 'rezervu nesmí prolomit');
 });
 
 test('nákup: Přeprava se kupuje, když bot už má Stáje', () => {
@@ -181,13 +187,13 @@ test('skóre: START ani jeho průchod se nezapočítává', () => {
   assert.equal(Bot.scoreSpace(ctx, 'bot', 2), 0);   // pole 2 = Finance, za STARTem
 });
 
-test('skóre: volný kůň, který kompletuje stáj, má hodnotu své ceny', () => {
+test('skóre: volný kůň, který kompletuje stáj, má hodnotu celé stáje', () => {
   const ctx = twoPlayerCtx();
   const bot = ctx.players.get('bot');
   bot.position = 20;
   bot.balance = 50000;
   own(ctx, 'bot', 1);
-  assert.equal(Bot.scoreSpace(ctx, 'bot', 3), 1200);
+  assert.equal(Bot.scoreSpace(ctx, 'bot', 3), 1200 + 1200);
 });
 
 test('skóre: vlastní kůň s monopolem láká na stavbu žetonu', () => {
@@ -389,12 +395,22 @@ test('dispatch: airport_select_target pošle konkrétní cíl', () => {
     { kind: 'respond', data: { decision: 'fly', spaceId: 39 } });
 });
 
-test('dispatch: cílená nabídka obchodu se odmítne i mimo tah bota', () => {
+test('dispatch: prázdná cílená nabídka se odmítne i mimo tah bota', () => {
   const ctx = twoPlayerCtx();
   ctx.pendingAction = { type: 'wait_roll', targetId: 'opp' };
   ctx.tradeOffers = [{ id: 'o1', fromId: 'opp', targetId: 'bot', offer: {}, request: {} }];
   assert.deepEqual(Bot.decideAction(ctx, 'bot'),
     { kind: 'respond', data: { decision: 'decline', tradeOfferId: 'o1' } });
+});
+
+test('dispatch: výhodná cílená nabídka se přijme i mimo tah bota', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 6);
+  ctx.pendingAction = { type: 'wait_roll', targetId: 'opp' };
+  ctx.tradeOffers = [{ id: 'o1', fromId: 'opp', targetId: 'bot',
+    offer: { horses: [], money: 3000 }, request: { horses: [6], money: 0 } }];
+  assert.deepEqual(Bot.decideAction(ctx, 'bot'),
+    { kind: 'respond', data: { decision: 'accept', tradeOfferId: 'o1' } });
 });
 
 test('dispatch: veřejná nabídka se ignoruje — smazala by ji i lidem', () => {
@@ -417,4 +433,209 @@ test('dispatch: bankrotující bot nic nedělá', () => {
   ctx.players.get('bot').bankrupt = true;
   ctx.pendingAction = { type: 'wait_roll', targetId: 'bot' };
   assert.equal(Bot.decideAction(ctx, 'bot'), null);
+});
+
+// ─── Riskování botů (config.botRisk) ──────────────────────────────────────────
+
+function riskCtx(risk) {
+  const ctx = twoPlayerCtx();
+  ctx.config.botRisk = risk;
+  return ctx;
+}
+
+test('riskování: rezerva roste od riskujícího k opatrnému', () => {
+  const reserveAt = risk => Bot.calcReserve(riskCtx(risk), 'bot');
+  assert.equal(reserveAt('balanced'), Bot.RESERVE_MIN);
+  assert.equal(reserveAt('risky'), Math.round(Bot.RESERVE_MIN * Bot.RISK_FACTORS.risky));
+  assert.equal(reserveAt('cautious'), Math.round(Bot.RESERVE_MIN * Bot.RISK_FACTORS.cautious));
+  assert.ok(reserveAt('risky') < reserveAt('balanced'));
+  assert.ok(reserveAt('balanced') < reserveAt('cautious'));
+});
+
+test('riskování: bez nastavení nebo s neznámou hodnotou se bot chová vyváženě', () => {
+  const ctx = twoPlayerCtx();
+  delete ctx.config.botRisk;
+  assert.equal(Bot.calcReserve(ctx, 'bot'), Bot.RESERVE_MIN);
+  ctx.config.botRisk = 'nesmysl';
+  assert.equal(Bot.calcReserve(ctx, 'bot'), Bot.RESERVE_MIN);
+});
+
+test('riskování: riskující bot koupí koně, kterého vyvážený odmítne', () => {
+  const decide = risk => {
+    const ctx = riskCtx(risk);
+    own(ctx, 'opp', 1);
+    ctx.players.get('bot').balance = 2500;    // 2500 - 1200 = 1300 < 2000
+    return Bot.evaluatePurchase(ctx, 'bot', 3).buy;
+  };
+  assert.equal(decide('balanced'), false);
+  assert.equal(decide('risky'), true);
+});
+
+test('riskování: opatrný bot odmítne koupi, kterou vyvážený udělá', () => {
+  const decide = risk => {
+    const ctx = riskCtx(risk);
+    own(ctx, 'opp', 1);
+    ctx.players.get('bot').balance = 1200 + 2500;   // zbyde 2500 ≥ 2000, ale < 3200
+    return Bot.evaluatePurchase(ctx, 'bot', 3).buy;
+  };
+  assert.equal(decide('balanced'), true);
+  assert.equal(decide('cautious'), false);
+});
+
+// ─── Obchod (evaluateTrade) ───────────────────────────────────────────────────
+
+/** Nabídka od soupeře botovi: offer = co bot dostane, request = co dá. */
+function tradeOffer(offer = {}, request = {}) {
+  return {
+    id: 't1', fromId: 'opp', targetId: 'bot',
+    offer:   { horses: [], money: 0, jailCard: false, ...offer },
+    request: { horses: [], money: 0, jailCard: false, ...request },
+  };
+}
+
+test('obchod: férové peníze za koně bot přijme', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 6);                         // hnědá 2000 Kč, zbytek stáje volný
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ money: 2500 }, { horses: [6] })), true);
+});
+
+test('obchod: laciná nabídka za koně se odmítne', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 6);
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ money: 2100 }, { horses: [6] })), false);
+});
+
+test('obchod: o celou stáj bot nepřijde ani za slušné peníze', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 1, 3);                      // celá oranžová
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ money: 3000 }, { horses: [3] })), false);
+});
+
+test('obchod: žetony na koni se počítají do ceny', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 6);
+  ctx.tokens[6] = { small: 2, big: false };   // +2000 Kč ve stavbách
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ money: 2500 }, { horses: [6] })), false);
+});
+
+test('obchod: koně, který soupeři doplní stáj, bot nedá za pouhou cenu', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'opp', 1);
+  own(ctx, 'bot', 3);
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ money: 1500 }, { horses: [3] })), false);
+});
+
+test('obchod: koně, který botovi doplní stáj, zaplatí i nad cenu', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 1);
+  own(ctx, 'opp', 3);
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ horses: [3] }, { money: 1800 })), true);
+});
+
+test('obchod: stejného koně bez doplnění stáje za tu cenu nekoupí', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'opp', 3);                         // bot v oranžové nic nemá
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ horses: [3] }, { money: 1800 })), false);
+});
+
+test('obchod: po zaplacení musí botovi zůstat rezerva', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 1);
+  own(ctx, 'opp', 3);
+  ctx.players.get('bot').balance = 2500;      // 2500 - 1800 = 700 < 2000
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ horses: [3] }, { money: 1800 })), false);
+});
+
+test('obchod: dar bez protihodnoty bot přijme, prázdnou nabídku ne', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'opp', 3);
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ horses: [3] })), true);
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer()), false);
+});
+
+test('obchod: karta „Zrušen distanc" má cenu', () => {
+  const ctx = twoPlayerCtx();
+  ctx.players.get('bot').jailFreeCards = 1;
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ money: 500 }, { jailCard: true })), false);
+  assert.equal(Bot.evaluateTrade(ctx, 'bot', tradeOffer({ money: 2500 }, { jailCard: true })), true);
+});
+
+// ─── Odkup (buyout_offer) ─────────────────────────────────────────────────────
+
+function buyoutDecision(ctx, spaceId, buyoutCost) {
+  ctx.pendingAction = { type: 'buyout_offer', targetId: 'bot', data: { spaceId, buyoutCost } };
+  return Bot.decideAction(ctx, 'bot').data.decision;
+}
+
+test('odkup: kůň doplní botovi stáj → koupí, zbyde-li rezerva', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 1);
+  own(ctx, 'opp', 3);
+  // Žeton se po odkupu staví až při příštím zastavení — stačí rezerva.
+  ctx.players.get('bot').balance = 2400 + 2000;
+  assert.equal(buyoutDecision(ctx, 3, 2400), 'buy');
+  ctx.players.get('bot').balance -= 1;
+  assert.equal(buyoutDecision(ctx, 3, 2400), 'decline');
+});
+
+test('odkup: postup ve stáji (zbytek je botův nebo volný) → koupí s rezervou a žetonem', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'bot', 6);
+  own(ctx, 'opp', 8);                         // hnědá: 9 volný
+  ctx.players.get('bot').balance = 4000 + 2000 + 1000;
+  assert.equal(buyoutDecision(ctx, 8, 4000), 'buy');
+  ctx.players.get('bot').balance -= 1;
+  assert.equal(buyoutDecision(ctx, 8, 4000), 'decline');
+});
+
+test('odkup: když zbytek stáje drží i jiný soupeř, bot neodkupuje', () => {
+  const ctx = twoPlayerCtx();
+  addPlayer(ctx, makePlayer('opp2'));
+  own(ctx, 'bot', 6);
+  own(ctx, 'opp', 8);
+  own(ctx, 'opp2', 9);
+  assert.equal(buyoutDecision(ctx, 8, 4000), 'decline');
+});
+
+test('odkup: běžného koně (soupeř nemá celou stáj) bot neodkoupí', () => {
+  const ctx = twoPlayerCtx();
+  own(ctx, 'opp', 6, 8);                      // hnědá: soupeř 2 ze 3, 9 volný
+  assert.equal(buyoutDecision(ctx, 6, 4000), 'decline');
+});
+
+// ─── Letiště → odkup ─────────────────────────────────────────────────────────
+
+test('letiště: bot letí na soupeřova koně, jehož odkupem doplní stáj', () => {
+  const ctx = twoPlayerCtx();
+  ctx.config.buyoutMultiplier = 2;
+  const bot = ctx.players.get('bot');
+  bot.position = 20;
+  bot.balance = 30000;
+  own(ctx, 'bot', 37);
+  own(ctx, 'opp', 39);                        // Napoli: odkup 16 000
+  assert.equal(Bot.decideAirport(ctx, 'bot'), 39);
+});
+
+test('letiště: bez zapnutého odkupu na soupeřova koně nelétá', () => {
+  const ctx = twoPlayerCtx();
+  const bot = ctx.players.get('bot');
+  bot.position = 20;
+  bot.balance = 30000;
+  own(ctx, 'bot', 37);
+  own(ctx, 'opp', 39);
+  assert.equal(Bot.decideAirport(ctx, 'bot'), null);
+});
+
+test('letiště: na odkup nelétá, když by po poplatku a nájmu nezbyla rezerva', () => {
+  const ctx = twoPlayerCtx();
+  ctx.config.buyoutMultiplier = 2;
+  const bot = ctx.players.get('bot');
+  bot.position = 20;
+  own(ctx, 'bot', 37);
+  own(ctx, 'opp', 39);
+  // poplatek 2000 + nájem 1000 + odkup 16 000 + rezerva 2000
+  bot.balance = 2000 + 1000 + 16000 + 2000;
+  assert.equal(Bot.decideAirport(ctx, 'bot'), 39);
+  bot.balance -= 1;
+  assert.equal(Bot.decideAirport(ctx, 'bot'), null);
 });

@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const GameEngine = require('../src/GameEngine');
-const { OUTCOMES } = require('../src/Roulette');
+const { spinRoulette } = require('./helpers/roulette');
+const { OUTCOMES, rndFor } = require('../src/Roulette');
 
 const BET = OUTCOMES.find(o => o.id === 'bet');
 
@@ -14,6 +15,7 @@ function makeEngine() {
   engine._scheduleAction = (delay, fn) => fn();
   engine.phase = 'playing';
   engine.config.field30Mode = 'roulette';
+  engine.config.rouletteFee = 0;   // točí se hned, bez volby zaplatit
 
   ['A', 'B'].forEach(id => {
     engine.players.set(id, {
@@ -21,14 +23,13 @@ function makeEngine() {
       position: 0, balance: 30000, bankrupt: false, inJail: false, jailTurns: 0,
       skipTurns: 0, properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: true, disconnected: false, canFly: false, left: false,
-      pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
+      pendingBet: null, halfPriceNext: false,
     });
   });
   engine.turnOrder = ['A', 'B'];
   engine.currentTurnIdx = 0;
 
-  const idx = OUTCOMES.findIndex(o => o.id === 'bet');
-  engine._rouletteRnd = () => (idx + 0.5) / OUTCOMES.length;
+  engine._rouletteRnd = () => rndFor('bet');
   return engine;
 }
 
@@ -39,9 +40,8 @@ function placeBet(engine) {
   // stejný vzor izolace jako v tests/roulette-spin.test.js (test "režim
   // doping se chová jako dřív") a tests/trade-debt-resume.test.js.
   engine._advanceTurn = () => {};
-  engine.players.get('A').position = 30;
-  engine._evaluateSpace('A');
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
+  spinRoulette(engine);
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'ack' });
 }
 
 test('sázka se strhne hned při zatočení', () => {

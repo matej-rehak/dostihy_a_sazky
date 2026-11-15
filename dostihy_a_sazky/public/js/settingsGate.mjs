@@ -5,12 +5,12 @@
 export const SETTING_KEYS = [
   'pawnAnimation',      // pohyb figurky po plánu
   'cardFlip',           // otáčení karty Finance / Náhoda
-  'rouletteSpin',       // roztočení kola Totalizátoru
   'particles',          // částice na pozadí
   'sixSparks',          // jiskry po hodu šestky
   'starterDraw',        // losování prvního hráče
   'celebrationOverlays',// oslavné obrazovky (dokončená stáj, bankrot)
   'toasts',             // informativní vyskakovací hlášky
+  'showLog',            // sekce Průběh v pravém panelu
 ];
 
 /** Ve výchozím stavu je zapnuté všechno. */

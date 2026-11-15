@@ -4,12 +4,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const GameEngine = require('../src/GameEngine');
+const { spinRoulette } = require('./helpers/roulette');
 const BOARD = require('../src/data/boardData');
-const { OUTCOMES } = require('../src/Roulette');
+const { rndFor, GIFT_FALLBACK_FINE } = require('../src/Roulette');
 
 const FANTOME = 1;
 const GAVORA = 3;
-const AUCTION = OUTCOMES.find(o => o.id === 'auction');
+const LADY_ANNE = 6;
 
 function makeEngine(outcomeId) {
   const engine = new GameEngine({ to: () => ({ emit: () => {} }) }, 'room-test');
@@ -17,6 +18,7 @@ function makeEngine(outcomeId) {
   engine._scheduleAction = (delay, fn) => fn();
   engine.phase = 'playing';
   engine.config.field30Mode = 'roulette';
+  engine.config.rouletteFee = 0;   // točí se hned, bez volby zaplatit
 
   ['A', 'B'].forEach(id => {
     engine.players.set(id, {
@@ -24,73 +26,20 @@ function makeEngine(outcomeId) {
       position: 0, balance: 30000, bankrupt: false, inJail: false, jailTurns: 0,
       skipTurns: 0, properties: [], rollAccumulator: 0, moveDirection: 1,
       jailFreeCards: 0, ready: true, disconnected: false, canFly: false, left: false,
-      pendingBet: null, doubleRent: 0, rentImmunity: 0, halfPriceNext: false, tokenStrike: 0,
+      pendingBet: null, halfPriceNext: false,
     });
   });
   engine.turnOrder = ['A', 'B'];
   engine.currentTurnIdx = 0;
 
-  const idx = OUTCOMES.findIndex(o => o.id === outcomeId);
-  engine._rouletteRnd = () => (idx + 0.5) / OUTCOMES.length;
+  engine._rouletteRnd = () => rndFor(outcomeId);
   return engine;
 }
 
 function spinAndAck(engine) {
-  engine.players.get('A').position = 30;
-  engine._evaluateSpace('A');
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, {});
+  spinRoulette(engine);
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'ack' });
 }
-
-test('dražba nabídne volné koně s přirážkou 50 %', () => {
-  const engine = makeEngine('auction');
-  engine.ownerships[GAVORA] = 'B';
-  spinAndAck(engine);
-
-  assert.equal(engine.pendingAction.type, 'roulette_pick_horse');
-  const option = engine.pendingAction.data.options.find(o => o.spaceId === FANTOME);
-  const expected = Math.round(BOARD[FANTOME].price * (1 + AUCTION.surchargePct / 100));
-  assert.equal(option.price, expected);
-  // obsazený kůň v nabídce být nesmí
-  assert.equal(engine.pendingAction.data.options.some(o => o.spaceId === GAVORA), false);
-});
-
-test('dražba převede koně a strhne cenu s přirážkou', () => {
-  const engine = makeEngine('auction');
-  spinAndAck(engine);
-  const price = engine.pendingAction.data.options.find(o => o.spaceId === FANTOME).price;
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: FANTOME });
-
-  assert.equal(engine.ownerships[FANTOME], 'A');
-  assert.equal(engine.players.get('A').balance, 30000 - price);
-});
-
-test('dražba nespotřebuje přednostní právo', () => {
-  const engine = makeEngine('auction');
-  engine.players.get('A').halfPriceNext = true;
-  spinAndAck(engine);
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: FANTOME });
-
-  assert.equal(engine.players.get('A').halfPriceNext, true);
-});
-
-test('odmítnutá dražba efekt spotřebuje a tah pokračuje', () => {
-  const engine = makeEngine('auction');
-  spinAndAck(engine);
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'decline' });
-
-  assert.equal(engine.ownerships[FANTOME], undefined);
-  assert.notEqual(engine.pendingAction?.type, 'roulette_pick_horse');
-});
-
-test('nabídnou se jen koně, na které hráč má', () => {
-  const engine = makeEngine('auction');
-  engine.players.get('A').balance = 1900; // Fantome 1200 → 1800 ano, Lady Anne 2000 → 3000 ne
-  spinAndAck(engine);
-
-  const ids = engine.pendingAction.data.options.map(o => o.spaceId);
-  assert.ok(ids.includes(FANTOME));
-  assert.equal(ids.includes(6), false, 'Lady Anne je nad rozpočet');
-});
 
 test('dostih zdarma položí žeton bez placení', () => {
   const engine = makeEngine('free_token');
@@ -113,31 +62,6 @@ test('bez úplné stáje dostih zdarma propadne', () => {
 
   assert.notEqual(engine.pendingAction?.type, 'roulette_pick_horse');
   assert.equal(engine.tokens[FANTOME], undefined);
-});
-
-test('dražba propadne, pokud hráč mezi otevřením a odpovědí zchudl (schválená obchodem)', () => {
-  const engine = makeEngine('auction');
-  spinAndAck(engine);
-  const price = engine.pendingAction.data.options.find(o => o.spaceId === FANTOME).price;
-  // simuluje, že hráč mezitím utratil peníze (např. přijetím obchodu) a na koně už nemá
-  engine.players.get('A').balance = price - 1;
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: FANTOME });
-
-  assert.equal(engine.ownerships[FANTOME], undefined);
-  assert.equal(engine.players.get('A').balance, price - 1);
-  assert.notEqual(engine.pendingAction?.type, 'roulette_pick_horse');
-});
-
-test('dražba propadne, pokud koně mezitím koupil někdo jiný', () => {
-  const engine = makeEngine('auction');
-  spinAndAck(engine);
-  // simuluje, že koně mezitím získal jiný hráč (např. kartou) dřív, než A odpověděl(a)
-  engine.ownerships[FANTOME] = 'B';
-  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: FANTOME });
-
-  assert.equal(engine.ownerships[FANTOME], 'B');
-  assert.equal(engine.players.get('A').balance, 30000);
-  assert.notEqual(engine.pendingAction?.type, 'roulette_pick_horse');
 });
 
 test('dostih zdarma propadne, pokud hráč mezitím přišel o koně', () => {
@@ -185,4 +109,79 @@ test('dostih zdarma propadne, pokud mezitím žetony dosáhly stropu', () => {
 
   assert.equal(engine.tokens[FANTOME].small, 4);
   assert.notEqual(engine.pendingAction?.type, 'roulette_pick_horse');
+});
+
+// ─── Daruješ koně ───────────────────────────────────────────────────────────
+
+function own(engine, pid, ...sids) {
+  sids.forEach(sid => {
+    engine.ownerships[sid] = pid;
+    engine.players.get(pid).properties.push(sid);
+  });
+}
+
+test('dar koně nabídne vlastní koně a soupeře', () => {
+  const engine = makeEngine('give_horse');
+  own(engine, 'A', FANTOME, 5);   // 5 = služba, darovat se nedá
+  spinAndAck(engine);
+
+  assert.equal(engine.pendingAction.type, 'roulette_give_horse');
+  assert.deepEqual(engine.pendingAction.data.options, [FANTOME]);
+  assert.deepEqual(engine.pendingAction.data.candidates, ['B']);
+});
+
+test('dar převede zvoleného koně zvolenému soupeři i se žetony', () => {
+  const engine = makeEngine('give_horse');
+  own(engine, 'A', FANTOME, LADY_ANNE);
+  engine.tokens[LADY_ANNE] = { small: 2, big: false };
+  spinAndAck(engine);
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'B', spaceId: LADY_ANNE });
+
+  assert.equal(engine.ownerships[LADY_ANNE], 'B');
+  assert.deepEqual(engine.players.get('A').properties, [FANTOME]);
+  assert.deepEqual(engine.players.get('B').properties, [LADY_ANNE]);
+  assert.deepEqual(engine.tokens[LADY_ANNE], { small: 2, big: false });
+  assert.equal(engine.players.get('A').balance, 30000, 'dar se neplatí');
+});
+
+test('neplatná volba daru se nahradí — špatná výseč se nedá obejít', () => {
+  const engine = makeEngine('give_horse');
+  own(engine, 'A', FANTOME, LADY_ANNE);
+  spinAndAck(engine);
+  // cizí kůň a neexistující hráč
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'X', spaceId: 39 });
+
+  // náhradní volba bere nejlevnějšího koně
+  assert.equal(engine.ownerships[FANTOME], 'B');
+  assert.equal(engine.ownerships[LADY_ANNE], 'A');
+});
+
+test('vypršelý limit dar provede za hráče', () => {
+  const engine = makeEngine('give_horse');
+  own(engine, 'A', LADY_ANNE);
+  spinAndAck(engine);
+  engine._handleTurnTimeout();
+
+  assert.equal(engine.ownerships[LADY_ANNE], 'B');
+});
+
+test('bez koně se místo daru platí pokuta', () => {
+  const engine = makeEngine('give_horse');
+  spinAndAck(engine);
+
+  assert.notEqual(engine.pendingAction?.type, 'roulette_give_horse');
+  assert.equal(engine.players.get('A').balance, 30000 - GIFT_FALLBACK_FINE);
+});
+
+test('dar propadne, pokud hráč mezitím o koně přišel', () => {
+  const engine = makeEngine('give_horse');
+  own(engine, 'A', FANTOME);
+  spinAndAck(engine);
+  engine.ownerships[FANTOME] = 'B';
+  engine.players.get('A').properties = [];
+  engine.players.get('B').properties = [FANTOME];
+  engine.handleRespond({ playerId: 'A', emit: () => {} }, { decision: 'B', spaceId: FANTOME });
+
+  assert.equal(engine.ownerships[FANTOME], 'B');
+  assert.deepEqual(engine.players.get('B').properties, [FANTOME]);
 });

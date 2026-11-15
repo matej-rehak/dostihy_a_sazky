@@ -7,6 +7,8 @@ const Bot = require('../src/Bot');
 const { makeCtx, makePlayer, addPlayer } = require('./helpers/botCtx');
 
 const FANTOME = 1;
+const GAVORA = 3;
+const LADY_ANNE = 6;
 
 function ctxWithPrompt(pendingAction, extra = {}) {
   const ctx = makeCtx({ pendingAction, ...extra });
@@ -18,7 +20,7 @@ function ctxWithPrompt(pendingAction, extra = {}) {
 
 test('bot potvrdí roulette_ack', () => {
   const ctx = ctxWithPrompt({
-    type: 'roulette_ack', targetId: 'BOT', data: { result: { id: 'immunity' } },
+    type: 'roulette_ack', targetId: 'BOT', data: { result: { id: 'preemption' } },
   });
   const action = Bot.decideAction(ctx, 'BOT');
 
@@ -37,30 +39,6 @@ test('bot vybere soupeře pro cílený efekt', () => {
   assert.equal(action.data.decision, 'HUMAN');
 });
 
-test('bot si vybere koně v dražbě', () => {
-  const ctx = ctxWithPrompt({
-    type: 'roulette_pick_horse', targetId: 'BOT',
-    data: { outcomeId: 'auction', options: [{ spaceId: FANTOME, price: 1800 }] },
-  });
-  const action = Bot.decideAction(ctx, 'BOT');
-
-  assert.notEqual(action, null, 'bot nesmí zamrznout na dražbě');
-  // Bot má 30.000 Kč, kůň za 1.800 Kč mu po zaplacení nechá rezervu s přehledem
-  // — dražbu má vzít. `decision === 'decline'` by tady byla chyba, ne varianta.
-  assert.equal(action.data.decision, FANTOME);
-});
-
-test('bot na dražbu, na kterou nemá, odpoví decline', () => {
-  const ctx = ctxWithPrompt({
-    type: 'roulette_pick_horse', targetId: 'BOT',
-    data: { outcomeId: 'auction', options: [{ spaceId: FANTOME, price: 999999 }] },
-  });
-  ctx.players.get('BOT').balance = 1000;
-  const action = Bot.decideAction(ctx, 'BOT');
-
-  assert.equal(action.data.decision, 'decline');
-});
-
 test('bot si vezme žeton zdarma vždy', () => {
   const ctx = ctxWithPrompt({
     type: 'roulette_pick_horse', targetId: 'BOT',
@@ -74,12 +52,43 @@ test('bot si vezme žeton zdarma vždy', () => {
 test('žádný nový prompt nevrací null', () => {
   const prompts = [
     { type: 'roulette_ack', data: { result: { id: 'doping' } } },
-    { type: 'roulette_pick_player', data: { outcomeId: 'strike', candidates: ['HUMAN'] } },
-    { type: 'roulette_pick_horse', data: { outcomeId: 'auction', options: [{ spaceId: FANTOME, price: 1800 }] } },
+    { type: 'roulette_pick_player', data: { outcomeId: 'report', candidates: ['HUMAN'] } },
+    { type: 'roulette_give_horse', data: { options: [FANTOME], candidates: ['HUMAN'] } },
     { type: 'roulette_pick_horse', data: { outcomeId: 'free_token', options: [{ spaceId: FANTOME, price: 0 }] } },
   ];
   for (const p of prompts) {
     const ctx = ctxWithPrompt({ ...p, targetId: 'BOT' });
     assert.notEqual(Bot.decideAction(ctx, 'BOT'), null, `bot zamrzl na ${p.type}/${p.data.outcomeId ?? ''}`);
   }
+});
+
+test('bot daruje nejlevnějšího koně nejslabšímu soupeři', () => {
+  const ctx = ctxWithPrompt({
+    type: 'roulette_give_horse', targetId: 'BOT',
+    data: { options: [FANTOME, LADY_ANNE], candidates: ['HUMAN', 'RICH'] },
+  });
+  addPlayer(ctx, makePlayer('RICH', { balance: 90000 }));
+  ctx.turnOrder.push('RICH');
+  [FANTOME, LADY_ANNE].forEach(sid => {
+    ctx.ownerships[sid] = 'BOT';
+    ctx.players.get('BOT').properties.push(sid);
+  });
+  const action = Bot.decideAction(ctx, 'BOT');
+
+  assert.equal(action.data.decision, 'HUMAN');
+  assert.equal(action.data.spaceId, FANTOME);
+});
+
+test('bot nedaruje koně z vlastní úplné stáje, když má jiného', () => {
+  const ctx = ctxWithPrompt({
+    type: 'roulette_give_horse', targetId: 'BOT',
+    data: { options: [FANTOME, GAVORA, LADY_ANNE], candidates: ['HUMAN'] },
+  });
+  [FANTOME, GAVORA, LADY_ANNE].forEach(sid => {
+    ctx.ownerships[sid] = 'BOT';
+    ctx.players.get('BOT').properties.push(sid);
+  });
+  const action = Bot.decideAction(ctx, 'BOT');
+
+  assert.equal(action.data.spaceId, LADY_ANNE);
 });

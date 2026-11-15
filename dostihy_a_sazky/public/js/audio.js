@@ -32,7 +32,6 @@ export const audioManager = {
     // Registrace zvuků.
     this.load('click', '/sounds/click.mp3');
     this.load('roll', '/sounds/roll.mp3');
-    this.load('step', '/sounds/step.mp3');
     this.load('cash', '/sounds/cash.mp3');
     this.load('jail', '/sounds/jail.mp3');
     this.load('card', '/sounds/card.mp3');
@@ -51,6 +50,20 @@ export const audioManager = {
     this.load('start_bonus', '/sounds/start_bonus.mp3');
     this.load('pay_rent', '/sounds/pay_rent.mp3');
     this.load('upgrade_star', '/sounds/upgrade_star.mp3');
+    this.load('money_out', '/sounds/money_out.mp3');
+
+    // Herní momenty — CC0 z Freesound (výběr přes Openverse, 2026-11)
+    this.load('skip_turn', '/sounds/skip_turn.mp3');           // banner „Toto kolo stojíš"
+    this.load('roulette_spin', '/sounds/roulette_spin.mp3');   // roztočení Rulety
+    this.load('roulette_good', '/sounds/roulette_good.mp3');   // dobrá výseč
+    this.load('roulette_bad', '/sounds/roulette_bad.mp3');     // špatná výseč
+    this.load('doping', '/sounds/doping.mp3');                 // píšťalka
+    this.load('airport', '/sounds/airport.mp3');               // odlet z Letiště
+    this.load('stable_fanfare', '/sounds/stable_fanfare.mp3'); // úplná stáj
+    this.load('reroll', '/sounds/reroll.mp3');                 // karta Opakovaný hod
+    this.load('bet_win', '/sounds/bet_win.mp3');               // výhra sázky
+    this.load('tick', '/sounds/tick.mp3');                     // poslední vteřiny tahu
+    this.load('horse', '/sounds/horse.mp3');                   // koupě koně
 
     // Pozadí hry
     this.load('music', '/sounds/music.mp3');

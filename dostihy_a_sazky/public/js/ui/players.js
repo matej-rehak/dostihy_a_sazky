@@ -1,7 +1,9 @@
-import { makeEl, fmt, safeColor } from '../utils.js';
+import { makeEl, fmt, safeColor, uiIcon, imgIcon, setIconText } from '../utils.js';
 import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { startTradeWith } from './actions.js';
+import { tradeBadge } from './tradeNoticeView.mjs';
+import { statusBadges } from './playerStatusView.mjs';
 
 function calcAssetsValue(p, gameState) {
   if (!state.boardData) return 0;
@@ -71,7 +73,8 @@ export function updatePlayers(gameState) {
     avatar.style.background = safeColor(p.color);
     avatar.textContent = p.name[0].toUpperCase();
     if (leaders.includes(p.id)) {
-      const crown = makeEl('div', 'p-crown', '👑');
+      const crown = makeEl('div', 'p-crown');
+      crown.appendChild(uiIcon('koruna'));
       avatar.appendChild(crown);
     }
     row.appendChild(avatar);
@@ -88,17 +91,41 @@ export function updatePlayers(gameState) {
 
     const pos = state.boardData ? (state.boardData[p.position]?.name ?? '?') : '?';
     const posEl = makeEl('div', 'p-pos', pos + ' ');
-    if (p.inJail) posEl.appendChild(makeEl('span', 'p-badge jail', '🔒 Distanc'));
-    if (p.bankrupt) posEl.appendChild(makeEl('span', 'p-badge bankrupt-badge', '💀 Bankrot'));
-    if (p.disconnected) posEl.appendChild(makeEl('span', 'p-badge disconnected-badge', '📡 Odpojeno'));
+    if (!p.bankrupt) {
+      // Zdržení, doping, Distanc, sleva, sázka… (ui/playerStatusView.mjs).
+      // Na mobilu CSS skryje dlouhý text a nechá ikonku + číslo.
+      statusBadges(p, gameState.config).forEach(b => {
+        const el = makeEl('span', `p-badge status-badge st-${b.kind}`);
+        el.title = b.title;
+        if (b.kind === 'jail') el.appendChild(uiIcon('zamek', true));
+        else el.appendChild(makeEl('span', 'st-icon', b.icon));
+        el.appendChild(makeEl('span', 'st-text', b.text));
+        if (b.short) el.appendChild(makeEl('span', 'st-short', b.short));
+        posEl.appendChild(el);
+      });
+    }
+    if (p.bankrupt) {
+      const broke = makeEl('span', 'p-badge bankrupt-badge');
+      setIconText(broke, 'bankrot', 'Bankrot');
+      posEl.appendChild(broke);
+    }
+    if (p.disconnected) {
+      const off = makeEl('span', 'p-badge disconnected-badge');
+      setIconText(off, 'odpojeno', 'Odpojeno');
+      posEl.appendChild(off);
+    }
     if (isTurn) posEl.appendChild(makeEl('span', 'p-badge', '▶ Na tahu'));
-    if (p.jailFreeCards > 0) {
-      const label = p.jailFreeCards > 1 ? `🔓 Zrušen distanc (${p.jailFreeCards}×)` : '🔓 Zrušen distanc';
-      posEl.appendChild(makeEl('span', 'p-badge jail-free-badge', label));
+    // Vyjednávání — kdo s kým (rozpracovaná i odeslaná nabídka)
+    const trade = tradeBadge(gameState, p.id);
+    if (trade) {
+      const tb = makeEl('span', `p-badge trade-badge${trade.live ? ' is-live' : ''}`);
+      setIconText(tb, 'obchod', trade.text);
+      tb.title = trade.text;
+      posEl.appendChild(tb);
     }
     info.appendChild(posEl);
 
-    if (state.boardData && p.properties?.length > 0) {
+    if (state.boardData && (p.properties?.length > 0 || p.jailFreeCards > 0 || p.rerollCards > 0)) {
       info.appendChild(buildInventory(p, gameState));
     }
 
@@ -118,8 +145,10 @@ export function updatePlayers(gameState) {
 
     if ((meOnTurn || p.id === targetInDebt) && !isMe && !p.bankrupt) {
       const me = gameState.players.find(pl => pl.id === state.myId);
-      const tradeBtn = makeEl('button', 'btn btn-xs btn-trade-icon', '🤝');
+      const tradeBtn = makeEl('button', 'btn btn-xs btn-trade-icon');
+      tradeBtn.appendChild(uiIcon('obchod'));
       tradeBtn.title = `Navrhnout obchod s ${p.name}`;
+      tradeBtn.setAttribute('aria-label', `Navrhnout obchod s ${p.name}`);
       tradeBtn.addEventListener('click', () => startTradeWith(p.id, gameState, me));
       row.appendChild(tradeBtn);
     }
@@ -141,6 +170,20 @@ function buildInventory(p, gameState) {
   });
 
   const invDiv = makeEl('div', 'p-inventory');
+  // Karta „Zrušen distanc" — kartička s obrázkem Distancu vedle koní.
+  if (p.jailFreeCards > 0) {
+    const card = makeEl('div', 'inv-jail-card');
+    card.title = 'Karta „Zrušen distanc" — vysvobodí z Distancu. Lze s ní obchodovat.';
+    card.appendChild(imgIcon('img/distanc.png'));
+    invDiv.appendChild(card);
+  }
+  // Karta „Opakovaný hod" — stejná kartička, s kostkou.
+  if (p.rerollCards > 0) {
+    const card = makeEl('div', 'inv-jail-card');
+    card.title = 'Karta „Opakovaný hod" — po hodu kostkou můžeš hodit znovu.';
+    card.appendChild(uiIcon('kostka'));
+    invDiv.appendChild(card);
+  }
   Object.entries(groups).forEach(([gColor, spcList]) => {
     const totalInGroup = state.boardData.filter(s => s.type === 'horse' && s.groupColor === gColor).length;
     const isMonopoly = spcList.length === totalInGroup && totalInGroup > 0 && spcList[0].type !== 'service';
@@ -148,8 +191,9 @@ function buildInventory(p, gameState) {
     const grpDiv = makeEl('div', `inv-group${isMonopoly ? ' monopoly-glow' : ''}`);
     spcList.forEach(sp => {
       if (sp.type === 'service') {
-        const icon = sp.serviceType === 'trener' ? '👤' : sp.serviceType === 'staje' ? '🏠' : '🚐';
-        const svc = makeEl('div', 'inv-service', icon);
+        // Stejná ikonka jako na políčku služby (img/trener.png, staje.png, preprava.png)
+        const svc = makeEl('div', 'inv-service');
+        svc.appendChild(imgIcon(`img/${sp.serviceType}.png`));
         svc.dataset.sid = sp.id;
         grpDiv.appendChild(svc);
       } else {
@@ -157,10 +201,17 @@ function buildInventory(p, gameState) {
         const bar = makeEl('div', 'inv-bar');
         bar.dataset.sid = sp.id;
         bar.style.background = safeColor(sp.groupColor);
+        // Stejné žetony jako na plánu (img/dostih.png, img/hlavni-dostih.png)
         if (tok?.big) {
-          bar.appendChild(makeEl('span', 'inv-crown', '👑'));
+          const big = imgIcon('img/hlavni-dostih.png');
+          big.className = 'inv-tok-big';
+          bar.appendChild(big);
         } else if (tok?.small > 0) {
-          for (let i = 0; i < tok.small; i++) bar.appendChild(makeEl('span', 'inv-dot'));
+          for (let i = 0; i < tok.small; i++) {
+            const small = imgIcon('img/dostih.png');
+            small.className = 'inv-tok';
+            bar.appendChild(small);
+          }
         }
         grpDiv.appendChild(bar);
       }

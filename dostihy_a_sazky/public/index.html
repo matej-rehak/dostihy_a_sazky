@@ -13,7 +13,7 @@
 <body>
   <div class="top-right-controls">
     <button id="settings-toggle-btn" class="btn-icon header-btn" onclick="window.toggleSettingsModal()" aria-label="Otevřít nastavení" title="Nastavení">
-      ⚙️
+      <img class="ui-icon ui-icon-spin" src="img/ui/nastaveni.png" alt="" draggable="false" />
     </button>
   </div>
 
@@ -22,7 +22,7 @@
     <div class="settings-modal modal-card">
       <div class="modal-header">
         <h2>Nastavení hry</h2>
-        <button class="btn-icon" onclick="window.toggleSettingsModal()" aria-label="Zavřít">✖</button>
+        <button class="btn-icon" onclick="window.toggleSettingsModal()" aria-label="Zavřít"><img class="ui-icon" src="img/ui/zavrit.png" alt="" draggable="false" /></button>
       </div>
       <div class="modal-body">
         
@@ -55,10 +55,6 @@
             <input id="set-cardFlip" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('cardFlip', this.checked)">
           </div>
           <div class="setting-row">
-            <label for="set-rouletteSpin">Točení Totalizátoru</label>
-            <input id="set-rouletteSpin" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('rouletteSpin', this.checked)">
-          </div>
-          <div class="setting-row">
             <label for="set-particles">Částice na pozadí</label>
             <input id="set-particles" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('particles', this.checked)">
           </div>
@@ -87,6 +83,10 @@
         <div class="settings-group">
           <h3>Zobrazení</h3>
           <div class="setting-row">
+            <label for="set-showLog">Průběh hry v panelu</label>
+            <input id="set-showLog" type="checkbox" class="setting-check" checked onchange="window.setGameSetting('showLog', this.checked)">
+          </div>
+          <div class="setting-row">
             <label>Režim celé obrazovky</label>
             <button class="btn btn-outline btn-sm" onclick="window.toggleFullscreen()">Přepnout Fullscreen</button>
           </div>
@@ -100,8 +100,8 @@
   <div id="trade-overlay" class="overlays-bg hidden" style="z-index: 10010;">
     <div class="trade-modal modal-card">
       <div class="modal-header">
-        <h2 id="trade-title">🤝 Obchod</h2>
-        <button class="btn-icon" id="trade-close-btn" aria-label="Zavřít">✖</button>
+        <h2 id="trade-title"><img class="ui-icon ui-icon-inline" src="img/ui/obchod.png" alt="" draggable="false" />Obchod</h2>
+        <button class="btn-icon" id="trade-close-btn" aria-label="Zavřít"><img class="ui-icon" src="img/ui/zavrit.png" alt="" draggable="false" /></button>
       </div>
       <div id="trade-content" class="modal-body">
         <!-- Obsah obchodu bude generován dynamicky -->
@@ -113,8 +113,8 @@
   <div id="debt-overlay" class="overlays-bg hidden" style="z-index: 10005;">
     <div class="debt-modal modal-card">
       <div class="modal-header">
-        <h2 id="debt-title">💸 Řešení dluhu</h2>
-        <button class="btn-icon" id="debt-close-btn" aria-label="Zavřít">✖</button>
+        <h2 id="debt-title"><img class="ui-icon ui-icon-inline" src="img/ui/dluh.png" alt="" draggable="false" />Řešení dluhu</h2>
+        <button class="btn-icon" id="debt-close-btn" aria-label="Zavřít"><img class="ui-icon" src="img/ui/zavrit.png" alt="" draggable="false" /></button>
       </div>
       <div id="debt-content" class="modal-body">
         <!-- Obsah bude generován dynamicky -->
@@ -125,6 +125,10 @@
   <div id="app-root"></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <!-- Three.js pro 3D pohled; server ho vystavuje z node_modules (viz server.js) -->
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

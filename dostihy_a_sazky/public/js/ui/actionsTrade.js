@@ -1,16 +1,42 @@
-import { makeEl, fmt, safeColor } from '../utils.js';
+import { makeEl, fmt, safeColor, setIconText } from '../utils.js';
 import { dom } from '../dom.js';
 import { state } from '../state.js';
 import { socket } from '../socket.js';
 import { audioManager } from '../audio.js';
 import { buildWaitEl } from './actionsHelpers.js';
 import { showTip, moveTip } from './tooltip.js';
+import { syncTradeDrafting } from './tradeNotice.js';
+
+// Nadpis sloupce obchodu s ikonkou (nabizim / zadam)
+function colTitle(icon, text) {
+  const el = makeEl('div', 'trade-col-title');
+  setIconText(el, icon, text);
+  return el;
+}
 
 // ─── Trade draft stav ─────────────────────────────────────────────────────────
 export let tradeDraft = null;
 
 export function setTradeDraft(v) {
   tradeDraft = v;
+  syncDrafting();
+}
+
+// ─── „Skládá nabídku" ─────────────────────────────────────────────────────────
+// Ostatní hráči i cílový hráč vidí, že se vyjednává (ui/tradeNotice.js).
+// Skládám, dokud je okno obchodu otevřené s rozpracovanou nabídkou. Okno se
+// zavírá z mnoha míst, proto se hlídá přes změnu jeho třídy `hidden`.
+export function syncDrafting() {
+  const open = dom.tradeOverlay && !dom.tradeOverlay.classList.contains('hidden');
+  syncTradeDrafting(open && tradeDraft ? tradeDraft.targetId : null);
+}
+
+let overlayWatched = null;
+function watchTradeOverlay() {
+  const overlay = dom.tradeOverlay;
+  if (!overlay || overlayWatched === overlay) return;
+  overlayWatched = overlay;
+  new MutationObserver(syncDrafting).observe(overlay, { attributes: true, attributeFilter: ['class'] });
 }
 
 function closeTradeModal() {
@@ -72,10 +98,43 @@ function createTradeCard(sid, isSelected, onToggle, tokenData = null, options = 
   return card;
 }
 
+/**
+ * Karta „Zrušen distanc" v obchodu — stejná kartička jako kůň, jen s obrázkem
+ * Distancu místo barevného pruhu. Ve hře je jen jedna.
+ */
+function createJailTradeCard(isSelected, onToggle, options = {}) {
+  const card = makeEl('div', `trade-card trade-card-jail ${isSelected ? 'selected' : ''} ${options.noCheck ? 'no-check' : ''}`);
+  const img = document.createElement('img');
+  img.className = 'trade-card-jail-img';
+  img.src = 'img/distanc.png';
+  img.alt = '';
+  img.draggable = false;
+  card.appendChild(img);
+  card.appendChild(makeEl('div', 'trade-card-name', 'Zrušen distanc'));
+  card.appendChild(makeEl('div', 'trade-card-check', '✓'));
+  card.title = 'Karta „Zrušen distanc" — vysvobodí z Distancu';
+  card.addEventListener('click', () => {
+    if (options.readonly) return;
+    onToggle();
+  });
+  return card;
+}
+
+/** Mřížka nabízených / žádaných věcí v náhledu nabídky (jen ke čtení). */
+function readonlyGrid(side, gameState) {
+  if (!side.horses?.length && !side.jailCard) return null;
+  const grid = makeEl('div', 'trade-grid');
+  if (side.jailCard) grid.appendChild(createJailTradeCard(true, () => {}, { noCheck: true, readonly: true }));
+  (side.horses || []).forEach(sid => {
+    grid.appendChild(createTradeCard(sid, true, () => {}, gameState.tokens[sid], { noCheck: true, readonly: true }));
+  });
+  return grid;
+}
+
 // ─── Trade: builder (sestavení nabídky) ───────────────────────────────────────
 
 export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, submitFn = null) {
-  dom.tradeTitle.textContent = fixedTargetId ? '🔄 Protinabídka' : '🤝 Navrhnout obchod';
+  setIconText(dom.tradeTitle, 'obchod', fixedTargetId ? 'Protinabídka' : 'Navrhnout obchod');
   dom.tradeContent.innerHTML = '';
   dom.tradeOverlay.classList.remove('hidden');
 
@@ -97,17 +156,25 @@ export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, 
   
   const isPublic = tradeDraft.targetId === 'public';
   const target = isPublic ? null : others.find(p => p.id === tradeDraft.targetId);
+  watchTradeOverlay();
+  syncDrafting();
 
   // Columns container
   const cols = makeEl('div', 'trade-columns');
 
   // ── LEVÝ SLOUPCE: NABÍZÍM ────────────────────────────────────────────────
   const leftCol = makeEl('div', 'trade-col');
-  leftCol.appendChild(makeEl('div', 'trade-col-title', '📤 Nabízím'));
+  leftCol.appendChild(colTitle('nabizim', 'Nabízím'));
   
-  if (me?.properties?.length) {
+  if (me?.properties?.length || me?.jailFreeCards > 0) {
     const myGrid = makeEl('div', 'trade-grid');
-    me.properties.forEach(sid => {
+    if (me.jailFreeCards > 0) {
+      myGrid.appendChild(createJailTradeCard(!!tradeDraft.offer.jailCard, () => {
+        tradeDraft.offer.jailCard = !tradeDraft.offer.jailCard;
+        renderTradeBuild(gameState, me, onCancel, fixedTargetId, submitFn);
+      }));
+    }
+    (me.properties || []).forEach(sid => {
       const selected = tradeDraft.offer.horses.includes(sid);
       myGrid.appendChild(createTradeCard(sid, selected, () => {
         tradeDraft.offer.horses = selected
@@ -118,7 +185,7 @@ export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, 
     });
     leftCol.appendChild(myGrid);
   } else {
-    leftCol.appendChild(makeEl('div', 'trade-empty-msg', 'Nevlastníte žádné koně.'));
+    leftCol.appendChild(makeEl('div', 'trade-empty-msg', 'Nemáte žádné koně ani karty.'));
   }
 
   const myMoneyBox = makeEl('div', 'trade-money-box');
@@ -153,7 +220,7 @@ export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, 
   const rightCol = makeEl('div', 'trade-col');
   
   // Header with target selector
-  const rightTitle = makeEl('div', 'trade-col-title', `📥 Žádám od: `);
+  const rightTitle = colTitle('zadam', 'Žádám od: ');
   if (!fixedTargetId) {
     const sel = document.createElement('select');
     
@@ -168,6 +235,7 @@ export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, 
     sel.addEventListener('change', () => {
       tradeDraft.targetId = sel.value;
       tradeDraft.request.horses = [];
+      tradeDraft.request.jailCard = false;
       renderTradeBuild(gameState, me, onCancel, fixedTargetId, submitFn);
     });
     rightTitle.appendChild(sel);
@@ -176,9 +244,15 @@ export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, 
   }
   rightCol.appendChild(rightTitle);
 
-  if (target?.properties?.length) {
+  if (target?.properties?.length || target?.jailFreeCards > 0) {
     const targetGrid = makeEl('div', 'trade-grid');
-    target.properties.forEach(sid => {
+    if (target.jailFreeCards > 0) {
+      targetGrid.appendChild(createJailTradeCard(!!tradeDraft.request.jailCard, () => {
+        tradeDraft.request.jailCard = !tradeDraft.request.jailCard;
+        renderTradeBuild(gameState, me, onCancel, fixedTargetId, submitFn);
+      }));
+    }
+    (target.properties || []).forEach(sid => {
       const selected = tradeDraft.request.horses.includes(sid);
       targetGrid.appendChild(createTradeCard(sid, selected, () => {
         tradeDraft.request.horses = selected
@@ -189,7 +263,7 @@ export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, 
     });
     rightCol.appendChild(targetGrid);
   } else {
-    rightCol.appendChild(makeEl('div', 'trade-empty-msg', 'Hráč nevlastní žádné koně.'));
+    rightCol.appendChild(makeEl('div', 'trade-empty-msg', 'Hráč nemá žádné koně ani karty.'));
   }
 
   const targetMoneyBox = makeEl('div', 'trade-money-box');
@@ -234,8 +308,12 @@ export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, 
   const confirmBtn = makeEl('button', 'btn btn-green', 'Odeslat nabídku ✓');
   confirmBtn.onclick = () => {
     const payload = {
-      offer:   { horses: [...tradeDraft.offer.horses],   money: tradeDraft.offer.money   },
-      request: { horses: [...tradeDraft.request.horses], money: tradeDraft.request.money },
+      // Karta může být v konceptu vybraná, i když ji hráč mezitím použil —
+      // posílá se jen, když ji strana pořád drží (server to stejně ověří).
+      offer:   { horses: [...tradeDraft.offer.horses],   money: tradeDraft.offer.money,
+                 jailCard: !!tradeDraft.offer.jailCard && me?.jailFreeCards > 0 },
+      request: { horses: [...tradeDraft.request.horses], money: tradeDraft.request.money,
+                 jailCard: !!tradeDraft.request.jailCard && target?.jailFreeCards > 0 },
     };
     if (submitFn) {
       submitFn(payload);
@@ -254,7 +332,7 @@ export function renderTradeBuild(gameState, me, onCancel, fixedTargetId = null, 
 export function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
   // If we are the target, show modal
   if (isTargeted) {
-    dom.tradeTitle.textContent = '🤝 Nabídka obchodu';
+    setIconText(dom.tradeTitle, 'obchod', 'Nabídka obchodu');
     dom.tradeContent.innerHTML = '';
     dom.tradeOverlay.classList.remove('hidden');
     
@@ -269,13 +347,10 @@ export function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
 
     // Left: What they offer
     const leftCol = makeEl('div', 'trade-col');
-    leftCol.appendChild(makeEl('div', 'trade-col-title', `📤 ${initiator?.name ?? '?'} nabízí:`));
+    leftCol.appendChild(colTitle('nabizim', `${initiator?.name ?? '?'} nabízí:`));
     
-    if (offer.horses?.length) {
-      const offGrid = makeEl('div', 'trade-grid');
-      offer.horses.forEach(sid => {
-        offGrid.appendChild(createTradeCard(sid, true, () => {}, gameState.tokens[sid], { noCheck: true, readonly: true }));
-      });
+    const offGrid = readonlyGrid(offer, gameState);
+    if (offGrid) {
       leftCol.appendChild(offGrid);
     } else if (!offer.money) {
       leftCol.appendChild(makeEl('div', 'trade-empty-msg', 'Nic'));
@@ -293,13 +368,10 @@ export function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
 
     // Right: What they want
     const rightCol = makeEl('div', 'trade-col');
-    rightCol.appendChild(makeEl('div', 'trade-col-title', '📥 Na oplátku chce:'));
+    rightCol.appendChild(colTitle('zadam', 'Na oplátku chce:'));
     
-    if (request.horses?.length) {
-      const reqGrid = makeEl('div', 'trade-grid');
-      request.horses.forEach(sid => {
-        reqGrid.appendChild(createTradeCard(sid, true, () => {}, gameState.tokens[sid], { noCheck: true, readonly: true }));
-      });
+    const reqGrid = readonlyGrid(request, gameState);
+    if (reqGrid) {
       rightCol.appendChild(reqGrid);
     } else if (!request.money) {
       rightCol.appendChild(makeEl('div', 'trade-empty-msg', 'Nic'));
@@ -320,7 +392,8 @@ export function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
     // Footer
     const footer = makeEl('div', 'trade-footer');
     
-    const rejectBtn = makeEl('button', 'btn btn-outline', '❌ Odmítnout');
+    const rejectBtn = makeEl('button', 'btn btn-outline');
+    setIconText(rejectBtn, 'zavrit', 'Odmítnout');
     rejectBtn.onclick = () => {
       audioManager.play('trade_reject');
       socket.emit('game:respond', { decision: 'reject' });
@@ -328,20 +401,22 @@ export function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
     };
     footer.appendChild(rejectBtn);
 
-    const counterBtn = makeEl('button', 'btn btn-outline', '🔄 Protinabídka');
+    const counterBtn = makeEl('button', 'btn btn-outline');
+    setIconText(counterBtn, 'obchod', 'Protinabídka');
     counterBtn.onclick = () => {
       const me = gameState.players.find(p => p.id === state.myId);
       setTradeDraft({
         targetId: fromId,
-        offer:   { horses: [...(request.horses || [])], money: request.money || 0 },
-        request: { horses: [...(offer.horses  || [])], money: offer.money  || 0 },
+        offer:   { horses: [...(request.horses || [])], money: request.money || 0, jailCard: !!request.jailCard },
+        request: { horses: [...(offer.horses  || [])], money: offer.money  || 0, jailCard: !!offer.jailCard },
         context: 'counter',
       });
       renderCounterBuild(gameState, me, pa);
     };
     footer.appendChild(counterBtn);
 
-    const acceptBtn = makeEl('button', 'btn btn-green', '✅ Přijmout');
+    const acceptBtn = makeEl('button', 'btn btn-green');
+    setIconText(acceptBtn, 'prijmout', 'Přijmout');
     acceptBtn.onclick = () => {
       audioManager.play('trade_accept');
       socket.emit('game:respond', { decision: 'accept' });
@@ -354,7 +429,7 @@ export function renderTradeOffer(isTargeted, targetPlayer, pa, gameState) {
   } else {
     // Čekáme na odpověď — zavřeme obchodní modal a ukažme sidebar
     if (dom.tradeOverlay) dom.tradeOverlay.classList.add('hidden');
-    dom.actionTitle.textContent = '🤝 Nabídka obchodu';
+    setIconText(dom.actionTitle, 'obchod', 'Nabídka obchodu');
     dom.actionContent.innerHTML = '';
     dom.actionContent.appendChild(buildWaitEl(targetPlayer, 'zvažuje obchod...'));
   }
@@ -366,7 +441,7 @@ export function renderIncomingTradeOffer(offerData, gameState, onClose = null) {
   const currentIdx = myOffers.findIndex(o => o.id === offerData.id);
   const isOutgoing = offerData.fromId === state.myId;
 
-  dom.tradeTitle.textContent = `🤝 Nabídka obchodu (${currentIdx + 1}/${myOffers.length})`;
+  setIconText(dom.tradeTitle, 'obchod', `Nabídka obchodu (${currentIdx + 1}/${myOffers.length})`);
   dom.tradeContent.innerHTML = '';
   dom.tradeOverlay.classList.remove('hidden');
 
@@ -383,14 +458,11 @@ export function renderIncomingTradeOffer(offerData, gameState, onClose = null) {
 
   // Left: What is offered
   const leftCol = makeEl('div', 'trade-col');
-  const offerTitle = isOutgoing ? '📤 Vy nabízíte:' : `📤 ${initiator?.name ?? '?'} nabízí:`;
-  leftCol.appendChild(makeEl('div', 'trade-col-title', offerTitle));
+  const offerTitle = isOutgoing ? 'Vy nabízíte:' : `${initiator?.name ?? '?'} nabízí:`;
+  leftCol.appendChild(colTitle('nabizim', offerTitle));
   
-  if (offer.horses?.length) {
-    const offGrid = makeEl('div', 'trade-grid');
-    offer.horses.forEach(sid => {
-      offGrid.appendChild(createTradeCard(sid, true, () => {}, gameState.tokens[sid], { noCheck: true, readonly: true }));
-    });
+  const offGrid = readonlyGrid(offer, gameState);
+  if (offGrid) {
     leftCol.appendChild(offGrid);
   } else if (!offer.money) {
     leftCol.appendChild(makeEl('div', 'trade-empty-msg', 'Nic'));
@@ -406,14 +478,11 @@ export function renderIncomingTradeOffer(offerData, gameState, onClose = null) {
 
   // Right: What is requested
   const rightCol = makeEl('div', 'trade-col');
-  const reqTitle = isOutgoing ? '📥 Vy požadujete:' : '📥 Na oplátku chce:';
-  rightCol.appendChild(makeEl('div', 'trade-col-title', reqTitle));
+  const reqTitle = isOutgoing ? 'Vy požadujete:' : 'Na oplátku chce:';
+  rightCol.appendChild(colTitle('zadam', reqTitle));
   
-  if (request.horses?.length) {
-    const reqGrid = makeEl('div', 'trade-grid');
-    request.horses.forEach(sid => {
-      reqGrid.appendChild(createTradeCard(sid, true, () => {}, gameState.tokens[sid], { noCheck: true, readonly: true }));
-    });
+  const reqGrid = readonlyGrid(request, gameState);
+  if (reqGrid) {
     rightCol.appendChild(reqGrid);
   } else if (!request.money) {
     rightCol.appendChild(makeEl('div', 'trade-empty-msg', 'Nic'));
@@ -468,7 +537,8 @@ export function renderIncomingTradeOffer(offerData, gameState, onClose = null) {
     const targetPlayer = gameState.players.find(p => p.id === offerData.targetId);
     footer.appendChild(makeEl('div', 'dim', `Čeká se na odpověď hráče ${targetPlayer?.name ?? '...'}...`));
   } else {
-    const rejectBtn = makeEl('button', 'btn btn-outline', '❌ Odmítnout');
+    const rejectBtn = makeEl('button', 'btn btn-outline');
+    setIconText(rejectBtn, 'zavrit', 'Odmítnout');
     rejectBtn.onclick = () => {
       audioManager.play('trade_reject');
       socket.emit('game:respond', { decision: 'reject', tradeOfferId: offerData.id });
@@ -477,12 +547,13 @@ export function renderIncomingTradeOffer(offerData, gameState, onClose = null) {
     };
     footer.appendChild(rejectBtn);
 
-    const counterBtn = makeEl('button', 'btn btn-outline', '🔄 Protinabídka');
+    const counterBtn = makeEl('button', 'btn btn-outline');
+    setIconText(counterBtn, 'obchod', 'Protinabídka');
     counterBtn.onclick = () => {
       setTradeDraft({
         targetId: fromId,
-        offer:   { horses: [...(request.horses || [])], money: request.money || 0 },
-        request: { horses: [...(offer.horses  || [])], money: offer.money  || 0 },
+        offer:   { horses: [...(request.horses || [])], money: request.money || 0, jailCard: !!request.jailCard },
+        request: { horses: [...(offer.horses  || [])], money: offer.money  || 0, jailCard: !!offer.jailCard },
         context: 'counter',
       });
       renderTradeBuild(gameState, me, () => renderIncomingTradeOffer(offerData, gameState, onClose), fromId, ({ offer, request }) => {
@@ -493,7 +564,8 @@ export function renderIncomingTradeOffer(offerData, gameState, onClose = null) {
     };
     footer.appendChild(counterBtn);
 
-    const acceptBtn = makeEl('button', 'btn btn-green', '✅ Přijmout');
+    const acceptBtn = makeEl('button', 'btn btn-green');
+    setIconText(acceptBtn, 'prijmout', 'Přijmout');
     acceptBtn.onclick = () => {
       audioManager.play('trade_accept');
       socket.emit('game:respond', { decision: 'accept', tradeOfferId: offerData.id });

@@ -1,15 +1,17 @@
   <!-- ═══════════════════════════════════════════════════════════ INTRO -->
   <div id="intro-view">
     <div class="lobby-bg-glow"></div>
+    <!-- Počet lidí s otevřenou hrou (server:online) — vpravo nahoře, naproti nastavení -->
+    <span id="online-count" class="online-count"></span>
     <div class="lobby-card" style="width: 500px;">
       <div class="lobby-hero">
-        <div class="lobby-emoji">🏇</div>
+        <div class="lobby-emoji"><img class="ui-icon" src="img/logo.png" alt="" draggable="false" /></div>
         <h1 class="lobby-title">DOSTIHY<br />A SÁZKY</h1>
       </div>
 
       <div id="room-selection">
         <button id="show-create-room" class="btn btn-gold" style="width:100%">+ Vytvořit novou místnost</button>
-        <div class="bc-divider" style="margin: 15px auto; width: 100%;"></div>
+        <div class="intro-divider"></div>
         <p class="label-sm">Dostupné hry:</p>
         <div id="room-list" class="room-list">
           <p class="dim">Hledám volné místnosti...</p>

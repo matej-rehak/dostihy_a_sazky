@@ -17,8 +17,11 @@ module.exports = {
 
       this._checkBankrupt(pid);
 
+      // Po prodeji posledního majetku může `_checkBankrupt` hráče vyřadit.
+      // Bankrotáři se už `debt_manage` otevírat nesmí — nikdo by na něj
+      // neodpověděl a hra by zamrzla. Pokračuje se jako po vyhlášení bankrotu.
       const p = this.players.get(pid);
-      if (p.balance < 0) {
+      if (p.balance < 0 && !p.bankrupt) {
         this._setPendingAction({ type: 'debt_manage', targetId: pid });
         this._broadcast();
       } else {
@@ -32,6 +35,26 @@ module.exports = {
       this._resumeFn = null;
       this._scheduleAction(ACTION_DELAY_MS / 2, fn);
     }
+  },
+
+  /**
+   * Dobrovolný prodej bance za polovinu ceny (jako při dluhu):
+   *  • `bank_sell_property` — kůň nebo služba i se všemi žetony,
+   *  • `bank_sell_token` — jeden žeton (hlavní dostih se rozloží na 4 malé).
+   * Prodejní ceny inflace neovlivňuje.
+   */
+  _handleBankSale(pid, decision, spaceId) {
+    const sid = Number(spaceId);
+    const player = this.players.get(pid);
+    if (!player || this.ownerships[sid] !== pid) return;
+
+    if (decision === 'bank_sell_property') {
+      this._sellProperty(pid, sid);
+    } else if (decision === 'bank_sell_token') {
+      if (!this.tokens[sid]) return;
+      this._removeToken(pid, sid);
+    }
+    this._broadcast();
   },
 
   _handleBuyOffer(pid, decision, spaceId) {

@@ -2,6 +2,14 @@
 
 const { ACTION_DELAY_MS } = require('../constants');
 
+/**
+ * Dobrovolný prodej bance — hráč na tahu může kdykoli před hodem prodat
+ * koně, služby i žetony za polovinu ceny. Stejné chvíle, kdy smí navrhnout
+ * obchod (čeká na hod / je v Distancu).
+ */
+const BANK_SALE_ACTIONS = new Set(['wait_roll', 'jail_choice']);
+const BANK_SALE_DECISIONS = new Set(['bank_sell_property', 'bank_sell_token']);
+
 const MOVE_CARD_TYPES = new Set([
   'move_to', 'move_forward', 'move_backward',
   'move_nearest', 'move_nearest_backward', 'move_backward_to',
@@ -39,21 +47,40 @@ module.exports = {
     const actionData = this.pendingAction.data || {};
     const action = this.pendingAction.type;
 
+    // Prodej bance tah neposouvá — hráč pak dál hází (nebo řeší Distanc),
+    // proto se pendingAction nechává být.
+    // Mimo začátek tahu se požadavek ignoruje — jinak by ho např. nabídka
+    // koupě vyhodnotila jako „nekupovat" (každé jiné rozhodnutí než `buy`).
+    if (BANK_SALE_DECISIONS.has(decision)) {
+      if (BANK_SALE_ACTIONS.has(action)) return this._handleBankSale(pid, decision, spaceId);
+      return;
+    }
+
+    // Výsledek Rulety se uplatní JEN na výslovné potvrzení. Jakákoli jiná
+    // zpráva (dvojklik na „Zatočit", který dorazí až po roztočení) by jinak
+    // efekt spustila uprostřed točení kola — peníze i figurka by se změnily
+    // dřív, než hráč výsledek vůbec uvidí a potvrdí.
+    if (action === 'roulette_ack' && decision !== 'ack') return;
+
     this._setPendingAction(null);
 
     switch (action) {
       case 'debt_manage': return this._handleDebtManage(pid, decision, spaceId, data);
       case 'buy_offer': return this._handleBuyOffer(pid, decision, spaceId);
       case 'buyout_offer': return this._handleBuyoutOffer(pid, decision, actionData);
+      case 'reroll_offer': return this._handleRerollOffer(pid, decision, actionData);
       case 'card_ack': return this._handleCardAck(pid, actionData);
       case 'jail_choice': return this._handleJailChoice(pid, decision);
       case 'token_manage': return this._handleTokenManage(pid, decision, spaceId, tokenType);
       case 'trade_offer': return this._handleTradeOffer(pid, decision, actionData, clientOffer, clientRequest);
       case 'airport_choice': return this._handleAirportChoice(pid, decision);
       case 'airport_select_target': return this._handleAirportSelectTarget(pid, decision, spaceId);
+      case 'roulette_choice': return this._handleRouletteChoice(pid, decision);
       case 'roulette_ack': return this._handleRouletteAck(pid, actionData);
       case 'roulette_pick_player': return this._handleRoulettePickPlayer(pid, decision, actionData);
       case 'roulette_pick_horse': return this._handleRoulettePickHorse(pid, decision, actionData);
+      // `decision` = id obdarovaného, `spaceId` = darovaný kůň
+      case 'roulette_give_horse': return this._handleRouletteGiveHorse(pid, spaceId, decision, actionData);
     }
   },
 
@@ -103,7 +130,8 @@ module.exports = {
         this._handleBuyOffer(targetId, 'decline', data?.spaceId);
         break;
       case 'buyout_offer':
-        this._handleBuyoutOffer(targetId, 'decline', data);
+      case 'reroll_offer':
+        this._handleDecisionTimeout(this.pendingAction);
         break;
       case 'card_ack':
         this._handleCardAck(targetId, data);
@@ -131,12 +159,16 @@ module.exports = {
         this._broadcast();
         break;
       }
-      // Prompty Totalizátoru spotřebují `pendingAction` JEŠTĚ PŘED voláním
+      // Prompty Rulety spotřebují `pendingAction` JEŠTĚ PŘED voláním
       // handleru — stejně jako to dělá `handleRespond`. Bez toho by kliknutí,
       // které dorazí v okně mezi vypršením limitu a dohráním handleru, prošlo
       // guardem v `handleRespond` a efekt by se aplikoval podruhé (sázka
       // stržená dvakrát, dva žetony zdarma) a navíc by druhý `_scheduleAction`
       // přepsal `this._timer` a hráč by tiše přišel o tah.
+      case 'roulette_choice':
+        this._setPendingAction(null);
+        this._handleRouletteChoice(targetId, 'skip');
+        break;
       case 'roulette_ack':
         this._setPendingAction(null);
         this._handleRouletteAck(targetId, data);
@@ -148,6 +180,11 @@ module.exports = {
       case 'roulette_pick_horse':
         this._setPendingAction(null);
         this._handleRoulettePickHorse(targetId, 'decline', data);
+        break;
+      case 'roulette_give_horse':
+        // Neplatná volba se nahradí volbou bota — dar se vypršením neobejde.
+        this._setPendingAction(null);
+        this._handleRouletteGiveHorse(targetId, null, null, data);
         break;
     }
   },

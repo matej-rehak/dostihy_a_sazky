@@ -3,22 +3,31 @@ import { dom }                                  from './dom.js';
 import { socket }                               from './socket.js';
 import { showToast }                            from './utils.js';
 import { renderRoomList, renderLobby, buildColorPicker, initLobbyListeners, showIntroSelection } from './ui/lobby.js';
-import { buildBoard, updateBoard, resetBoardCache } from './ui/board.js';
+import { resetBoardCache }                      from './ui/board.js';
+import { buildBoard, updateBoard, animatePawnsIfNeeded, toggleMode, resetBoardMode } from './ui/boardMode.js';
 import { updatePlayers }                        from './ui/players.js';
-import { updateActionPanel, showStableOverlay }                    from './ui/actions.js';
-import { updateLog, updateCenter, resetLogCache } from './ui/log.js';
+import { updateActionPanel, showStableOverlay, syncRouletteOverlay } from './ui/actions.js';
+import { updateLog, updateCenter, resetLogCache, initLogToggle } from './ui/log.js';
 import { initTooltipListeners }                 from './ui/tooltip.js';
-import { animatePawnsIfNeeded }                 from './animations/pawns.js';
 import { playBuyAnimation, playTokenAnimation } from './animations/cards.js';
 import { resetRouletteCache, hideRouletteOverlay } from './animations/roulette.js';
 import { generateParticles }                    from './animations/particles.js';
 import { audioManager }                         from './audio.js';
+import { isRouletteMoment }                     from './soundGate.mjs';
+import { onlineLabel }                          from './ui/onlineCount.mjs';
 import { initSettings }                         from './settings.js';
 import { initDebugPanel, showDebugBtnIfNeeded } from './ui/debug.js';
 import { confirmDialog }                        from './ui/confirm.js';
 import { initMobileTabs, autoSwitchToAction }   from './ui/mobileTabs.js';
 import { initInspectListeners }                 from './ui/spaceInspect.js';
 import { initModalDragging }                    from './ui/draggable.js';
+import { canRollNow, requestRoll }              from './ui/rollRequest.js';
+import { preloadImages }                        from './imagePreload.js';
+import { updateTradeNotices, resetTradeNotices } from './ui/tradeNotice.js';
+import { updateSkipBanner, resetSkipBanner } from './ui/skipBanner.js';
+import { balanceDiffPosition } from './ui/balanceDiffView.mjs';
+import { playerSoundEvents, betWinFromLog } from './soundEvents.mjs';
+import { syncDrafting }                         from './ui/actionsTrade.js';
 
 
 // ─── Load HTML partials ───────────────────────────────────────────────────────
@@ -52,7 +61,9 @@ function identifyMe(players) {
 // ─── Reset lokálního stavu ────────────────────────────────────────────────────
 
 function resetLocalState() {
-  state.myId              = null;
+  resetTradeNotices();
+  resetSkipBanner();
+  state.myId             = null;
   state.boardData         = null;
   state.gameState         = null;
   state.boardBuilt        = false;
@@ -69,6 +80,8 @@ function resetLocalState() {
   state.prevTurnId        = null;
   state.prevLobbyCount    = 0;
   state.prevBankruptCount = 0;
+  state.prevPlayers       = undefined;
+  state.prevLogTop        = undefined;
   state.prevPaJSON        = null;
   state.prevPhase         = null;
 
@@ -77,9 +90,10 @@ function resetLocalState() {
 
   // Cache vykreslování drží odkazy na prvky, které teď zanikly.
   resetBoardCache();
+  resetBoardMode();
   resetLogCache();
   resetRouletteCache();
-  hideRouletteOverlay();
+  hideRouletteOverlay({ immediate: true });
 
   // Zastav pozadí hudbu při návratu do lobby
   audioManager.stopMusic();
@@ -146,18 +160,12 @@ function processState(gameState) {
     initTooltipListeners(dom.playersList);
     state.boardBuilt = true;
 
+    // onclick (ne addEventListener) — blok běží při každém novém sestavení desky
+    const viewModeBtn = document.getElementById('view-mode-btn');
+    if (viewModeBtn) viewModeBtn.onclick = () => toggleMode();
+
     const diceEl = document.getElementById('dice-3d');
-    if (diceEl) {
-      diceEl.addEventListener('click', () => {
-        const pa = state.gameState?.pendingAction;
-        if (!pa || pa.targetId !== state.myId) return;
-        if (pa.type === 'wait_roll' || pa.type === 'service_roll') {
-          socket.emit('game:roll');
-        } else if (pa.type === 'jail_choice') {
-          socket.emit('game:respond', { decision: 'roll_jail' });
-        }
-      });
-    }
+    if (diceEl) diceEl.addEventListener('click', requestRoll);
   }
 
   // Detect změny vlastnictví a žetonů → spustit animace
@@ -173,6 +181,8 @@ function processState(gameState) {
           playBuyAnimation(sid, owner);
           if (owner.id === state.myId) {
             audioManager.play('buy'); // Slavnostní zvuk pro pořízení prvotního koně
+            // U koně ještě frknutí (služby jen „buy").
+            if (state.boardData?.[sid]?.type === 'horse') setTimeout(() => audioManager.play('horse', 0.8), 350);
             expectAssetPurchase = true;
           }
         }
@@ -215,10 +225,21 @@ function processState(gameState) {
   });
 
   updatePlayers(gameState);
+  // Vyjednávání: lišta pro cílového hráče, toast a zvuk u nové nabídky.
+  // Srovnat i server — po obnovení stránky okno obchodu není otevřené.
+  updateTradeNotices(gameState);
+  syncDrafting();
+  // „Toto kolo stojíš" — jen přeskočenému hráči (zdržení / doping).
+  updateSkipBanner(gameState, state.myId);
+
+  // Ruleta se neozvučuje (poplatek, Jackpot, Pokuta…) — viz soundGate.mjs.
+  let prevPaType = null;
+  try { prevPaType = JSON.parse(state.prevPaJSON || 'null')?.type ?? null; } catch { /* první stav */ }
+  const silentMoney = isRouletteMoment(prevPaType, gameState.pendingAction?.type);
 
   balanceDiffs.forEach(({ id, diff }) => {
     // Peníze pro MĚ 
-    if (id === state.myId) {
+    if (id === state.myId && !silentMoney) {
        if (diff === 4000) audioManager.play('start_bonus');
        else if (diff > 0) audioManager.play('cash');
        else if (diff < 0 && !expectAssetPurchase) audioManager.play('pay_rent');
@@ -229,7 +250,12 @@ function processState(gameState) {
       const diffEl = document.createElement('div');
       diffEl.className = `balance-diff ${diff > 0 ? 'pos' : 'neg'}`;
       diffEl.textContent = (diff > 0 ? '+' : '') + Number(diff).toLocaleString('cs-CZ') + ' Kč';
-      balEl.appendChild(diffEl);
+      // Do body, ne do seznamu hráčů — ten se posouvá a částku u prvního
+      // hráče ořezával (ui/balanceDiffView.mjs).
+      document.body.appendChild(diffEl);
+      const { left, top } = balanceDiffPosition(balEl.getBoundingClientRect(), diffEl.offsetWidth, window.innerWidth);
+      diffEl.style.left = `${left}px`;
+      diffEl.style.top = `${top}px`;
       setTimeout(() => { if (diffEl.parentNode) diffEl.remove(); }, 2000);
     }
   });
@@ -265,6 +291,15 @@ function processState(gameState) {
     state.prevDiceId = gameState.lastDice.id;
   }
 
+  // Doping, odlet z Letiště, karta Opakovaný hod (ui: soundEvents.mjs)
+  playerSoundEvents(state.prevPlayers, gameState.players).forEach(s => audioManager.play(s));
+  state.prevPlayers = gameState.players.map(p => ({ ...p }));
+
+  // Výhra sázky (na vlastní hod nebo z Rulety) — jen moje
+  // `me` je deklarované na začátku processState
+  if (betWinFromLog(state.prevLogTop, gameState.log, me?.name)) audioManager.play('bet_win');
+  state.prevLogTop = gameState.log?.[0] ?? null;
+
   // Trackování bankrotů
   const bankrupts = gameState.players.filter(p => p.bankrupt).length;
   if (state.prevBankruptCount !== undefined && bankrupts > state.prevBankruptCount) {
@@ -274,12 +309,12 @@ function processState(gameState) {
 
   const updateActionControls = (nextState) => {
     updateActionPanel(nextState);
-    const nextPa = nextState.pendingAction;
-    const canRoll = nextPa && (nextPa.type === 'wait_roll' || nextPa.type === 'service_roll' || nextPa.type === 'jail_choice') && nextPa.targetId === state.myId;
-    document.getElementById('dice-3d')?.classList.toggle('dice-rollable', !!canRoll);
+    document.getElementById('dice-3d')?.classList.toggle('dice-rollable', canRollNow(nextState));
   };
 
   updateBoard(gameState);
+  // Kolo Rulety nečeká na figurku jako panel akcí — viz syncRouletteOverlay.
+  syncRouletteOverlay(gameState);
   const actionControlsDelayed = animatePawnsIfNeeded(gameState, () => {
     updateActionControls(state.gameState);
   });
@@ -297,9 +332,11 @@ function processState(gameState) {
   audioManager.init();
   window.confirmDialog = confirmDialog;
   await loadPartials();
+  preloadImages();   // na pozadí, nečeká se na něj
   initMobileTabs();
   initInspectListeners();
   initDebugPanel();
+  initLogToggle();
 
   // Načtení konfigurace (devMode + barvy figurek)
   try {
@@ -320,6 +357,10 @@ function processState(gameState) {
 
   // Socket events
   socket.on('room:list', list => renderRoomList(list));
+  socket.on('server:online', ({ count } = {}) => {
+    const el = document.getElementById('online-count');
+    if (el) el.textContent = onlineLabel(count);
+  });
 
   socket.on('room:created', () => {
     // Formulář schovat a seznam místností vrátit — jinak zůstanou schované
@@ -327,10 +368,11 @@ function processState(gameState) {
     showIntroSelection();
   });
 
-  socket.on('game:init', ({ roomId, board, colors, roulette, state: gameState }) => {
+  socket.on('game:init', ({ roomId, board, colors, roulette, settings, state: gameState }) => {
     state.boardData = board;
     window.__boardData = board;
     state.rouletteOutcomes = roulette || [];
+    state.gameSettings = settings || null; // schéma nastavení hry (src/gameSettings.js)
     state.allColors = colors;
     buildColorPicker(colors, gameState.players.map(p => p.color));
     dom.introView.classList.add('hidden');
@@ -346,11 +388,18 @@ function processState(gameState) {
   socket.on('game_event', (event) => {
     if (event.type === 'stable_completed') {
       showStableOverlay(event.playerName, event.group, event.groupColor);
+      audioManager.play('stable_fanfare');
     }
   });
 
   initSettings();
   initModalDragging();
   initLobbyListeners(resetLocalState);
+
+  // Připojit až teď, kdy jsou všichni posluchači zaregistrovaní — vracejícímu
+  // se hráči server posílá game:init hned po připojení a zprávu pro ještě
+  // neexistující posluchač by Socket.IO zahodil (pak chybí boardData).
+  // Hlídá tests/socket-connect-order.test.mjs.
+  socket.connect();
   socket.emit('room:list');
 })();
